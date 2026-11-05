@@ -1,7 +1,22 @@
 // 개발용 패널(?dev=1에서만 생성) - 밸런스를 직접 확인하려고 쓰는 것(docs/balance.md §5).
 // 층 이동, 골드 +10000, 탑 레벨 일괄 설정, 2배속. 캔버스가 아니라 평범한 DOM 오버레이로
 // 만든다(디버그 전용이라 스타일을 들일 필요가 없다).
-export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerShuffle }) {
+// 조합 10종(assets/effects/combos) - [라벨, 왼쪽 잼, 오른쪽 잼]. 왼쪽/오른쪽을 보드에 심고
+// 스왑하면 core가 조합 종류를 알아서 판정한다(src/core/specials.js resolveSpecialCombo).
+const COMBO_PAIRS = [
+  ['라인+라인', 'line', 'line'],
+  ['라인+폭탄', 'line', 'bomb'],
+  ['폭탄+폭탄', 'bomb', 'bomb'],
+  ['컬러+라인', 'color', 'line'],
+  ['컬러+폭탄', 'color', 'bomb'],
+  ['컬러+컬러', 'color', 'color'],
+  ['박스+박스', 'box', 'box'],
+  ['박스+라인', 'box', 'line'],
+  ['박스+폭탄', 'box', 'bomb'],
+  ['박스+컬러', 'box', 'color'],
+];
+
+export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle }) {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:fixed;top:0;left:0;z-index:9999;background:rgba(0,0,0,0.75);color:#fff;' +
@@ -45,6 +60,16 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
       const btn = document.createElement('button');
       btn.textContent = label;
       btn.onclick = () => triggerSpecialFx(kind);
+      panel.append(btn);
+    }
+  }
+
+  // 조합 연출(manifest.combo) 확인용 - 보드 가운데에 두 특수 잼을 심고 실제로 스왑한다.
+  if (triggerCombo) {
+    for (const [label, kindA, kindB] of COMBO_PAIRS) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.onclick = () => triggerCombo(kindA, kindB);
       panel.append(btn);
     }
   }

@@ -1,0 +1,83 @@
+#!/usr/bin/env node
+// 밸런스 시뮬레이터 CLI. 사용: node tools/sim/run.js --test=T1|T2|T3|T4|T5|all
+// --player=fast|normal|casual|all --seeds=N --floors=1-100 --mod=<sim.json modifiers 키>
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+import { loadConfigs, parseArgs } from './config.js';
+import { writeCsv, todayTag } from './report.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
+
+const TEST_MODULES = {
+  t1: () => import('./tests/t1.js'),
+  t2: () => import('./tests/t2.js'),
+  t3: () => import('./tests/t3.js'),
+  t4: () => import('./tests/t4.js'),
+  t5: () => import('./tests/t5.js'),
+};
+
+async function main() {
+  const configs = loadConfigs();
+  const args = parseArgs(process.argv.slice(2), configs.sim);
+  const env = { configs, players: args.players, seeds: args.seeds, floorsRange: args.floors, mods: args.mods };
+  const dateTag = todayTag();
+
+  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to}`);
+
+  const { execSync } = await import('node:child_process');
+  let commit = 'unknown';
+  try {
+    commit = execSync('git rev-parse --short HEAD', { cwd: join(__dirname, '..', '..') }).toString().trim();
+  } catch {
+    /* git 없이도 돌아가야 한다 */
+  }
+  const summaryParts = [
+    `# 밸런스 시뮬레이션 결과 (${dateTag})
+
+` +
+      `- 커밋: ${commit} (워킹 트리에 미커밋 변경 있음 - config/balance.json, src/core 참고)
+` +
+      `- 시드 수: ${env.seeds} (seed = 1..${env.seeds} 고정)
+` +
+      `- 층 범위: ${env.floorsRange.from}-${env.floorsRange.to}
+` +
+      `- 플레이어: ${env.players.join(', ')}
+` +
+      `- 테스트: ${args.tests.join(', ')}`,
+  ];
+  const allOutOfRange = [];
+
+  for (const testId of args.tests) {
+    const mod = TEST_MODULES[testId];
+    if (!mod) {
+      console.warn(`알 수 없는 테스트: ${testId}`);
+      continue;
+    }
+    const t0 = Date.now();
+    const { run } = await mod();
+    const { csvRows, summaryMd, outOfRange } = await run(env);
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    console.log(`${testId} 완료 (${elapsed}s, ${csvRows.length}행)`);
+
+    const csvPath = join(REPORT_DIR, `${testId}_${dateTag}.csv`);
+    writeCsv(csvPath, csvRows);
+    summaryParts.push(summaryMd);
+    allOutOfRange.push(...outOfRange);
+  }
+
+  if (allOutOfRange.length > 0) {
+    summaryParts.push(`## 기준 벗어남\n${allOutOfRange.map((s) => `- ${s}`).join('\n')}`);
+  }
+
+  const summaryPath = join(REPORT_DIR, 'summary.md');
+  const { writeFileSync, mkdirSync } = await import('node:fs');
+  mkdirSync(REPORT_DIR, { recursive: true });
+  writeFileSync(summaryPath, summaryParts.join('\n\n') + '\n', 'utf8');
+  console.log(`summary.md 작성: ${summaryPath}`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -1,67 +1,272 @@
 {
-  "version": 1,
-  "design": "봉인된 문 너머의 성소",
-  "image": "menu_bg.png",
-  "native": [
-    180,
-    320
-  ],
-  "drawScale": 3,
-  "imageSmoothing": false,
-  "x3": "menu_bg_x3.png",
-  "anim": {
-    "sheet": "menu_bg_anim.png",
-    "frameW": 180,
-    "frameH": 320,
-    "frames": 64,
-    "cols": 8,
-    "frameMs": 100,
-    "loop": true,
-    "note": "frame i: sx=(i%8)*180, sy=floor(i/8)*320; menu_bg.png = frame 8 (static fallback)"
-  },
-  "layoutA_screenPx": {
-    "note": "ui-ux-pro-max 시안 A 기준 (540x960). 배경은 이 자리를 피해서 그려짐",
-    "currencyBar": [
-      154,
-      28,
-      232,
-      56
-    ],
-    "attendance": [
-      20,
-      28,
-      48,
-      48
-    ],
-    "event": [
-      20,
-      92,
-      48,
-      48
-    ],
-    "settings": [
-      472,
-      28,
-      48,
-      48
-    ],
-    "shop": [
-      472,
-      92,
-      48,
-      48
-    ],
-    "centerpiece": [
-      50,
-      180,
-      440,
-      374
-    ],
-    "playButton": [
-      90,
-      760,
-      360,
-      64
+ "version": 2,
+ "design": "봉인된 문 너머의 성소",
+ "native": [
+  180,
+  320
+ ],
+ "drawScale": 3,
+ "imageSmoothing": false,
+ "background": {
+  "note": "static base + animated pieces; draw base, then each piece's current frame at (x,y), then particles, then UI. All native px (x3). menu_bg.png = full static fallback (frame 8).",
+  "base": "menu_base.png",
+  "frameMs": 200,
+  "loopFrames": 32,
+  "loopMs": 6400,
+  "pieces": [
+   {
+    "file": "menu_p00.png",
+    "x": 76,
+    "y": 64,
+    "w": 39,
+    "h": 13,
+    "frames": 18,
+    "cols": 13,
+    "periodFrames": 32,
+    "seq": [
+     0,
+     1,
+     1,
+     2,
+     2,
+     3,
+     3,
+     4,
+     4,
+     5,
+     5,
+     6,
+     7,
+     7,
+     8,
+     8,
+     9,
+     10,
+     10,
+     11,
+     11,
+     11,
+     11,
+     12,
+     12,
+     13,
+     14,
+     15,
+     16,
+     16,
+     17,
+     0
     ]
-  }
+   },
+   {
+    "file": "menu_p01.png",
+    "x": 44,
+    "y": 71,
+    "w": 93,
+    "h": 126,
+    "frames": 32,
+    "cols": 5,
+    "periodFrames": 32,
+    "seq": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30,
+     31
+    ]
+   },
+   {
+    "file": "menu_p02.png",
+    "x": 42,
+    "y": 229,
+    "w": 101,
+    "h": 24,
+    "frames": 31,
+    "cols": 5,
+    "periodFrames": 32,
+    "seq": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10,
+     11,
+     12,
+     13,
+     14,
+     15,
+     0,
+     16,
+     17,
+     18,
+     19,
+     20,
+     21,
+     22,
+     23,
+     24,
+     25,
+     26,
+     27,
+     28,
+     29,
+     30
+    ]
+   }
+  ],
+  "particles": [
+   {
+    "name": "sparks",
+    "rule": {
+     "desc": "10 gold sparks drifting up from the crystal's crack. Native px, 1x1 each, drawn AFTER base+pieces. (Belongs to the centerpiece; drop it when the crystal is replaced by the statue.)",
+     "bob": "round(2 * sin(2*PI*(t%6400)/3200))",
+     "cy": "134 + bob",
+     "x": "round(90 + amp * sin(2*PI*(t%6400)/6400 + phase*6.28))",
+     "y": "round(cy + 10 - (((t%6400)*60/6400 + phase*60) % 60))",
+     "visible": "floor(t/160 + blinkIndex) % 4 != 0",
+     "items": [
+      {
+       "phase": 0.4854,
+       "amp": 1.298,
+       "color": "#f2d264",
+       "blinkIndex": 0
+      },
+      {
+       "phase": 0.1057,
+       "amp": 8.818,
+       "color": "#c28a20",
+       "blinkIndex": 1
+      },
+      {
+       "phase": 0.444,
+       "amp": 8.611,
+       "color": "#c28a20",
+       "blinkIndex": 2
+      },
+      {
+       "phase": 0.3566,
+       "amp": 3.462,
+       "color": "#f2d264",
+       "blinkIndex": 3
+      },
+      {
+       "phase": 0.2005,
+       "amp": 5.906,
+       "color": "#c28a20",
+       "blinkIndex": 4
+      },
+      {
+       "phase": 0.3373,
+       "amp": 7.468,
+       "color": "#c28a20",
+       "blinkIndex": 5
+      },
+      {
+       "phase": 0.9845,
+       "amp": 5.295,
+       "color": "#f2d264",
+       "blinkIndex": 6
+      },
+      {
+       "phase": 0.7404,
+       "amp": 0.004,
+       "color": "#c28a20",
+       "blinkIndex": 7
+      },
+      {
+       "phase": 0.1698,
+       "amp": 8.59,
+       "color": "#c28a20",
+       "blinkIndex": 8
+      },
+      {
+       "phase": 0.4904,
+       "amp": 3.393,
+       "color": "#f2d264",
+       "blinkIndex": 9
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "staticFallback": "menu_bg.png",
+ "layoutA_screenPx": {
+  "note": "ui-ux-pro-max 시안 A 기준 (540x960). 배경은 이 자리를 피해서 그려짐",
+  "currencyBar": [
+   154,
+   28,
+   232,
+   56
+  ],
+  "attendance": [
+   20,
+   28,
+   48,
+   48
+  ],
+  "event": [
+   20,
+   92,
+   48,
+   48
+  ],
+  "settings": [
+   472,
+   28,
+   48,
+   48
+  ],
+  "shop": [
+   472,
+   92,
+   48,
+   48
+  ],
+  "centerpiece": [
+   50,
+   180,
+   440,
+   374
+  ],
+  "playButton": [
+   90,
+   760,
+   360,
+   64
+  ]
+ }
 }

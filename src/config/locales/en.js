@@ -12,15 +12,15 @@ export const en = {
     play: 'Play',
     icon: { attendance: 'Attend', event: 'Event', settings: 'Settings', shop: 'Shop' },
     mode: { title: 'Select Mode', normal: 'Normal Mode', competitive: 'Competitive Mode', locked: 'Locked — unlock condition TBD' },
-    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM' },
+    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM', mute: 'Mute', unmute: 'Unmute', help: 'Help', about: 'Game Info' },
     shop: { title: 'Shop', body: 'Item list placeholder (empty)' },
     attendance: { title: 'Daily Attendance', body: 'Content placeholder (TBD)' },
     event: { title: 'Event', body: 'Content placeholder (TBD)' },
   },
   hud: {
-    cascade: 'Chain x{count}',
-    combo: 'COMBO x{count}',
-    comboBreak: 'Combo x{count} Break!',
+    cascade: 'Chain x {count}',
+    combo: 'COMBO x {count}',
+    comboBreak: 'Combo x {count} Break!',
   },
   puzzle: {
     shuffle: 'SHUFFLE',
@@ -35,7 +35,6 @@ export const en = {
   },
   battle: {
     floor: 'Floor {floor}',
-    wave: 'Wave {wave}/{total}',
   },
   popup: {
     pause: { title: 'Paused', desc: 'Battle and puzzle are paused.' },

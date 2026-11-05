@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { Animator, computeShuffleMovePose } from '../src/render/animator.js';
+import { Animator, computeShuffleFallTiming, shuffleElapsedMs } from '../src/render/animator.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const effectsConfig = JSON.parse(readFileSync(join(__dirname, '..', 'src', 'config', 'effects.json'), 'utf8'));
@@ -25,54 +25,108 @@ test('reset()은 newly-clearing/newly-settled 판정용 Set 4개를 모두 비�
   assert.equal(animator._scratchFalling.size, 0);
 });
 
-// computeShuffleMovePose: 0ms(시작)/phases.convergeMs(1->2단계 경계)/phases.totalMs(끝) 세
-// 지점만 본다 - 그 경계들이 서로 자연스럽게 이어지는지가 핵심이라, 중간값은 수치를 손으로
-// 다시 유도해야 해서 스냅샷하지 않았다(§셔플 애니메이션, config/effects.json의 shuffleAnim).
-test('computeShuffleMovePose: 0ms엔 from 칸에 그대로, scale은 1이다', () => {
-  const cfg = effectsConfig.shuffleAnim;
-  const move = { from: { row: 0, col: 0 }, to: { row: 6, col: 6 } };
-  const pose = computeShuffleMovePose(move, 0, cfg, 7, 7);
-  assert.equal(pose.row, 0);
-  assert.equal(pose.col, 0);
-  assert.equal(pose.scale, 1);
+// computeShuffleFallTiming(seed, rows, cols, shuffleAnim) - 셔플 "떨어지며 쌓이기" 연출의
+// 칸별 시작/착지 시각을 돌려주는 순수 함수(§셔플 애니메이션). 7x7 보드 기준으로 요구된
+// 네 가지 성질만 확인한다(값 자체는 seed 기반 난수라 손으로 다시 유도하지 않는다).
+const ROWS = 7;
+const COLS = 7;
+
+test('computeShuffleFallTiming: 같은 seed면 같은 결과다', () => {
+  const a = computeShuffleFallTiming(42, ROWS, COLS, effectsConfig.shuffleAnim);
+  const b = computeShuffleFallTiming(42, ROWS, COLS, effectsConfig.shuffleAnim);
+  assert.deepEqual(a, b);
 });
 
-test('computeShuffleMovePose: phases.totalMs(끝)엔 to 칸에 도착하고, scale은 scatter.scaleTo다', () => {
-  const cfg = effectsConfig.shuffleAnim;
-  const move = { from: { row: 0, col: 0 }, to: { row: 6, col: 6 } };
-  const pose = computeShuffleMovePose(move, cfg.phases.totalMs, cfg, 7, 7);
-  assert.equal(pose.row, 6);
-  assert.equal(pose.col, 6);
-  assert.equal(pose.scale, cfg.scatter.scaleTo);
+test('computeShuffleFallTiming: 모든 칸의 착지 시각은 phases.fallEndMs(860ms) 이하다', () => {
+  for (const seed of [1, 2, 3, 12345, 999999]) {
+    const timing = computeShuffleFallTiming(seed, ROWS, COLS, effectsConfig.shuffleAnim);
+    for (const entry of timing) {
+      assert.ok(entry.landMs <= effectsConfig.shuffleAnim.phases.fallEndMs, `landMs=${entry.landMs}`);
+    }
+  }
 });
 
-test('computeShuffleMovePose: phases.convergeMs(1->2단계 경계)엔 중심 기준 최대 회전·축소된 지점에 있고, scale은 converge.scale이다', () => {
-  const cfg = effectsConfig.shuffleAnim;
-  const rows = 7;
-  const cols = 7;
-  const move = { from: { row: 0, col: 0 }, to: { row: 6, col: 6 } };
-  const pose = computeShuffleMovePose(move, cfg.phases.convergeMs, cfg, rows, cols);
-
-  // 손으로 다시 유도: center=(3,3), v=(from-center)=(-3,-3), radiusScale=1-pullRatio=0.3 ->
-  // (-0.9,-0.9), maxRotationDeg(90도)만큼 회전 -> row'=3-0.9=2.1, col'=3+0.9=3.9.
-  assert.ok(Math.abs(pose.row - 2.1) < 1e-9, `row=${pose.row}`);
-  assert.ok(Math.abs(pose.col - 3.9) < 1e-9, `col=${pose.col}`);
-  assert.equal(pose.scale, cfg.converge.scale);
+test('computeShuffleFallTiming: 같은 열에서 위 칸의 착지는 바로 아래 칸의 착지 + 최소 30ms다', () => {
+  const minGapMs = effectsConfig.shuffleAnim.fall.minGapMs;
+  for (const seed of [1, 2, 3, 12345, 999999]) {
+    const timing = computeShuffleFallTiming(seed, ROWS, COLS, effectsConfig.shuffleAnim);
+    for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < ROWS - 1; r++) {
+        const upper = timing[r * COLS + c];
+        const lower = timing[(r + 1) * COLS + c];
+        assert.ok(upper.landMs >= lower.landMs + minGapMs - 1e-9, `row ${r} vs ${r + 1}, col ${c}`);
+      }
+    }
+  }
 });
 
-test('computeShuffleMovePose: 단계 경계에서 값이 끊기지 않는다(popMs/scatterMs 전후가 연속)', () => {
+test('computeShuffleFallTiming: 맨 아래 행(마지막 row)이 각 열에서 가장 먼저 시작한다', () => {
+  for (const seed of [1, 2, 3, 12345, 999999]) {
+    const timing = computeShuffleFallTiming(seed, ROWS, COLS, effectsConfig.shuffleAnim);
+    for (let c = 0; c < COLS; c++) {
+      const bottomStart = timing[(ROWS - 1) * COLS + c].startMs;
+      for (let r = 0; r < ROWS - 1; r++) {
+        assert.ok(timing[r * COLS + c].startMs >= bottomStart, `row ${r}, col ${c}`);
+      }
+    }
+  }
+});
+
+// 입장 셔플(skipClear) - 층에 들어올 때는 치울 이전 보드가 없으므로 §0 비우기(기존 자리에서
+// 가라앉으며 페이드아웃)를 건너뛴다. 그 단계를 그대로 쓰면 방금 만든 보드가 내려가며
+// 사라졌다가 다시 위에서 떨어지는 "두 번 떨어지는" 연출이 된다.
+const CLEAR_MS = effectsConfig.shuffleAnim.phases.clearMs;
+
+function shuffleFx(overrides = {}) {
+  return {
+    type: 'shuffle',
+    elapsedMs: 0,
+    durationMs: effectsConfig.shuffleAnim.phases.totalMs,
+    seed: 12345,
+    moves: [{ id: 0, from: { row: 6, col: 0 }, to: { row: 0, col: 0 }, value: 0, special: null }],
+    ...overrides,
+  };
+}
+
+test('shuffleElapsedMs: skipClear면 비우기 단계만큼 타임라인을 앞당기고, 아니면 그대로다', () => {
   const cfg = effectsConfig.shuffleAnim;
-  const move = { from: { row: 1, col: 2 }, to: { row: 5, col: 4 } };
-  const eps = 1e-6;
+  assert.equal(shuffleElapsedMs(shuffleFx({ elapsedMs: 0 }), cfg), 0);
+  assert.equal(shuffleElapsedMs(shuffleFx({ elapsedMs: 40 }), cfg), 40);
+  assert.equal(shuffleElapsedMs(shuffleFx({ elapsedMs: 0, skipClear: true }), cfg), CLEAR_MS);
+  assert.equal(shuffleElapsedMs(shuffleFx({ elapsedMs: 40, skipClear: true }), cfg), CLEAR_MS + 40);
+});
 
-  const beforePop = computeShuffleMovePose(move, cfg.phases.popMs - eps, cfg, 7, 7);
-  const afterPop = computeShuffleMovePose(move, cfg.phases.popMs, cfg, 7, 7);
-  assert.ok(Math.abs(beforePop.row - afterPop.row) < 1e-3);
-  assert.ok(Math.abs(beforePop.scale - afterPop.scale) < 1e-3);
+test('입장 셔플(skipClear)은 t=0에 "원래 자리에서 가라앉으며 사라지는" 젬을 그리지 않는다', () => {
+  const animator = new Animator();
+  // 비우기 단계 한가운데(t=0 ~ clearMs)에 재배치는 from 자리에 반투명 젬을 그린다.
+  const reshuffle = animator._getShuffleDisplayList(shuffleFx({ elapsedMs: CLEAR_MS / 2 }), ROWS, COLS, effectsConfig);
+  assert.equal(reshuffle.length, 1, '재배치는 비우기 단계에 젬을 그린다');
+  assert.equal(reshuffle[0].row, 6 + 0.3 * 0.5, 'from(6행)에서 아래로 가라앉는다');
+  assert.ok(reshuffle[0].opacity < 1, '페이드아웃 중이어야 한다');
 
-  // scatterMs 경계: to.row(5) * rowStaggerMs만큼 늦게 시작하는 행이라도 경계 양쪽 값이 이어져야 한다.
-  const beforeScatter = computeShuffleMovePose(move, cfg.phases.scatterMs - eps, cfg, 7, 7);
-  const afterScatter = computeShuffleMovePose(move, cfg.phases.scatterMs, cfg, 7, 7);
-  assert.ok(Math.abs(beforeScatter.row - afterScatter.row) < 1e-3);
-  assert.ok(Math.abs(beforeScatter.col - afterScatter.col) < 1e-3);
+  // 같은 시각, 입장 연출은 이미 낙하 구간이라 from 자리에 아무것도 없다.
+  const entry = animator._getShuffleDisplayList(
+    shuffleFx({ elapsedMs: CLEAR_MS / 2, skipClear: true }),
+    ROWS,
+    COLS,
+    effectsConfig
+  );
+  for (const item of entry) {
+    assert.equal(item.opacity, 1, '입장 연출엔 페이드아웃이 없다');
+    assert.ok(item.row < 6, 'from(6행)에 가라앉는 젬이 남아 있으면 안 된다');
+  }
+});
+
+test('입장 셔플도 낙하 자체는 재배치와 같은 타이밍을 쓴다(끝 모습이 같다)', () => {
+  const animator = new Animator();
+  const { fallEndMs } = effectsConfig.shuffleAnim.phases;
+  const entry = animator._getShuffleDisplayList(
+    shuffleFx({ elapsedMs: fallEndMs, skipClear: true }),
+    ROWS,
+    COLS,
+    effectsConfig
+  );
+  assert.equal(entry.length, 1);
+  assert.equal(entry[0].row, 0, '낙하가 끝나면 목표 칸(0행)에 있다');
+  assert.equal(entry[0].col, 0);
 });

@@ -1,4 +1,5 @@
 import { EMPTY, OBSTACLE } from '../core/board.js';
+import { computeShuffleFallTiming, shuffleElapsedMs } from './animator.js';
 import { GEM_TYPES } from '../config/gems.js';
 import { SPECIAL_GEM_CONFIG } from '../config/specialGems.js';
 import { HINT_CONFIG } from '../config/hint.js';
@@ -8,7 +9,7 @@ import { computeLayout } from './layout.js';
 import { ParticlePool } from './effects/particlePool.js';
 import { BattleRenderer } from './battleRenderer.js';
 import { haptics } from '../platform/haptics.js';
-import { AudioPlayer } from '../platform/audio.js';
+import { audio } from '../audio/AudioManager.js';
 import { drawNine, drawFixedImage, drawText, getUi, getUiMeta, snap, uiReady } from './uiKit.js';
 import { t } from '../config/i18n.js';
 import { getFontString } from '../config/fonts.js';
@@ -16,10 +17,21 @@ import { boltPath, drawPixelBolt } from './effects/pixelBolt.js';
 
 const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
+// 특수 잼 조합(comboActivate)은 전용 소리가 아직 없다 - 섞인 두 종류의 소리를 같이 낸다
+// (assets/sfx/README.md "특수 보석끼리 조합은 ... 두 소리를 같이 재생").
+const COMBO_SFX = { line: 'line_fire', bomb: 'bomb_explode', box: 'box_open', color: 'color_burst' };
+// 연쇄 몇 단계에서 combo_great를 들려줄지(README "연쇄 5단계 이상 도달 시 1번").
+const COMBO_GREAT_CASCADE = 5;
 
 // assets/effects/manifest.json 애니메이션 하나의 프레임 번호를 ageMs로 찾는다.
 // frameMs는 숫자(고정 길이, box_soul/color_wisp처럼 loop:true) 또는 배열(프레임마다
 // 다른 길이)일 수 있다(README 참고). loop가 아닌데 ageMs가 전체 길이를 넘으면 -1(끝남).
+// audioCues는 at(ms) 오름차순이어야 _advanceAndDrawSpecialFx가 앞에서부터 하나씩 꺼내 쓸 수 있다
+// (affected 칸 순서는 거리순이 아니다).
+function sortCues(cues) {
+  return cues.sort((a, b) => a.at - b.at);
+}
+
 function effectFrameIndex(anim, ageMs) {
   const { frames, frameMs, loop } = anim;
   if (typeof frameMs === 'number') {
@@ -80,9 +92,6 @@ export class CanvasRenderer {
 
     // 박스 잼 체인 라이트닝(§9) - source->target 지그재그 점 캐시(70ms마다 재계산). 매 프레임
     // 새 배열을 만들지 않도록 points는 flat [x0,y0,x1,y1,...] 배열을 재사용한다.
-    this._lightningCache = new Map();
-    this._lightningActiveKeys = new Set();
-    this._boxLightningSegments = [];
 
     // 폭탄 충격파(§3) 대상 effect 참조만 담는 재사용 배열(소스=gameState.effects 항목 그대로).
     this._shockwaveSources = [];
@@ -92,7 +101,11 @@ export class CanvasRenderer {
     this._comboMilestone = null; // { label, elapsedMs }
     this._comboBreakDisplay = null; // { streak, elapsedMs }
 
-    this._audioPlayer = new AudioPlayer(null);
+    // combo_great / timebomb_tick 판정용 - core에 전용 effect가 없는 소리들이라 렌더에서
+    // 직전 값과 비교해 "변한 순간"을 찾는다(퍼즐 로직은 건드리지 않는다).
+    this._prevCascadeCount = 0;
+    this._bombTimers = new Map(); // 보드 인덱스 -> 지난 프레임의 timeBomb timer
+    this._bombBoard = null;
 
     // 퍼즐에서 잼이 터진 위치 -> 같은 색 탑으로 날아가는 빛줄기. 발생이 드물고(잼 제거
     // 시점에만) 수명이 짧아 풀 없이 일반 배열로 충분하다(이벤트 배열들과 같은 관례).
@@ -113,6 +126,10 @@ export class CanvasRenderer {
     this._specialFx = [];
     this._simplePops = [];
     this._specialFxReserved = new Set();
+    // 변환형 조합(라인+컬러 등)의 연쇄 발동을 리드인+캐리어가 끝날 때까지 통째로 늦추기 위한
+    // { cells: Set<"r,c">, delayMs }. 해당 칸의 specialActivate가 올 때 하나씩 소모된다.
+    // shortcut: 그 발동이 끝내 오지 않으면 항목이 남는다 - 다음 조합이 통째로 덮어쓴다.
+    this._comboChainDelay = null;
     this._boltCanvas = null;
     this._boltCtx = null;
 
@@ -133,7 +150,6 @@ export class CanvasRenderer {
     if (maxParticles !== this._particles.particles.length) {
       this._particles = new ParticlePool(maxParticles);
     }
-    this._audioPlayer.setConfig(assets?.soundsConfig);
   }
 
   // CSS 픽셀 크기와 devicePixelRatio를 받아 캔버스 실제 해상도를 맞춘다.
@@ -153,9 +169,25 @@ export class CanvasRenderer {
   }
 
   // 메인 메뉴(mainMenuScreen.js) - ctx/css 크기만 공유하고 그리기는 MainMenuScreen이 직접 한다.
-  drawMainMenu(mainMenuScreen, playerState, now) {
+  // alpha < 1이면 타이틀 문 열림 전환 위로 겹쳐지는 크로스페이드다(titleScreen.menuFadeAlpha).
+  drawMainMenu(mainMenuScreen, playerState, now, alpha = 1) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
-    mainMenuScreen.draw(ctx, width, height, playerState, now);
+    if (alpha >= 1) {
+      mainMenuScreen.draw(ctx, width, height, playerState, now, this.assets);
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    mainMenuScreen.draw(ctx, width, height, playerState, now, this.assets);
+    ctx.restore();
+  }
+
+  // 화면 전환용 검은 오버레이(alpha 0~1) - 어떤 scene을 그린 뒤든 그 위에 덮는다.
+  drawFadeOverlay(alpha) {
+    const { ctx, cssWidth: width, cssHeight: height } = this;
+    if (alpha <= 0 || width === 0 || height === 0) return;
+    ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, alpha)})`;
+    ctx.fillRect(0, 0, width, height);
   }
 
   render(gameState, animator, battleState, hintCell = null, playerState = null, paused = false, battleHud = null, clearReward = null, upgradeTowerIndex = null, upgradeTab = 'levelUp') {
@@ -197,12 +229,14 @@ export class CanvasRenderer {
     // 새로 등록한다(gameState._advanceEffects와 같은 순서 - 신규 항목이 이번 틱에 같이
     // 늙지 않도록).
     this._advanceLandingSquashes(dtMs);
-    for (const cell of animator.getNewlySettledCells(board)) {
+    const newlySettled = animator.getNewlySettledCells(board);
+    for (const cell of newlySettled) {
       this._landingSquashes.set(`${cell.row},${cell.col}`, { elapsedMs: 0 });
     }
+    // 착지음은 같은 프레임에 여러 열이 멈춰도 1번(열마다 1번 + manifest minGapMs 40ms).
+    if (newlySettled.length > 0) audio.play('gem_land');
 
     const shockwaveSources = this._collectShockwaveSources(gameState);
-    const boxLightningSegments = this._collectBoxLightningSegments(gameState);
 
     ctx.save();
     ctx.translate(this._shakeX, this._shakeY);
@@ -218,7 +252,6 @@ export class CanvasRenderer {
       animator.getObstacleDisplayList(board),
       animator.getEffects(gameState, this.assets?.effectsConfig),
       shockwaveSources,
-      boxLightningSegments,
       now,
       dtMs,
       hintCell,
@@ -314,7 +347,7 @@ export class CanvasRenderer {
     ctx.strokeRect(rect.x + 1, rect.y + 1, rect.width - 2, rect.height - 2);
   }
 
-  _drawBoard(rect, displayList, obstacleList, effects, shockwaveSources, boxLightningSegments, nowMs, dtMs, hintCell, shuffleFx) {
+  _drawBoard(rect, displayList, obstacleList, effects, shockwaveSources, nowMs, dtMs, hintCell, shuffleFx) {
     const { ctx } = this;
     ctx.fillStyle = '#0d0f14';
     ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -355,7 +388,14 @@ export class CanvasRenderer {
     // 여백으로 옆 칸까지 번지는데, 먼저 그리면 그 위를 옆 칸의 일반 잼이 덮어버린다(README 참고).
     const normalItems = [];
     const specialItems = [];
-    for (const item of displayList) (item.special ? specialItems : normalItems).push(item);
+    for (const item of displayList) {
+      // 발동 스프라이트가 담당 중인 armed 칸은 fx에게 맡긴다 - core의 armed 간격과 manifest의
+      // 명중 간격이 달라서(예: 박스 boxStepMs 150 vs box_box 50) fx가 이미 터뜨린 칸을 core가
+      // 아직 지우지 않았을 때 "터진 잼이 다시 보이는" 걸 막는다. 터지기 전까지는 fx가
+      // _drawFrozenGemAt으로 같은 잼을 그려준다(README 점4).
+      if (item.armed && this._specialFxReserved.has(`${item.row},${item.col}`)) continue;
+      (item.special ? specialItems : normalItems).push(item);
+    }
     for (const item of normalItems) this._drawDisplayItem(rect, item, shockwaveSources, shockwaveCfg, nowMs, hintCell);
     for (const item of specialItems) this._drawDisplayItem(rect, item, shockwaveSources, shockwaveCfg, nowMs, hintCell);
 
@@ -368,7 +408,6 @@ export class CanvasRenderer {
     // 시한폭탄 오버레이 + 남은 횟수 숫자 - occupant 다음.
     this._drawTimeBombOverlays(rect, displayList, nowMs);
 
-    this._drawBoxLightning(rect, boxLightningSegments, nowMs);
     this._particles.draw(ctx);
 
     // 방해요소 부서짐/폭발(칸 범위 한정 - crate_break/stone_hit/stone_break/time_bomb_explode) -
@@ -919,17 +958,20 @@ export class CanvasRenderer {
   _drawShuffleText(rect, shuffleFx) {
     const cfg = this.assets?.effectsConfig;
     if (cfg?.settings?.reduceMotion) return;
+    // 입장 연출(skipClear)은 재배치가 아니다 - "SHUFFLE" 문구를 띄우면 층에 들어올 때마다
+    // 보드가 섞인 것처럼 읽힌다(gameState.shuffleBoard({skipClear}) 주석 참고).
+    if (shuffleFx.skipClear) return;
     const phases = cfg?.shuffleAnim?.phases;
     if (!phases) return;
 
     const elapsed = shuffleFx.elapsedMs;
     let opacity;
-    if (elapsed < phases.popMs) {
-      opacity = elapsed / phases.popMs;
-    } else if (elapsed < phases.scatterMs) {
+    if (elapsed < phases.clearMs) {
+      opacity = phases.clearMs > 0 ? elapsed / phases.clearMs : 1;
+    } else if (elapsed < phases.fallEndMs) {
       opacity = 1;
     } else {
-      opacity = 1 - Math.min(1, (elapsed - phases.scatterMs) / Math.max(1, phases.totalMs - phases.scatterMs));
+      opacity = 1 - Math.min(1, (elapsed - phases.fallEndMs) / Math.max(1, phases.totalMs - phases.fallEndMs));
     }
     if (opacity <= 0) return;
 
@@ -992,133 +1034,6 @@ export class CanvasRenderer {
   }
 
   // ------------------------------------------------------------
-  // 박스 잼 체인 라이트닝(§9) - core를 바꾸지 않고 gameState.effects에 이미 있는 필드만으로
-  // source->target 쌍을 매 프레임 다시 유도한다(이벤트가 살아있는 동안만 존재 - 보드/화면
-  // 어긋남 걱정 없음).
-  // ------------------------------------------------------------
-
-  _collectBoxLightningSegments(gameState) {
-    const segments = this._boxLightningSegments;
-    segments.length = 0;
-    const effects = gameState.effects;
-
-    for (const effect of effects) {
-      // 단독 박스 발동(specialActivate kind=box)의 번개는 더 이상 여기서 그리지 않는다 -
-      // _spawnSpecialFx/_drawBoxFx가 README #4의 픽셀 번개(drawPixelBolt)로 그린다.
-      // 조합(box_box/box_line/box_bomb/box_color)의 번개는 이번 작업 범위 밖이라 기존
-      // sin/cos 지그재그 라이트닝을 그대로 쓴다.
-      if (effect.type === 'comboActivate' && effect.comboKind === 'box_box') {
-        for (const cell of effect.affected) segments.push({ source: effect.position, target: cell });
-      } else if (
-        effect.type === 'comboActivate' &&
-        (effect.comboKind === 'box_line' || effect.comboKind === 'box_bomb' || effect.comboKind === 'box_color')
-      ) {
-        // 변환형 조합: affected엔 스왑한 두 칸만 있다 - 실제 번개 타겟은 같은 cascadeIndex로
-        // 같이 push되는 specialTransform.cells(+box_color는 노랜덤 타겟 specialActivate(box))다.
-        for (const other of effects) {
-          if (other.type === 'specialTransform' && other.cascadeIndex === effect.cascadeIndex) {
-            for (const cell of other.cells) segments.push({ source: effect.position, target: cell });
-          }
-          if (
-            effect.comboKind === 'box_color' &&
-            other.type === 'specialActivate' &&
-            other.kind === 'box' &&
-            other.cascadeIndex === effect.cascadeIndex
-          ) {
-            for (const cell of other.affected) segments.push({ source: effect.position, target: cell });
-          }
-        }
-      }
-    }
-    return segments;
-  }
-
-  _drawBoxLightning(rect, segments, nowMs) {
-    if (!segments || segments.length === 0) {
-      if (this._lightningCache.size > 0) this._lightningCache.clear();
-      return;
-    }
-
-    const cfg = this.assets?.effectsConfig?.boxLightning ?? {};
-    const recomputeMs = cfg.recomputeMs ?? 70;
-    const bucket = Math.floor(nowMs / recomputeMs);
-    const { ctx } = this;
-    const cellSize = rect.cellSize;
-    const wideWidth = Math.max(1, cellSize * (cfg.wideWidthRatio ?? 0.22));
-    const thinWidth = Math.max(1, cellSize * (cfg.thinWidthRatio ?? 0.045));
-    const color = cfg.color ?? '#8ef7ff';
-
-    const activeKeys = this._lightningActiveKeys;
-    activeKeys.clear();
-
-    for (const seg of segments) {
-      const key = `${seg.source.row},${seg.source.col}>${seg.target.row},${seg.target.col}`;
-      activeKeys.add(key);
-      let entry = this._lightningCache.get(key);
-      if (!entry) {
-        entry = { points: [], lastBucket: -1 };
-        this._lightningCache.set(key, entry);
-      }
-      if (entry.lastBucket !== bucket) {
-        this._computeLightningPoints(entry.points, seg.source, seg.target, rect, cfg, bucket);
-        entry.lastBucket = bucket;
-      }
-
-      this._strokeLightningPath(ctx, entry.points, wideWidth, color, cfg.wideAlpha ?? 0.35);
-      this._strokeLightningPath(ctx, entry.points, thinWidth, '#ffffff', 1);
-    }
-
-    for (const key of this._lightningCache.keys()) {
-      if (!activeKeys.has(key)) this._lightningCache.delete(key);
-    }
-  }
-
-  // points는 호출부가 들고 있는 flat [x0,y0,x1,y1,...] 배열을 그 자리에서 다시 채운다(매
-  // 재계산마다 새 배열을 만들지 않는다). bucket은 nowMs를 recomputeMs로 나눈 정수 - 같은
-  // bucket 동안은 항상 같은 점을 돌려줘서(결정적) "재계산 주기와 맞는 살아있는" 느낌을 낸다.
-  _computeLightningPoints(points, source, target, rect, cfg, bucket) {
-    const { cellSize } = rect;
-    const sx = rect.x + (source.col + 0.5) * cellSize;
-    const sy = rect.y + (source.row + 0.5) * cellSize;
-    const tx = rect.x + (target.col + 0.5) * cellSize;
-    const ty = rect.y + (target.row + 0.5) * cellSize;
-    const segments = cfg.segments ?? 6;
-    const dx = tx - sx;
-    const dy = ty - sy;
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    const nx = -dy / len;
-    const ny = dx / len;
-    const jitterAmp = cellSize * (cfg.jitterRatio ?? 0.18);
-
-    points.length = 0;
-    points.push(sx, sy);
-    for (let i = 1; i < segments; i++) {
-      const t = i / segments;
-      const baseX = sx + dx * t;
-      const baseY = sy + dy * t;
-      // 고정 주파수 sin/cos 조합(Math.random 금지) - bucket이 바뀔 때만 값이 바뀐다.
-      const wave = Math.sin(bucket * 0.9 + i * 1.7) + Math.cos(bucket * 1.3 + i * 2.3);
-      const offset = jitterAmp * wave * 0.5;
-      points.push(baseX + nx * offset, baseY + ny * offset);
-    }
-    points.push(tx, ty);
-  }
-
-  _strokeLightningPath(ctx, points, width, color, alpha) {
-    if (points.length < 4) return;
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(points[0], points[1]);
-    for (let i = 2; i < points.length; i += 2) ctx.lineTo(points[i], points[i + 1]);
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  // ------------------------------------------------------------
   // 잼 터짐 이펙트(assets/effects) - README.md 참고. line/bomb/box/color 발동 하나당
   // "스프라이트 재생 일정" 객체 하나를 만들어 this._specialFx에 넣고, 매 프레임 자체 ageMs로
   // 진행시킨다(core의 specialActivate effect 수명과 무관 - 점 4).
@@ -1142,8 +1057,11 @@ export class CanvasRenderer {
     return anim.frameMs.reduce((a, b) => a + b, 0);
   }
 
+  // audioCues: { at(ms), key, step } - 이펙트와 같은 지연에 소리를 내기 위한 일정
+  // (assets/sfx/README.md "타이밍"). _advanceAndDrawSpecialFx가 ageMs가 at을 넘길 때 재생한다.
   _spawnSpecialFx(effect, board) {
     const { kind, position, affected } = effect;
+    const step = effect.cascadeIndex ?? 1;
     if (kind === 'box' && effect.color != null) return; // box+color 조합 전용 경로 - 손대지 않는다(animator.js 참고).
 
     if (kind === 'line') {
@@ -1166,7 +1084,8 @@ export class CanvasRenderer {
         targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, fireAtMs, seg });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
-      this._specialFx.push({ kind: 'line', direction: effect.direction, row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets });
+      const cues = [{ at: 0, key: 'line_fire' }, ...targets.map((tg) => ({ at: tg.fireAtMs, key: 'gem_pop', step }))];
+      this._specialFx.push({ kind: 'line', direction: effect.direction, row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets, audioCues: sortCues(cues) });
     } else if (kind === 'bomb') {
       const hitMs = this.assets?.effectFxManifest?.bomb?.hitMs ?? 110;
       const colorId = this._cellColorId(board, position.row, position.col);
@@ -1180,7 +1099,8 @@ export class CanvasRenderer {
         targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, fireAtMs: hitMs });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
-      this._specialFx.push({ kind: 'bomb', row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets });
+      const cues = [{ at: 0, key: 'bomb_explode' }, ...targets.map(() => ({ at: hitMs, key: 'gem_pop', step }))];
+      this._specialFx.push({ kind: 'bomb', row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets, audioCues: sortCues(cues) });
     } else if (kind === 'box') {
       const cfg = this.assets?.effectFxManifest?.box ?? { startMs: 60, durationMs: 300, growPart: 0.3, reshapeMs: 70, hitMs: 150 };
       const colorId = this._cellColorId(board, position.row, position.col);
@@ -1195,7 +1115,10 @@ export class CanvasRenderer {
         targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, seed, boltCache: null });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
-      this._specialFx.push({ kind: 'box', row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets, cfg });
+      // 번개가 꽂히는 순간(cfg.hitMs)마다 box_zap + 그 칸의 pop.
+      const cues = [{ at: 0, key: 'box_open' }];
+      for (const tg of targets) cues.push({ at: cfg.hitMs, key: 'box_zap' }, { at: cfg.hitMs, key: 'gem_pop', step });
+      this._specialFx.push({ kind: 'box', row: position.row, col: position.col, colorId, ageMs: 0, totalLifeMs: maxEnd, targets, cfg, audioCues: sortCues(cues) });
     } else if (kind === 'color') {
       const colorCfg = this.assets?.effectFxManifest?.color ?? { waveStartMs: 240, stepMs: 45, minFlightMs: 60 };
       const waveStartMs = colorCfg.waveStartMs ?? 240;
@@ -1212,13 +1135,278 @@ export class CanvasRenderer {
         targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, flightMs });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
-      this._specialFx.push({ kind: 'color', row: position.row, col: position.col, ageMs: 0, totalLifeMs: maxEnd, targets, waveStartMs });
+      // charge(발동 순간) -> color_origin이 터지며 wisp가 날아가는 프레임에 burst -> 도착마다 hit.
+      const cues = [{ at: 0, key: 'color_charge' }, { at: waveStartMs, key: 'color_burst' }];
+      for (const tg of targets) {
+        cues.push({ at: waveStartMs + tg.flightMs, key: 'color_hit' }, { at: waveStartMs + tg.flightMs, key: 'gem_pop', step });
+      }
+      this._specialFx.push({ kind: 'color', row: position.row, col: position.col, ageMs: 0, totalLifeMs: maxEnd, targets, waveStartMs, audioCues: sortCues(cues) });
     }
+  }
+
+  // 그 칸의 "원래" 잼 한 장(색 + 특수 종류) - 조합 리드인에서 합쳐지는 두 특수 잼을 그릴 때 쓴다.
+  _comboGemAt(board, row, col) {
+    const idx = row * board.cols + col;
+    return {
+      colorId: this._cellColorId(board, row, col),
+      special: board.cellStates[idx]?.special ?? board.specials[idx] ?? null,
+    };
+  }
+
+  // _spawnSpecialFx와 같은 입력(specialActivate 모양)으로 fx를 만들고 재생만 delayMs 늦춘다
+  // (ageMs를 음수로 시작 - 그 사이 대상 칸의 잼은 _advanceAndDrawSpecialFx가 얼려 그린다).
+  // freezeOrigin: 발동 칸 자체의 잼도 얼려 그린다(변환으로 이미 특수 잼이 된 칸이 자기 발동을
+  // 기다리는 동안 보여야 하므로). 반환 = 이번에 만들어진 fx들(조합 전용 필드를 덧붙이려고).
+  _spawnDelayedFx(effectLike, board, delayMs, { freezeOrigin = false } = {}) {
+    const from = this._specialFx.length;
+    this._spawnSpecialFx(effectLike, board);
+    const made = this._specialFx.slice(from);
+    for (const fx of made) {
+      fx.ageMs = -Math.max(0, delayMs);
+      if (!freezeOrigin) continue;
+      const idx = fx.row * board.cols + fx.col;
+      fx.originGem = {
+        colorId: fx.colorId ?? this._cellColorId(board, fx.row, fx.col),
+        special: board.cellStates[idx]?.special ?? board.specials[idx] ?? null,
+      };
+      this._specialFxReserved.add(`${fx.row},${fx.col}`);
+    }
+    return made;
+  }
+
+  // 변환형 조합: core는 변환 직후(등장 순서 * DETONATION_CONFIG.transformStepMs = 40ms)에
+  // 바로 specialActivate를 낸다 - 순서와 간격은 core 그대로 두고, 리드인+캐리어(불씨/번개)
+  // 연출이 끝날 때까지 그 발동의 "그리기"만 통째로 늦춘다(보드 데이터는 그대로).
+  _deferComboChain(cells, delayMs) {
+    this._comboChainDelay = { cells: new Set(cells.map((c) => `${c.row},${c.col}`)), delayMs };
+  }
+
+  // flightMs를 바꾼 뒤(컬러+컬러의 무지개 물결) 수명과 소리 일정을 다시 계산한다.
+  _retimeColorFx(fx, step) {
+    const cues = [{ at: 0, key: 'color_charge' }, { at: fx.waveStartMs, key: 'color_burst' }];
+    let maxEnd = this._effectAnimDurationMs('color_origin', 460);
+    for (const target of fx.targets) {
+      const arriveAtMs = fx.waveStartMs + target.flightMs;
+      const tail = Math.max(
+        this._effectAnimDurationMs(`pop_${target.colorId}`, 270),
+        this._effectAnimDurationMs(`color_mark_${target.colorId}`, 200)
+      );
+      maxEnd = Math.max(maxEnd, arriveAtMs + tail);
+      cues.push({ at: arriveAtMs, key: 'color_hit' }, { at: arriveAtMs, key: 'gem_pop', step });
+    }
+    fx.totalLifeMs = maxEnd;
+    fx.audioCues = sortCues(cues);
+  }
+
+  // 특수 잼 조합(comboActivate) - manifest.combo + assets/effects/combos/README.md의 10종.
+  // 공통 리드인(두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 combo_merge_{색}) 다음에,
+  // 조합별 연출을 #1~#5 발동 fx의 조합으로 만든다(_spawnDelayedFx가 같은 _spawnSpecialFx
+  // 경로를 쓰고 재생만 늦춘다 - 조합 전용 드로잉 엔진을 따로 만들지 않는다).
+  _spawnComboFx(effect, gameState) {
+    const { board } = gameState;
+    const cfg = this.assets?.effectFxManifest?.combo ?? {};
+    // manifest.combo는 조합별 간격을 산문으로만 적어뒀다 - 숫자 필드가 생기면 그걸 쓰고,
+    // 없으면 그 산문에 적힌 값을 기본값으로 쓴다.
+    const swapMs = cfg.swapMs ?? 120;
+    const boxBoxStepMs = cfg.boxBoxStepMs ?? 50; // 박스+박스: 번개 6갈래 간격.
+    const boxLineStepMs = cfg.boxLineStepMs ?? 40; // 박스+라인/폭탄: 번개 2갈래 간격.
+    const chainGapMs = cfg.chainGapMs ?? 100; // 변환이 다 끝난 뒤 연쇄 발동까지의 틈.
+    const boxChainGapMs = cfg.boxChainGapMs ?? 60;
+    const boxColorStepMs = cfg.boxColorStepMs ?? 120; // 박스+컬러: 박스마다 번개를 쏘는 간격.
+    const colorColorGapMs = cfg.colorColorGapMs ?? 60; // 컬러+컬러: 소용돌이 2개의 시간차.
+    const colorColorStepMs = cfg.colorColorStepMs ?? 55; // 컬러+컬러: 무지개 물결, 칸 거리당.
+
+    const ref = effect.position;
+    const affected = effect.affected ?? [];
+    // plan 순서상 affected[0] = 스왑을 시작한 칸(a), position = 플레이어가 옮긴 도착 칸(b).
+    const a = affected[0] ?? ref;
+    const gemA = this._comboGemAt(board, a.row, a.col);
+    const gemB = this._comboGemAt(board, ref.row, ref.col);
+    const mergeColorId = gemB.colorId ?? gemA.colorId;
+    const cascadeIndex = effect.cascadeIndex ?? 1;
+
+    this._specialFx.push({
+      kind: 'comboLead',
+      row: ref.row,
+      col: ref.col,
+      fromRow: a.row,
+      fromCol: a.col,
+      gemA,
+      gemB,
+      mergeColorId,
+      swapMs,
+      ageMs: 0,
+      totalLifeMs: swapMs + this._effectAnimDurationMs(`combo_merge_${mergeColorId}`, 220),
+      targets: [],
+      audioCues: [],
+    });
+
+    const inBounds = (r, c) => r >= 0 && r < board.rows && c >= 0 && c < board.cols;
+    const rowOf = (r) => Array.from({ length: board.cols }, (_, c) => ({ row: r, col: c }));
+    const colOf = (c) => Array.from({ length: board.rows }, (_, r) => ({ row: r, col: c }));
+    const merged = (cell) =>
+      (cell.row === ref.row && cell.col === ref.col) || (cell.row === a.row && cell.col === a.col);
+    const rest = affected.filter((cell) => !merged(cell));
+    const transformCells =
+      gameState.effects.find((e) => e.type === 'specialTransform' && e.cascadeIndex === cascadeIndex)?.cells ?? [];
+    const boxColorId = gemB.special?.kind === 'box' ? gemB.colorId : gemA.colorId;
+
+    switch (effect.comboKind) {
+      case 'line_line':
+        // 합쳐진 칸에서 가로/세로 빛줄기 동시(+).
+        this._spawnDelayedFx({ kind: 'line', direction: 'horizontal', position: ref, affected: rowOf(ref.row), cascadeIndex }, board, swapMs);
+        this._spawnDelayedFx({ kind: 'line', direction: 'vertical', position: ref, affected: colOf(ref.col), cascadeIndex }, board, swapMs);
+        break;
+
+      case 'line_bomb': {
+        // 가운데 폭탄 + 가로 3줄/세로 3줄("굵은 +"). position을 늘 ref로 둬서 칸별 지연이 ref
+        // 기준으로 계산되게 하고, 가운데가 아닌 줄만 origin을 끈다.
+        const box3 = [];
+        for (let r = ref.row - 1; r <= ref.row + 1; r++) {
+          for (let c = ref.col - 1; c <= ref.col + 1; c++) if (inBounds(r, c)) box3.push({ row: r, col: c });
+        }
+        this._spawnDelayedFx({ kind: 'bomb', direction: null, position: ref, affected: box3, cascadeIndex }, board, swapMs);
+        for (let r = ref.row - 1; r <= ref.row + 1; r++) {
+          if (r < 0 || r >= board.rows) continue;
+          const made = this._spawnDelayedFx({ kind: 'line', direction: 'horizontal', position: ref, affected: rowOf(r), cascadeIndex }, board, swapMs);
+          if (r !== ref.row) for (const fx of made) fx.noOrigin = true;
+        }
+        for (let c = ref.col - 1; c <= ref.col + 1; c++) {
+          if (c < 0 || c >= board.cols) continue;
+          const made = this._spawnDelayedFx({ kind: 'line', direction: 'vertical', position: ref, affected: colOf(c), cascadeIndex }, board, swapMs);
+          if (c !== ref.col) for (const fx of made) fx.noOrigin = true;
+        }
+        break;
+      }
+
+      case 'bomb_bomb': {
+        // 큰 폭탄 1개를 4x4 중심(칸 사이)에. 주변 칸 pop은 평소 폭탄과 같은 bomb.hitMs.
+        let minRow = Infinity;
+        let maxRow = -Infinity;
+        let minCol = Infinity;
+        let maxCol = -Infinity;
+        for (const cell of affected) {
+          minRow = Math.min(minRow, cell.row);
+          maxRow = Math.max(maxRow, cell.row);
+          minCol = Math.min(minCol, cell.col);
+          maxCol = Math.max(maxCol, cell.col);
+        }
+        const made = this._spawnDelayedFx({ kind: 'bomb', direction: null, position: ref, affected, cascadeIndex }, board, swapMs);
+        for (const fx of made) {
+          fx.animKey = `bomb_big_${mergeColorId}`;
+          fx.drawRow = (minRow + maxRow) / 2;
+          fx.drawCol = (minCol + maxCol) / 2;
+          fx.totalLifeMs = Math.max(fx.totalLifeMs, this._effectAnimDurationMs(fx.animKey, 500));
+        }
+        break;
+      }
+
+      case 'box_box': {
+        // 번개 6갈래, 두 박스 색을 번갈아 boxBoxStepMs 간격.
+        const made = this._spawnDelayedFx({ kind: 'box', direction: null, position: ref, color: null, affected: [ref, ...rest], cascadeIndex }, board, swapMs);
+        for (const fx of made) {
+          fx.targets.forEach((target, i) => {
+            target.boltColorId = i % 2 === 0 ? gemB.colorId : gemA.colorId;
+            target.startMs = fx.cfg.startMs + i * boxBoxStepMs;
+            target.hitMs = fx.cfg.hitMs + i * boxBoxStepMs;
+          });
+          fx.totalLifeMs += Math.max(0, fx.targets.length - 1) * boxBoxStepMs;
+        }
+        break;
+      }
+
+      case 'color_color': {
+        // 소용돌이 2개(colorColorGapMs 차이) -> 무지개 물결이 가운데부터 보드 전체로.
+        const made = this._spawnDelayedFx({ kind: 'color', direction: null, position: ref, color: null, affected: [ref, ...rest], cascadeIndex }, board, swapMs);
+        for (const fx of made) {
+          fx.noWisp = true;
+          fx.extraOrigin = { row: a.row, col: a.col, atMs: colorColorGapMs };
+          for (const target of fx.targets) {
+            const dist = Math.hypot(target.row - ref.row, target.col - ref.col);
+            target.flightMs = colorColorGapMs + dist * colorColorStepMs;
+          }
+          this._retimeColorFx(fx, cascadeIndex);
+        }
+        break;
+      }
+
+      case 'line_color':
+      case 'bomb_color':
+      case 'box_color': {
+        // 무지개 불씨가 같은 색 잼마다 날아가 transform_{색}으로 변신시킨다.
+        if (transformCells.length === 0) break;
+        const [fx] = this._spawnDelayedFx({ kind: 'color', direction: null, position: ref, color: null, affected: [ref, ...transformCells], cascadeIndex }, board, swapMs);
+        if (!fx) break;
+        let lastArriveMs = 0;
+        for (const target of fx.targets) {
+          target.transformKey = `transform_${target.colorId}`;
+          lastArriveMs = Math.max(lastArriveMs, fx.waveStartMs + target.flightMs);
+        }
+        const chainAtMs = swapMs + lastArriveMs + chainGapMs;
+        if (effect.comboKind !== 'box_color') {
+          this._deferComboChain(transformCells, chainAtMs);
+          break;
+        }
+        // 박스+컬러: 변환된 박스는 터지지 않고, 하나씩 번개 2갈래를 쏜다. core는 ref에서
+        // (변환 수 x 2)개를 한 번에 터뜨리는 specialActivate 하나만 내므로(_spawnSpecialFx가
+        // 건너뛴다), 그 대상을 박스마다 2개씩 나눠 렌더러가 직접 fx를 만든다.
+        const boxAct = gameState.effects.find(
+          (e) => e.type === 'specialActivate' && e.kind === 'box' && e.color != null && e.cascadeIndex === cascadeIndex
+        );
+        const extra = boxAct?.affected ?? [];
+        transformCells.forEach((cell, i) => {
+          const pair = extra.slice(i * 2, i * 2 + 2);
+          if (pair.length === 0) return;
+          this._spawnDelayedFx(
+            { kind: 'box', direction: null, position: cell, color: null, affected: [cell, ...pair], cascadeIndex },
+            board,
+            chainAtMs + i * boxColorStepMs
+          );
+        });
+        break;
+      }
+
+      case 'box_line':
+      case 'box_bomb': {
+        // 번개 2갈래(boxLineStepMs 간격)가 그 색 잼 2개를 쳐서 변신시킨 뒤 차례로 발동.
+        if (transformCells.length === 0) break;
+        const [fx] = this._spawnDelayedFx({ kind: 'box', direction: null, position: ref, color: null, affected: [ref, ...transformCells], cascadeIndex }, board, swapMs);
+        if (!fx) break;
+        fx.colorId = boxColorId; // 번개/origin 색은 박스 잼 색(ref에 라인 잼이 있을 수도 있다).
+        let lastHitMs = 0;
+        fx.targets.forEach((target, i) => {
+          target.transformKey = `transform_${target.colorId}`;
+          target.startMs = fx.cfg.startMs + i * boxLineStepMs;
+          target.hitMs = fx.cfg.hitMs + i * boxLineStepMs;
+          lastHitMs = Math.max(lastHitMs, target.hitMs);
+        });
+        fx.totalLifeMs += Math.max(0, fx.targets.length - 1) * boxLineStepMs;
+        this._deferComboChain(transformCells, swapMs + lastHitMs + boxChainGapMs);
+        break;
+      }
+
+      default:
+        break;
+    }
+  }
+
+  // 조합 리드인 - 두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 combo_merge_{색} 십자 번쩍.
+  _drawComboLeadFx(rect, fx, nowMs) {
+    if (fx.ageMs < fx.swapMs) {
+      const t = fx.swapMs > 0 ? fx.ageMs / fx.swapMs : 1;
+      this._drawFrozenGemAt(rect, fx.row, fx.col, fx.gemB.colorId, nowMs, fx.gemB.special);
+      const row = fx.fromRow + (fx.row - fx.fromRow) * t;
+      const col = fx.fromCol + (fx.col - fx.fromCol) * t;
+      this._drawFrozenGemAt(rect, row, col, fx.gemA.colorId, nowMs, fx.gemA.special);
+      return;
+    }
+    this._drawEffectSprite(rect, `combo_merge_${fx.mergeColorId}`, fx.ageMs - fx.swapMs, fx.row, fx.col);
   }
 
   // ageMs 기준으로 한 프레임을 cx,cy(화면 픽셀, 칸 중심 기준 아님 - 이미 중심 좌표로 받는다)에
   // 그린다. 배율은 cellSize/32(README "칸 크기가 64px가 아니면 배율 = 칸 크기/32").
   _drawEffectSpriteAtPx(rect, animKey, ageMs, px, py) {
+    if (ageMs < 0) return false; // 아직 시작 전(_spawnDelayedFx가 ageMs를 음수로 시작시킨다).
     const anim = this.assets?.effectAnims?.get(animKey);
     if (!anim?.state?.loaded || anim.state.failed) return false;
     const frame = effectFrameIndex(anim, ageMs);
@@ -1241,25 +1429,17 @@ export class CanvasRenderer {
     return this._drawEffectSpriteAtPx(rect, animKey, ageMs, (col + 0.5) * 32, (row + 0.5) * 32);
   }
 
-  // 아직 터지지 않은 칸의 원래 잼을 흔들림/줄어듦 없이 그대로 그린다(specialFx가 core의
-  // clearing/falling보다 그리기를 늦추는 동안 - README 점4, "보드 데이터는 그대로 두고
-  // 그리기만 지연시켜"). 그 자리를 완전히 덮으므로 Animator가 그 사이 그린 다른 내용(이미
-  // 새로 채워진 잼 등) 위에 그대로 올라간다.
-  _drawFrozenGemAt(rect, row, col, colorId, nowMs) {
-    const gem = GEM_TYPES.find((g) => g.id === colorId);
-    if (!gem) return;
-    const { cellSize } = rect;
-    const tileSize = this.assets?.gemTileSize ?? 48;
-    const bodySize = this.assets?.gemBodySize ?? 32;
-    const bodyRatio = bodySize / tileSize;
-    const imageSize = tileSize * (cellSize / bodySize);
-    const cx = rect.x + (col + 0.5) * cellSize;
-    const cy = rect.y + (row + 0.5) * cellSize;
-    const { ctx } = this;
-    ctx.save();
-    ctx.imageSmoothingEnabled = this.assets?.gemImageSmoothing ?? false;
-    this._drawGemImage(gem, 'normal', cx - imageSize / 2, cy - imageSize / 2, imageSize, imageSize, nowMs, row, col, bodyRatio);
-    ctx.restore();
+  // 아직 터지지 않은(또는 발동 그리기를 아직 시작하지 않은) 칸의 잼을 그대로 그린다
+  // (specialFx가 core의 clearing/falling보다 그리기를 늦추는 동안 - README 점4, "보드
+  // 데이터는 그대로 두고 그리기만 지연시켜"). 그 자리를 완전히 덮으므로 Animator가 그 사이
+  // 그린 다른 내용(이미 새로 채워진 잼 등) 위에 그대로 올라간다. row/col은 소수도 된다
+  // (조합 리드인에서 두 특수 잼이 한 칸으로 미끄러지는 동안 - manifest.combo.swapMs).
+  // special을 주면 그 특수 잼 그림으로 그린다(없으면 일반 잼 - 변환 전 모습).
+  _drawFrozenGemAt(rect, row, col, colorId, nowMs, special = null) {
+    const value = GEM_TYPES.findIndex((g) => g.id === colorId);
+    if (value < 0 && special?.kind !== 'color') return;
+    const item = { row, col, value, special, opacity: 1, scale: 1 };
+    this._drawGem(item, rect.x + col * rect.cellSize, rect.y + row * rect.cellSize, rect.cellSize, nowMs);
   }
 
   // README #4 drawPixelBolt - 원본 해상도(칸=32px) 오프스크린 캔버스에 찍고 cellSize/32배로
@@ -1291,7 +1471,7 @@ export class CanvasRenderer {
     }
 
     const t = Math.min(1, boltAge / (fx.cfg.durationMs ?? 300));
-    const colorCfg = this.assets?.effectFxManifest?.box?.colors?.[fx.colorId] ?? {};
+    const colorCfg = this.assets?.effectFxManifest?.box?.colors?.[target.boltColorId ?? fx.colorId] ?? {};
     const put = (x, y, color) => {
       if (x < 0 || y < 0 || x >= w || y >= h) return;
       bctx.fillStyle = color;
@@ -1321,7 +1501,8 @@ export class CanvasRenderer {
       this._drawEffectSprite(rect, `pop_${target.colorId}`, localAge, target.row, target.col);
       this._drawEffectSprite(rect, `line_${axis}_${target.seg}_${target.colorId}`, localAge, target.row, target.col);
     }
-    this._drawEffectSprite(rect, `line_${axis}_origin_${fx.colorId}`, fx.ageMs, fx.row, fx.col);
+    // 라인+폭탄 조합의 "가운데가 아닌 줄"은 origin 없이 세그먼트만 이어 그린다(manifest.combo).
+    if (!fx.noOrigin) this._drawEffectSprite(rect, `line_${axis}_origin_${fx.colorId}`, fx.ageMs, fx.row, fx.col);
   }
 
   // 폭탄 발동(README #3) - 잼 -> pop -> 폭탄 스프라이트(폭탄이 pop보다 위) 순.
@@ -1333,33 +1514,40 @@ export class CanvasRenderer {
       if (fx.ageMs < target.fireAtMs) continue;
       this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - target.fireAtMs, target.row, target.col);
     }
-    this._drawEffectSprite(rect, `bomb_${fx.colorId}`, fx.ageMs, fx.row, fx.col);
+    // 폭탄+폭탄 조합은 animKey=bomb_big_{색}, 그리는 위치는 4x4 중심(칸 사이)으로 바뀐다.
+    this._drawEffectSprite(rect, fx.animKey ?? `bomb_${fx.colorId}`, fx.ageMs, fx.drawRow ?? fx.row, fx.drawCol ?? fx.col);
   }
 
   // 박스 발동(README #4) - 잼 -> pop/box_origin -> 픽셀 번개 -> box_soul -> box_hit 순.
+  // 조합에서는 대상마다 startMs/hitMs(갈래별 간격)와 boltColorId(두 박스 색 번갈아)가 다를 수
+  // 있고, transformKey가 붙은 대상은 터지지 않고 그 자리에서 특수 잼으로 변신한다(manifest.combo).
   _drawBoxFx(rect, fx, nowMs) {
     const { cfg } = fx;
+    const hitOf = (target) => target.hitMs ?? cfg.hitMs;
     for (const target of fx.targets) {
-      if (fx.ageMs < cfg.hitMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+      if (fx.ageMs < hitOf(target)) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
     }
     for (const target of fx.targets) {
-      if (fx.ageMs < cfg.hitMs) continue;
-      this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - cfg.hitMs, target.row, target.col);
+      if (fx.ageMs < hitOf(target) || target.transformKey) continue;
+      this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - hitOf(target), target.row, target.col);
     }
     this._drawEffectSprite(rect, `box_origin_${fx.colorId}`, fx.ageMs, fx.row, fx.col);
     for (const target of fx.targets) {
-      const boltAge = fx.ageMs - cfg.startMs;
+      const boltAge = fx.ageMs - (target.startMs ?? cfg.startMs);
       if (boltAge < 0 || boltAge > cfg.durationMs) continue;
       const head = this._drawPixelBolt(rect, fx, target, boltAge);
-      if (head) this._drawEffectSpriteAtPx(rect, `box_soul_${fx.colorId}`, fx.ageMs, head.x, head.y);
+      if (head) this._drawEffectSpriteAtPx(rect, `box_soul_${target.boltColorId ?? fx.colorId}`, fx.ageMs, head.x, head.y);
     }
     for (const target of fx.targets) {
-      if (fx.ageMs < cfg.hitMs) continue;
-      this._drawEffectSprite(rect, `box_hit_${fx.colorId}`, fx.ageMs - cfg.hitMs, target.row, target.col);
+      if (fx.ageMs < hitOf(target)) continue;
+      const key = target.transformKey ?? `box_hit_${fx.colorId}`;
+      this._drawEffectSprite(rect, key, fx.ageMs - hitOf(target), target.row, target.col);
     }
   }
 
   // 컬러 발동(README #5) - 잼 -> pop -> color_origin -> color_wisp(비행) -> color_mark 순.
+  // 조합에서는 extraOrigin(컬러+컬러의 두 번째 소용돌이), noWisp(컬러+컬러는 불씨 없이
+  // 물결만), transformKey(불씨가 꽂힌 잼이 터지는 대신 특수 잼으로 변신)가 붙는다.
   _drawColorFx(rect, fx, nowMs) {
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
@@ -1367,11 +1555,14 @@ export class CanvasRenderer {
     }
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
-      if (fx.ageMs < arriveAtMs) continue;
+      if (fx.ageMs < arriveAtMs || target.transformKey) continue;
       this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - arriveAtMs, target.row, target.col);
     }
     this._drawEffectSprite(rect, 'color_origin', fx.ageMs, fx.row, fx.col);
-    if (fx.ageMs >= fx.waveStartMs) {
+    if (fx.extraOrigin) {
+      this._drawEffectSprite(rect, 'color_origin', fx.ageMs - fx.extraOrigin.atMs, fx.extraOrigin.row, fx.extraOrigin.col);
+    }
+    if (!fx.noWisp && fx.ageMs >= fx.waveStartMs) {
       for (const target of fx.targets) {
         const arriveAtMs = fx.waveStartMs + target.flightMs;
         if (fx.ageMs >= arriveAtMs) continue;
@@ -1385,8 +1576,16 @@ export class CanvasRenderer {
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
       if (fx.ageMs < arriveAtMs) continue;
-      this._drawEffectSprite(rect, `color_mark_${target.colorId}`, fx.ageMs - arriveAtMs, target.row, target.col);
+      const key = target.transformKey ?? `color_mark_${target.colorId}`;
+      this._drawEffectSprite(rect, key, fx.ageMs - arriveAtMs, target.row, target.col);
     }
+  }
+
+  // "발동/조합 스프라이트가 아직 재생 중"(아직 시작 전인 지연 연출도 포함) - main.js가 매
+  // 프레임 GameState.settleHold에 넣어, 연출이 끝나기 전에 중력/리필이 돌지 않게 한다.
+  // 일반 매치 pop(_simplePops, 270ms)은 core의 clear(180ms)+fall보다 짧아 세지 않는다.
+  isSpecialFxBusy() {
+    return this._specialFx.length > 0;
   }
 
   // this._simplePops(일반 매치 pop) + this._specialFx(line/bomb/box/color) 진행/그리기.
@@ -1405,13 +1604,27 @@ export class CanvasRenderer {
     const next = [];
     for (const fx of this._specialFx) {
       fx.ageMs += dtMs;
+      // 아직 시작 전(_spawnDelayedFx로 미룬 조합 연쇄) - 그 칸들의 잼만 얼려 그려서, core가
+      // 이미 지워버린 자리에 구멍이 보이지 않게 한다(README 점4와 같은 "그리기만 지연").
+      if (fx.ageMs < 0) {
+        for (const target of fx.targets) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+        if (fx.originGem) this._drawFrozenGemAt(rect, fx.row, fx.col, fx.originGem.colorId, nowMs, fx.originGem.special);
+        next.push(fx);
+        continue;
+      }
+      while (fx.audioCues.length > 0 && fx.audioCues[0].at <= fx.ageMs) {
+        const cue = fx.audioCues.shift();
+        audio.play(cue.key, { step: cue.step });
+      }
       if (fx.kind === 'line') this._drawLineFx(rect, fx, nowMs);
       else if (fx.kind === 'bomb') this._drawBombFx(rect, fx, nowMs);
       else if (fx.kind === 'box') this._drawBoxFx(rect, fx, nowMs);
       else if (fx.kind === 'color') this._drawColorFx(rect, fx, nowMs);
+      else if (fx.kind === 'comboLead') this._drawComboLeadFx(rect, fx, nowMs);
 
       if (fx.ageMs > fx.totalLifeMs) {
         for (const target of fx.targets) this._specialFxReserved.delete(`${target.row},${target.col}`);
+        if (fx.originGem) this._specialFxReserved.delete(`${fx.row},${fx.col}`);
         continue;
       }
       next.push(fx);
@@ -1487,100 +1700,26 @@ export class CanvasRenderer {
     ctx.strokeRect(cx + gap / 2, cy + gap / 2, half - gap / 2, half - gap / 2);
   }
 
+  // Animator.getEffects가 남긴 유일한 도형 - 특수 잼 생성(specialCreate)의 짧은 글로우.
+  // 발동/조합/변환은 모두 assets/effects 스프라이트(_advanceAndDrawSpecialFx)가 그린다.
   _drawEffects(rect, effects) {
     if (!effects || effects.length === 0) return;
     const { ctx } = this;
-    const { cellSize, rows, cols } = rect;
+    const { cellSize } = rect;
 
     for (const effect of effects) {
+      if (effect.kind !== 'glow') continue;
       ctx.save();
       ctx.globalAlpha = Math.max(0, effect.opacity ?? 1);
-
-      if (effect.kind === 'beamRow') {
-        // thickness(칸 단위, 기본 1)와 color/glow는 조합 발동(line_line/line_bomb)이
-        // 단일 라인 발동보다 "굵고 밝게" 보이도록 쓰인다.
-        const thickness = effect.thickness ?? 1;
-        const y = rect.y + (effect.row - (thickness - 1) / 2) * cellSize;
-        ctx.fillStyle = effect.color ?? '#ffffff';
-        if (effect.glow) {
-          ctx.shadowColor = effect.color ?? '#ffffff';
-          ctx.shadowBlur = cellSize * 0.6;
-        }
-        ctx.fillRect(rect.x, y, cols * cellSize, thickness * cellSize);
-      } else if (effect.kind === 'beamCol') {
-        const thickness = effect.thickness ?? 1;
-        const x = rect.x + (effect.col - (thickness - 1) / 2) * cellSize;
-        ctx.fillStyle = effect.color ?? '#ffffff';
-        if (effect.glow) {
-          ctx.shadowColor = effect.color ?? '#ffffff';
-          ctx.shadowBlur = cellSize * 0.6;
-        }
-        ctx.fillRect(x, rect.y, thickness * cellSize, rows * cellSize);
-      } else if (effect.kind === 'burst') {
-        // radiusScale/color는 조합(bomb_bomb)이 단일 폭탄 발동보다 더 크고 다른 색으로
-        // 보이도록 쓰인다.
-        const cx = rect.x + (effect.col + 0.5) * cellSize;
-        const cy = rect.y + (effect.row + 0.5) * cellSize;
-        const radius = cellSize * (effect.radiusScale ?? 1.6) * (effect.t ?? 0);
-        ctx.strokeStyle = effect.color ?? '#ffd166';
-        ctx.lineWidth = Math.max(2, cellSize * 0.1);
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (effect.kind === 'wipe') {
-        const cx = rect.x + (effect.col + 0.5) * cellSize;
-        const cy = rect.y + (effect.row + 0.5) * cellSize;
-        const radius = cellSize * 0.5 * (1 + (effect.t ?? 0));
-        ctx.strokeStyle = RAINBOW[Math.floor((effect.t ?? 0) * RAINBOW.length) % RAINBOW.length];
-        ctx.lineWidth = Math.max(2, cellSize * 0.08);
-        ctx.beginPath();
-        ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (effect.kind === 'glow') {
-        // 특수 잼 생성: 그 칸 위에 짧게 번쩍이는 빛(색은 config/effects.json에서 받음).
-        const cx = rect.x + (effect.col + 0.5) * cellSize;
-        const cy = rect.y + (effect.row + 0.5) * cellSize;
-        const color = effect.color ?? '#ffffff';
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.shadowBlur = cellSize * 0.5;
-        ctx.beginPath();
-        ctx.arc(cx, cy, cellSize * 0.42, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (effect.kind === 'projectile') {
-        // 박스 잼 투사체: 박스 칸 -> 영향 칸으로 가속하며 날아가는 작은 발사체.
-        const ease = effect.t * effect.t; // easeInQuad - 가속감(다른 특수 잼보다 튀는 느낌)
-        const fromX = rect.x + (effect.fromCol + 0.5) * cellSize;
-        const fromY = rect.y + (effect.fromRow + 0.5) * cellSize;
-        const toX = rect.x + (effect.toCol + 0.5) * cellSize;
-        const toY = rect.y + (effect.toRow + 0.5) * cellSize;
-        ctx.fillStyle = '#ffe066';
-        ctx.strokeStyle = '#a9690d';
-        ctx.lineWidth = Math.max(1, cellSize * 0.04);
-        ctx.beginPath();
-        ctx.arc(fromX + (toX - fromX) * ease, fromY + (toY - fromY) * ease, cellSize * 0.16, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-      } else if (effect.kind === 'flash') {
-        // color_color 조합: 보드 전체를 덮는 큰 플래시(무지개색이 시간에 따라 바뀜). 셔플은
-        // 더 이상 이 플래시를 쓰지 않는다(§셔플 애니메이션 - 젬이 직접 소용돌이치며 움직이는
-        // 연출로 대체됨, _getShuffleDisplayList/_drawShuffleText 참고).
-        const boardWidth = cols * cellSize;
-        const boardHeight = rows * cellSize;
-        ctx.fillStyle = RAINBOW[Math.floor((effect.t ?? 0) * RAINBOW.length) % RAINBOW.length];
-        ctx.globalAlpha = Math.max(0, (effect.opacity ?? 1) * 0.55);
-        ctx.fillRect(rect.x, rect.y, boardWidth, boardHeight);
-        ctx.globalAlpha = Math.max(0, effect.opacity ?? 1);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = Math.max(3, cellSize * 0.12);
-        ctx.strokeRect(
-          rect.x + cellSize * 0.1,
-          rect.y + cellSize * 0.1,
-          boardWidth - cellSize * 0.2,
-          boardHeight - cellSize * 0.2
-        );
-      }
-
+      const cx = rect.x + (effect.col + 0.5) * cellSize;
+      const cy = rect.y + (effect.row + 0.5) * cellSize;
+      const color = effect.color ?? '#ffffff';
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = cellSize * 0.5;
+      ctx.beginPath();
+      ctx.arc(cx, cy, cellSize * 0.42, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
   }
@@ -1622,15 +1761,27 @@ export class CanvasRenderer {
       // 잼 터짐 이펙트(assets/effects) - line/bomb/box(일반)/color 발동마다 스프라이트
       // 재생 일정을 만든다(설정 유무와 무관하게 항상 시도 - obstacleFx와 같은 이유).
       if (effect.type === 'specialActivate') {
-        this._spawnSpecialFx(effect, gameState.board);
+        // 변환형 조합으로 막 만들어진 특수 잼의 발동은 조합 리드인+캐리어 연출이 끝난 뒤에
+        // 그린다(_deferComboChain - core의 순서/간격은 그대로).
+        const chain = this._comboChainDelay;
+        const key = `${effect.position.row},${effect.position.col}`;
+        if (chain?.cells.has(key)) {
+          chain.cells.delete(key);
+          if (chain.cells.size === 0) this._comboChainDelay = null;
+          this._spawnDelayedFx(effect, gameState.board, chain.delayMs, { freezeOrigin: true });
+        } else {
+          this._spawnSpecialFx(effect, gameState.board);
+        }
+      } else if (effect.type === 'comboActivate') {
+        this._spawnComboFx(effect, gameState);
       }
+
+      // 효과음(assets/sfx)은 effects.json에 particles/shake 항목이 없어도(hint 등) 독립적으로
+      // 재생을 시도한다 - manifest/파일이 없으면 AudioManager가 조용히 무음 처리한다.
+      this._playEffectSfx(effect);
 
       const key = this._effectConfigKey(effect);
       if (!key) continue;
-
-      // 사운드(§13)는 effects.json에 particles/shake 항목이 없어도(comboChange/hint 등)
-      // 독립적으로 재생을 시도한다 - AudioPlayer가 설정/파일 없음을 조용히 무시한다.
-      this._audioPlayer.play(key, { comboStreak: gameState.comboStreak });
 
       const eventCfg = events[key];
       if (!eventCfg) continue;
@@ -1655,11 +1806,23 @@ export class CanvasRenderer {
     // 항상 호출한다. specialFx(line/bomb/box/color)가 이미 담당 중인 칸(_specialFxReserved)은
     // 제외한다 - 그 칸의 pop은 specialFx 자신의 지연 일정(hitMs 등)에 맞춰 따로 재생된다.
     const newlyClearing = animator.getNewlyClearingCells(gameState.board);
+    // gem_pop_n은 연쇄 단계로 고른다. 같은 프레임에 여러 칸이 터져도 manifest의 minGapMs(25ms)가
+    // 중복을 걸러낸다(README "한 프레임에 보석 20개가 터져도 소리가 뭉개지지 않게").
+    const popStep = Math.max(1, gameState.cascadeCount || 1);
     for (const cell of newlyClearing) {
       if (this._specialFxReserved.has(`${cell.row},${cell.col}`)) continue;
       const colorId = GEM_TYPES[cell.value]?.id;
-      if (colorId) this._simplePops.push({ row: cell.row, col: cell.col, colorId, ageMs: 0 });
+      if (!colorId) continue;
+      this._simplePops.push({ row: cell.row, col: cell.col, colorId, ageMs: 0 });
+      audio.play('gem_pop', { step: popStep });
     }
+
+    // 한 이동에서 연쇄 5단계 처음 도달(cascadeCount는 유효 스왑마다 0으로 리셋된다).
+    const cascade = gameState.cascadeCount ?? 0;
+    if (cascade >= COMBO_GREAT_CASCADE && this._prevCascadeCount < COMBO_GREAT_CASCADE) audio.play('combo_great');
+    this._prevCascadeCount = cascade;
+
+    this._advanceTimeBombAudio(gameState.board);
 
     // 기존 파편 파티클(§1) - pop_{색} 스프라이트가 이미 번쩍임/산산조각/파편을 다 그리므로
     // 기본은 끈다. settings.legacyClearParticles:true로 다시 켤 수 있다.
@@ -1672,22 +1835,85 @@ export class CanvasRenderer {
     }
   }
 
-  // 셔플 사운드 훅(§사운드 훅) + 착지 스쿼시 트리거를 같이 본다(둘 다 같은 "effect별 한 번만"
-  // 마크가 필요해서 한 메서드로 묶음). shuffleStart는 _collectNewEffects의 범용 "처음 봤을 때
-  // 1번" 경로(_effectConfigKey)가 이미 낸다. 여기서는:
-  // - shuffleScatter: 2단계 시작(phases.convergeMs 경계)에서 1번.
-  // - 착지 스쿼시: 3단계 시작(phases.scatterMs 경계)에서 모든 도착 칸에 1번씩 - 기존
-  //   _landingSquashes(§11 낙하 착지 스쿼시)를 그대로 재사용한다(새 메커니즘 불필요).
+  // 효과음 이벤트 연결(assets/sfx/README.md "이벤트 연결") - effect 1개당 1번. 특수 잼
+  // 발동(specialActivate)만 예외로, 이펙트 지연(stepMs/hitMs/wisp 도착)에 맞춰야 해서
+  // _spawnSpecialFx가 만든 audioCues가 낸다.
+  _playEffectSfx(effect) {
+    switch (effect.type) {
+      case 'specialCreate':
+        audio.play('special_create');
+        return;
+      case 'shuffle':
+        audio.play('shuffle');
+        return;
+      case 'hint':
+        audio.play('hint');
+        return;
+      case 'obstacleDamaged':
+        if (effect.id === 'stone') audio.play('stone_hit');
+        return;
+      case 'obstacleDestroyed':
+        if (effect.id === 'crate') audio.play('crate_break');
+        else if (effect.id === 'stone') audio.play('stone_break');
+        return;
+      case 'obstacleExpire':
+        if (effect.id === 'timeBomb') audio.play('timebomb_explode');
+        return;
+      case 'comboActivate':
+        for (const kind of new Set(String(effect.comboKind ?? '').split('_'))) {
+          if (COMBO_SFX[kind]) audio.play(COMBO_SFX[kind], { step: effect.cascadeIndex ?? 1 });
+        }
+        return;
+      default:
+    }
+  }
+
+  // 시한폭탄 타이머(timebomb_tick / 남은 수 1이면 timebomb_warn) - core에 "줄어들었다" 이벤트가
+  // 없어서 board.attachments의 timer를 직접 지켜본다. 층이 바뀌면 보드 객체가 바뀌므로 기억을
+  // 비운다(같은 인덱스를 이전 보드 기준으로 오판하지 않게 - Animator.reset()과 같은 이유).
+  _advanceTimeBombAudio(board) {
+    const atts = board.attachments;
+    if (!Array.isArray(atts)) return;
+    if (this._bombBoard !== board) {
+      this._bombTimers.clear();
+      this._bombBoard = board;
+    }
+    let ticked = false;
+    let warned = false;
+    for (let i = 0; i < atts.length; i++) {
+      const att = atts[i];
+      if (att?.type !== 'timeBomb') {
+        this._bombTimers.delete(i);
+        continue;
+      }
+      const prev = this._bombTimers.get(i);
+      if (prev != null && att.timer < prev) {
+        ticked = true;
+        if (att.timer === 1) warned = true;
+      }
+      this._bombTimers.set(i, att.timer);
+    }
+    if (warned) audio.play('timebomb_warn');
+    else if (ticked) audio.play('timebomb_tick');
+  }
+
+  // 셔플 사운드 훅(§사운드 훅) - shuffleStart는 _collectNewEffects의 범용 "처음 봤을 때 1번"
+  // 경로(_effectConfigKey)가 이미 낸다. 여기서는:
+  // - shuffleLand: 칸이 착지하는 그 틱마다 - 같은 프레임에 여러 칸이 착지해도 1번만, 그리고
+  //   마지막으로 낸 지 soundGapMs(기본 40ms) 안 지났으면 건너뛴다(스펙 "최소 40ms 간격"). 착지
+  //   바운스 자체(세로 스케일 연출)는 animator의 computeShuffleFallPose가 이미 그려주므로 여기선
+  //   손대지 않는다.
   // - shuffleSettle: effect가 gameState.effects에서 사라지는 순간 - core의 _advanceEffects가
   //   durationMs를 넘기면 바로 배열에서 빼버려 "끝난 그 틱"을 여기서 직접 볼 수 없으므로,
   //   "지난 프레임엔 있었는데 이번 프레임엔 없다"로 판정한다.
-  // 흔들림/연출 줄이기(settings.reduceMotion)일 땐 소용돌이/정렬 단계가 없으므로 scatter
-  // 사운드와 착지 스쿼시 둘 다 건너뛴다.
+  // 흔들림/연출 줄이기(settings.reduceMotion)일 땐 떨어지기 단계가 없으므로 착지 사운드를
+  // 건너뛴다(shuffleStart/Settle은 그대로 낸다).
   _advanceShuffleAudio(gameState) {
     const cfg = this.assets?.effectsConfig;
     const reduced = cfg?.settings?.reduceMotion;
-    const phases = cfg?.shuffleAnim?.phases;
-    const squashScale = cfg?.shuffleAnim?.land?.squashScale ?? 0.9;
+    const shuffleAnim = cfg?.shuffleAnim;
+    const { rows, cols } = gameState.board;
+    const soundGapMs = shuffleAnim?.land?.soundGapMs ?? 40;
     const current = new Set();
 
     for (const effect of gameState.effects) {
@@ -1695,30 +1921,33 @@ export class CanvasRenderer {
       current.add(effect);
       let marks = this._shuffleAudioMarks.get(effect);
       if (!marks) {
-        marks = { scatter: false, landed: false };
+        marks = { landedCells: new Set(), lastLandSoundMs: null };
         this._shuffleAudioMarks.set(effect, marks);
       }
-      if (reduced || !phases) continue;
-      if (!marks.scatter && effect.elapsedMs >= phases.convergeMs) {
-        marks.scatter = true;
-        this._audioPlayer.play('shuffleScatter');
-      }
-      if (!marks.landed && effect.elapsedMs >= phases.scatterMs) {
-        marks.landed = true;
-        const durationMs = Math.max(1, phases.totalMs - phases.scatterMs);
-        const amount = 1 - squashScale;
-        for (const move of effect.moves) {
-          if (move.value === EMPTY || move.value === OBSTACLE) continue;
-          this._landingSquashes.set(`${move.to.row},${move.to.col}`, { elapsedMs: 0, durationMs, amount });
+      if (reduced || !shuffleAnim) continue;
+
+      const timing = computeShuffleFallTiming(effect.seed, rows, cols, shuffleAnim);
+      // animator가 그릴 때 쓰는 것과 같은 실효 경과 시간이어야 착지음이 화면과 맞는다
+      // (입장 연출은 §0 비우기만큼 타임라인이 앞당겨져 있다).
+      const elapsed = shuffleElapsedMs(effect, shuffleAnim);
+      let landedNow = false;
+      for (const move of effect.moves) {
+        if (move.value === EMPTY || move.value === OBSTACLE) continue;
+        const idx = move.to.row * cols + move.to.col;
+        if (marks.landedCells.has(idx)) continue;
+        if (elapsed >= timing[idx].landMs) {
+          marks.landedCells.add(idx);
+          landedNow = true;
         }
+      }
+      if (landedNow && (marks.lastLandSoundMs == null || elapsed - marks.lastLandSoundMs >= soundGapMs)) {
+        marks.lastLandSoundMs = elapsed;
+        audio.play('gem_land');
       }
     }
 
     for (const effect of this._shuffleAudioMarks.keys()) {
-      if (!current.has(effect)) {
-        this._audioPlayer.play('shuffleSettle');
-        this._shuffleAudioMarks.delete(effect);
-      }
+      if (!current.has(effect)) this._shuffleAudioMarks.delete(effect);
     }
   }
 
@@ -1846,11 +2075,6 @@ export class CanvasRenderer {
     for (const event of battleState.events) {
       if (this._seenEffects.has(event)) continue;
       this._seenEffects.add(event);
-
-      // 사운드는 effects.json 설정(아래 shake/particles)과 무관하게 독립적으로 재생을
-      // 시도한다(_collectNewEffects와 같은 패턴) - sounds.json에 항목/파일이 없으면
-      // AudioPlayer가 조용히 무시한다(summonLand의 SFX 훅).
-      this._audioPlayer.play(event.type);
 
       const eventCfg = events[event.type];
       if (!eventCfg) continue;
@@ -2098,7 +2322,10 @@ export class CanvasRenderer {
     ctx.textBaseline = 'middle';
 
     // panels/panel_inset(9-slice) - 점수 숫자 칸(README: "골드/다이아/점수 숫자 칸").
-    ctx.font = getFontString(scoreFont, true);
+    // 숫자는 바 기준 폰트보다 작게 - 예전 크기(scoreFont 그대로)는 inset 9-slice 테두리를
+    // 넘어가 패널을 덮었다.
+    const numberFont = scoreFont * 0.78;
+    ctx.font = getFontString(numberFont, true);
     const scoreText = `${gameState.score}`;
     const scoreTextWidth = ctx.measureText(scoreText).width;
     const insetPath = 'panels/panel_inset.png';
@@ -2108,7 +2335,8 @@ export class CanvasRenderer {
     let scoreTextX = rect.x + 10;
     if (uiReady(insetState) && insetMeta?.slice) {
       const insetW = snap(scoreTextWidth + padX * 2);
-      const insetH = snap(scoreFont * 1.3);
+      // 테두리 4px x 2 + drawText 외곽선 2px 여유. 폰트에 비례시키면 작은 화면에서 테두리가 글자를 먹는다.
+      const insetH = snap(numberFont + 12);
       ctx.imageSmoothingEnabled = false;
       drawNine(ctx, insetState.img, insetMeta.slice, rect.x + 10, midY - insetH / 2, insetW, insetH);
       scoreTextX = rect.x + 10 + padX;
@@ -2118,8 +2346,9 @@ export class CanvasRenderer {
     ctx.fillStyle = '#e8e8e8';
     drawText(ctx, scoreText, scoreTextX, midY);
 
-    ctx.fillStyle = HUD_CONFIG.text.dim;
-    ctx.font = getFontString(scoreFont * 0.62);
+    // dim(#8a8296)은 바 배경(#15181f) 위에서 거의 안 보였다 - primary + 조금 크게.
+    ctx.fillStyle = HUD_CONFIG.text.primary;
+    ctx.font = getFontString(scoreFont * 0.72, true);
     drawText(ctx, t('hud.cascade', { count: gameState.cascadeCount }), rect.x + rect.width * 0.4, midY);
 
     // 콤보(연속 스트릭)(§10) - 항상 gameState의 현재 값에서 직접 그린다(이벤트로 캐시한 값을
@@ -2211,7 +2440,11 @@ export class CanvasRenderer {
     const { ctx } = this;
     const cfg = HUD_CONFIG.popup;
     const cardWidth = Math.min(width * 0.72, 300);
-    const cardHeight = cardWidth * 0.62;
+    // 일시정지 팝업에만 효과음/배경음 슬라이더 + 음소거 줄이 더 붙는다(headH = 원래 카드 높이 -
+    // 제목/설명/버튼 크기 계산은 그대로 두고 그 사이에 블록만 끼운다).
+    const headH = cardWidth * 0.62;
+    const audioBlockH = kind === 'pause' ? headH * 0.62 : 0;
+    const cardHeight = headH + audioBlockH;
     const cardX = (width - cardWidth) / 2;
     const cardY = (height - cardHeight) / 2;
 
@@ -2256,17 +2489,19 @@ export class CanvasRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = title.color;
-    ctx.font = getFontString(Math.max(16, cardHeight * 0.16), true);
-    drawText(ctx, title.text, cardX + cardWidth / 2, cardY + cardHeight * 0.28);
+    ctx.font = getFontString(Math.max(16, headH * 0.16), true);
+    drawText(ctx, title.text, cardX + cardWidth / 2, cardY + headH * 0.28);
 
     ctx.fillStyle = HUD_CONFIG.text.dim;
-    ctx.font = getFontString(Math.max(11, cardHeight * 0.08));
-    drawText(ctx, title.desc, cardX + cardWidth / 2, cardY + cardHeight * 0.48);
+    ctx.font = getFontString(Math.max(11, headH * 0.08));
+    drawText(ctx, title.desc, cardX + cardWidth / 2, cardY + headH * 0.48);
+
+    const audioRects = audioBlockH > 0 ? this._drawAudioSettings(cardX + 14, cardY + headH * 0.6, cardWidth - 28, audioBlockH) : null;
 
     const buttons = BUTTONS[kind];
     const btnGap = 8;
     const btnWidth = (cardWidth - 24 - btnGap * (buttons.length - 1)) / buttons.length;
-    const btnHeight = Math.max(32, cardHeight * 0.22);
+    const btnHeight = Math.max(32, headH * 0.22);
     const btnY = cardY + cardHeight - 16 - btnHeight;
     const rects = {};
 
@@ -2298,7 +2533,54 @@ export class CanvasRenderer {
     });
 
     ctx.restore();
-    this.lastLayout.popup = { kind, buttons: rects };
+    this.lastLayout.popup = { kind, buttons: rects, audio: audioRects };
+  }
+
+  // 효과음/배경음 슬라이더 + 음소거 버튼(일시정지 팝업). 전용 UI 에셋이 없어 팝업 버튼의
+  // 색 폴백과 같은 사각형으로 그린다. 반환값은 main.js가 터치 판정에 쓰는 사각형들 -
+  // 슬라이더는 얇아서 세로로 넉넉한 히트 영역을 따로 돌려준다.
+  _drawAudioSettings(x, y, width, height) {
+    const { ctx } = this;
+    const cfg = HUD_CONFIG.popup;
+    const rowH = height / 3;
+    const labelW = width * 0.3;
+    const trackH = Math.max(6, rowH * 0.22);
+    const rects = {};
+
+    ctx.font = getFontString(Math.max(10, rowH * 0.34));
+    [['sfx', t('menu.settings.sfx'), audio.sfxVolume], ['bgm', t('menu.settings.bgm'), audio.bgmVolume]].forEach(([channel, label, value], i) => {
+      const cy = y + rowH * (i + 0.5);
+      ctx.textAlign = 'left';
+      ctx.fillStyle = HUD_CONFIG.text.primary;
+      drawText(ctx, label, x, cy);
+
+      const tx = x + labelW;
+      const tw = width - labelW;
+      ctx.fillStyle = cfg.ghost;
+      ctx.fillRect(tx, cy - trackH / 2, tw, trackH);
+      ctx.fillStyle = audio.muted ? cfg.disabled : cfg.primary;
+      ctx.fillRect(tx, cy - trackH / 2, tw * value, trackH);
+      const knobW = Math.max(6, trackH);
+      ctx.fillStyle = HUD_CONFIG.text.primary;
+      ctx.fillRect(tx + tw * value - knobW / 2, cy - trackH, knobW, trackH * 2);
+      rects[channel] = { x: tx, y: cy - rowH / 2, width: tw, height: rowH };
+    });
+
+    const muteH = Math.max(20, rowH * 0.8);
+    const muteY = y + rowH * 2 + (rowH - muteH) / 2;
+    ctx.fillStyle = audio.muted ? cfg.primary : cfg.ghost;
+    ctx.fillRect(x, muteY, width, muteH);
+    ctx.strokeStyle = cfg.cardBorder;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + 1, muteY + 1, width - 2, muteH - 2);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = HUD_CONFIG.text.primary;
+    ctx.font = getFontString(Math.max(10, muteH * 0.42), true);
+    drawText(ctx, t(audio.muted ? 'menu.settings.unmute' : 'menu.settings.mute'), x + width / 2, muteY + muteH / 2);
+    rects.mute = { x, y: muteY, width, height: muteH };
+
+    ctx.textAlign = 'center';
+    return rects;
   }
 
   // 타워 강화 팝업(assets/ui/README.md "타워 강화 팝업") - 탭(레벨업/인벤토리) + 장착된 타워
@@ -2648,12 +2930,13 @@ export class CanvasRenderer {
       const { streak, elapsedMs } = this._comboBreakDisplay;
       const progress = Math.min(1, elapsedMs / COMBO_CONFIG.breakDisplayDurationMs);
       ctx.save();
-      ctx.globalAlpha = Math.max(0, 1 - progress);
+      // 처음부터 흐려지면 읽기 전에 사라진다 - 60%까지는 그대로 두고 나머지만 페이드아웃.
+      ctx.globalAlpha = progress > 0.6 ? Math.max(0, 1 - (progress - 0.6) / 0.4) : 1;
       ctx.fillStyle = '#ff6b6b';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = getFontString(22);
-      drawText(ctx, t('hud.comboBreak', { count: streak }), cx, cy + 36);
+      ctx.font = getFontString(22, true);
+      drawText(ctx, t('hud.comboBreak', { count: streak }), cx, cy + 36, { outlineWidth: 3 });
       ctx.restore();
     }
   }

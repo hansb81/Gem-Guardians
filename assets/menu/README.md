@@ -1,13 +1,19 @@
-# 메인 메뉴 배경 (menu)
+# 메인 메뉴 배경 (menu) v2 — 경량 구조
 
-봉인된 문 너머의 성소. 애니메이션 시트 + 정지 이미지.
+봉인된 문 너머의 성소. v1의 전체 화면 64프레임 시트(`menu_bg_anim.png`)는 없앴다. 대신 **정지 베이스 한 장 + 움직이는 부분만 잘라낸 작은 시트 + 코드로 그리는 불씨**. 네이티브 180x320, 3배로 그린다, `imageSmoothingEnabled = false`.
 
-- `menu_bg_anim.png`: 애니 시트. 프레임 180x320, 64프레임, 8열 x 8행, 100ms, 반복(6.4초, 끊김 없음). 원석 둥실거림/금빛 균열/불씨, 아치의 네온 고대 문자, 촛불, 제단 금빛 룬, 바닥 5색 룬 돌.
-  프레임 `i = floor(now / 100) % 64`, `sx = (i % 8) * 180`, `sy = floor(i / 8) * 320`.
-- `preview.gif`: 움직이는 미리보기.
-- `menu_bg.png`: 정지 버전(애니 8번 프레임), 네이티브 180x320. 로딩 전/저사양용. 3배(540x960)로 그린다, `imageSmoothingEnabled = false`.
-- `menu_bg_x3.png`: 이미 3배로 키운 540x960 (DOM/CSS 배경으로 쓸 때 편함, `image-rendering: pixelated`).
-- `preview_with_ui.png`: 시안 A UI 자리를 겹친 미리보기.
-- `manifest.json`: 크기와 시안 A UI 위치(화면 px). 배경의 기둥/제단/원석은 이 UI 자리를 피해서 배치돼 있다.
+- `menu_base.png` 180x320: 배경 전체 정지 그림.
+- `menu_p00.png` ~ `menu_p02.png`: 움직이는 부분의 프레임 시트. 위치/프레임/순서는 `manifest.json`의 `background.pieces`. 200ms/프레임, 32프레임 = 6.4초 반복.
+  - p00: 아치 위쪽 네온 문자 (39x13)
+  - p01: 아치 좌우 문자 + 봉인 원석(둥실거림, 금빛 균열) + 빛기둥 + 촛불 + 제단 룬 (93x126) — 가운데 원석을 석상으로 바꾸면 이 조각만 새로 만든다.
+  - p02: 바닥 5색 룬 돌 + 바닥의 따뜻한 빛 (101x24)
+- `manifest.json` `background.particles`: 원석 균열에서 올라가는 불씨 10개(1px, 코드로). 석상으로 바꾸면 빼면 된다.
+- `menu_bg.png`: 정지 전체 그림(v1 8번 프레임). 로딩 전/저사양 대체용.
+- `preview.gif`: 이 구조로 합성한 결과. `preview_with_ui.png`: 시안 A UI 자리를 겹친 미리보기.
+- `manifest.json` `layoutA_screenPx`: 시안 A UI 위치(화면 px).
 
-생성기: `art/menu/build_menu.py` (장면 코드 `art/menu/menu_bg.py`).
+그리기 순서는 타이틀과 같다: 베이스 → 각 piece의 현재 프레임(`f = floor(now/200) % 32`, `k = seq[f % periodFrames]`) → 입자 → UI.
+합성 결과는 v1 시트와 픽셀 단위로 동일(검증 완료).
+
+크기: v1 시트 336KB / GPU 텍스처 약 14.7MB → v2 전체 86KB / 약 2.3MB.
+생성기: `art/menu/build_menu_layers.py` (장면 코드 `art/menu/menu_bg.py`, 분리 도구 `art/tools/split_anim.py`).

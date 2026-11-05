@@ -27,7 +27,7 @@
  "roles": {
   "_doc": "역할(archetype)별 1층 기준 스탯. 몬스터는 역할 스탯을 그대로 쓰고, 몬스터 항목에 같은 키가 있으면 덮어쓴다. threat = 웨이브 예산 점수, weight = 뽑힐 확률 가중치, unlockFloor = 이 역할이 처음 나오는 층.",
   "swarm": {
-   "hp": 14,
+   "hp": 20,
    "def": 0,
    "travelTime": 15,
    "wallDmg": 4,
@@ -38,7 +38,7 @@
    "desc": "작고 약한 떼"
   },
   "grunt": {
-   "hp": 30,
+   "hp": 42,
    "def": 0,
    "travelTime": 20,
    "wallDmg": 8,
@@ -49,7 +49,7 @@
    "desc": "기본 보병"
   },
   "runner": {
-   "hp": 22,
+   "hp": 31,
    "def": 0,
    "travelTime": 11,
    "wallDmg": 6,
@@ -60,7 +60,7 @@
    "desc": "빠름"
   },
   "brute": {
-   "hp": 75,
+   "hp": 105,
    "def": 1,
    "travelTime": 19,
    "wallDmg": 15,
@@ -71,7 +71,7 @@
    "desc": "탱커"
   },
   "caster": {
-   "hp": 55,
+   "hp": 77,
    "def": 0,
    "travelTime": 16,
    "wallDmg": 28,
@@ -83,7 +83,7 @@
    "later": "원거리 공격, 아군 보호막"
   },
   "armored": {
-   "hp": 90,
+   "hp": 126,
    "def": 3,
    "travelTime": 20,
    "wallDmg": 20,
@@ -95,7 +95,7 @@
    "later": "방패"
   },
   "heavy": {
-   "hp": 160,
+   "hp": 224,
    "def": 2,
    "travelTime": 24,
    "wallDmg": 35,

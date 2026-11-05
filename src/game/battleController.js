@@ -1,5 +1,5 @@
 import { BattleState } from '../battle/battleState.js';
-import { getFloor, resolveFloorWaves } from '../core/balance/floorGen.js';
+import { getFloor, resolveFloorSpawns } from '../core/balance/floorGen.js';
 import { towerAttack, clearBonus } from '../core/economy/economy.js';
 import { playerState } from './playerState.js';
 
@@ -37,7 +37,7 @@ export class BattleController {
   _resetBattleState(floorNumber) {
     const floor = getFloor(this.balance, this.enemies, this.obstacles, this.floorsData, floorNumber);
     this.currentFloor = floor;
-    const resolvedFloor = { wallHp: floor.wallHp, waveBreak: floor.waveBreak, waves: resolveFloorWaves(this.balance, this.enemies, floor) };
+    const resolvedFloor = { wallHp: floor.wallHp, interval: floor.spawnInterval, spawns: resolveFloorSpawns(this.balance, this.enemies, floor) };
     this.floorTag = floor.tag;
     this.killGoldThisFloor = 0;
     this.lastClearReward = null;

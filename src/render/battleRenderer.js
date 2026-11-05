@@ -103,10 +103,10 @@ export class BattleRenderer {
     this._floorBannerUntilMs = 0;
   }
 
-  // hud = { floor, wave, totalWaves, tag('normal'|'elite'|'boss'), towerLevels[], towerCosts[], gold }.
-  // tag/wave/레벨·비용 표시는 docs/balance.md §2·§6, battle.md §3 요구사항(상단 바 + 탑 아래
-  // 레벨/비용 표시) 때문에 battleState 자체가 아니라 BattleController/playerState가 쥔
-  // 진행도 정보를 별도로 받는다(BattleState는 그 숫자들을 모른다).
+  // hud = { floor, remainingEnemies, totalEnemies, tag('normal'|'elite'|'boss'), towerLevels[],
+  // towerCosts[], gold }. tag/레벨·비용 표시는 docs/balance.md §2·§6, battle.md §3 요구사항
+  // (상단 바 + 탑 아래 레벨/비용 표시) 때문에 battleState 자체가 아니라 BattleController/
+  // playerState가 쥔 진행도 정보를 별도로 받는다(BattleState는 그 숫자들을 모른다).
   draw(ctx, rect, battleState, now, assets, hud, paused = false) {
     if (!battleState) return;
 
@@ -226,13 +226,17 @@ export class BattleRenderer {
     const gap = 6;
 
     // 한 줄에 왼쪽부터 층 표시 - 성벽 HP 바 - 일시정지 버튼(docs 요청: 그 아래 HUD).
-    // "123층☠ 12/12"까지 들어가야 해서(docs/balance.md §4·§6) 층수만 표시하던 때보다 넓게 잡는다.
-    const floorLabel = { x: rect.x + 6, y: rowY, width: Math.max(64, rect.width * 0.22), height: barHeight };
-    const pauseButton = { x: rect.x + rect.width - 6 - barHeight, y: rowY, width: barHeight, height: barHeight };
+    // 층 배지는 box_floor(9-slice) 테두리가 위아래 5px씩 고정으로 먹어서 barHeight 그대로면
+    // 글자가 테두리를 덮는다 - 배지만 더 높게 잡고 줄 높이를 거기에 맞춘다(탑 영역은 그만큼 내려간다).
+    const floorHeight = barHeight + 12;
+    const barY = rowY + (floorHeight - barHeight) / 2;
+    // 폭은 "120층☠"(3자리 + 보스 마커)가 테두리 안에 들어갈 만큼(docs/balance.md §4·§6).
+    const floorLabel = { x: rect.x + 6, y: rowY, width: Math.max(90, rect.width * 0.24), height: floorHeight };
+    const pauseButton = { x: rect.x + rect.width - 6 - barHeight, y: barY, width: barHeight, height: barHeight };
     const wallBarX = floorLabel.x + floorLabel.width + gap;
-    const wallBar = { x: wallBarX, y: rowY, width: pauseButton.x - gap - wallBarX, height: barHeight };
+    const wallBar = { x: wallBarX, y: barY, width: pauseButton.x - gap - wallBarX, height: barHeight };
 
-    const contentY = rowY + barHeight + 6;
+    const contentY = rowY + floorHeight + 6;
     const contentHeight = rect.y + rect.height - contentY - 6;
 
     // 왼쪽 약 30% = 성벽 + 탑 5개, 나머지 = 적이 걷는 길(docs/battle.md §3).
@@ -301,8 +305,7 @@ export class BattleRenderer {
   }
 
   // panels/box_floor(9-slice) - 층수 표시 박스(README). 숫자는 계속 코드로 그린다. 보스층은
-  // 해골, 엘리트층은 보라 다이아몬드 마커를 층수 옆에 붙이고(docs/balance.md §4·§6), 그
-  // 옆에 웨이브 n/N을 작게 더 그린다.
+  // 해골, 엘리트층은 보라 다이아몬드 마커를 층수 옆에 붙인다(docs/balance.md §4·§6).
   _drawFloorLabel(ctx, rect, hud, assets) {
     ctx.save();
     const path = 'panels/box_floor.png';
@@ -321,11 +324,17 @@ export class BattleRenderer {
 
     const tag = hud?.tag;
     const marker = tag === 'boss' ? '☠' : tag === 'elite' ? '✦' : '';
-    const waveText = hud?.totalWaves ? ` ${hud.wave ?? 1}/${hud.totalWaves}` : '';
-    const floorText = `${t('battle.floor', { floor: hud?.floor ?? 1 })}${marker}${waveText}`;
+    const floorText = `${t('battle.floor', { floor: hud?.floor ?? 1 })}${marker}`;
 
     ctx.fillStyle = tag === 'boss' ? '#ff6b6b' : tag === 'elite' ? '#c58cff' : HUD_CONFIG.text.primary;
-    ctx.font = getFontString(Math.max(9, rect.height * 0.42), true);
+    // 테두리(5px x2)를 넘지 않게 - 3자리 층 + 마커나 더 긴 번역 문구에서 글자가 박스를 덮었다.
+    const maxTextWidth = rect.width - 14;
+    const fontPx = Math.max(9, rect.height * 0.42);
+    ctx.font = getFontString(fontPx, true);
+    const textWidth = ctx.measureText(floorText).width;
+    if (textWidth > maxTextWidth) {
+      ctx.font = getFontString(Math.max(9, (fontPx * maxTextWidth) / textWidth), true);
+    }
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     drawText(ctx, floorText, rect.x + rect.width / 2, rect.y + rect.height / 2);
@@ -696,9 +705,18 @@ export class BattleRenderer {
       if (event.type !== 'towerAttack' || this._seenTowerAttacks.has(event)) continue;
       this._seenTowerAttacks.add(event);
 
-      const tower = towers.find((t) => t.id === event.towerId);
-      if (!tower) continue;
+      const towerIndex = towers.findIndex((t) => t.id === event.towerId);
+      if (towerIndex < 0) continue;
+      const tower = towers[towerIndex];
       const anim = this._ensureTowerAnim(tower.id);
+      // 연쇄로 같은 탑이 연달아 쏘면 이전 공격이 아직 fireFrame에 닿기 전일 수 있다.
+      // 애니메이션을 처음부터 다시 돌리기 전에 그 한 발을 지금 바로 발사해 잃지 않게 한다.
+      if (anim.mode === 'attack' && !anim.firedProjectile && anim.hitEvent) {
+        const prevEnemy = enemies.find((e) => e.id === anim.targetEnemyId);
+        const prevPos = prevEnemy ? this._enemyPixelPos(track, prevEnemy) : anim.fallbackTargetPos;
+        const prevMuzzle = this._towerMuzzlePosition(towerArea, towerIndex, assets);
+        if (prevPos && prevMuzzle) this._spawnTowerProjectile(tower, prevMuzzle, prevPos, now, anim.hitEvent);
+      }
       anim.mode = 'attack';
       anim.attackStartMs = now;
       anim.firedProjectile = false;
@@ -823,7 +841,7 @@ export class BattleRenderer {
     const laneSize = track.height / ENEMY_LANE_COUNT;
     const baseShapeSize = Math.min(laneSize * 0.6, 40);
     const rules = assets?.enemySpriteRules ?? {};
-    const displayScale = rules.displayScale ?? 3;
+    const displayScale = rules.displayScale ?? 2;
     const walkFrameMs = rules.frameMs?.walk ?? 110;
 
     for (const enemy of enemies) {

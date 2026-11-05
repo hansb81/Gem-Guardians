@@ -1,6 +1,5 @@
 import { EMPTY, OBSTACLE } from '../core/board.js';
-import { ANIMATION_DURATIONS_MS } from '../config/animation.js';
-import { DETONATION_CONFIG } from '../config/detonation.js';
+import { createRng } from '../core/rng.js';
 
 function easeOutQuad(t) {
   return 1 - (1 - t) * (1 - t);
@@ -15,81 +14,98 @@ function bounceScale(t) {
   return t < 0.5 ? 1 + 0.4 * (t / 0.5) : 1.4 - 0.4 * ((t - 0.5) / 0.5);
 }
 
-function easeOutBack(t) {
-  const c1 = 1.70158;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+// 셔플 1단계(떨어지기)의 칸별 시작/착지 시각을 계산하는 순수 함수(§셔플 애니메이션) - seed와
+// 보드 크기, config/effects.json의 shuffleAnim만으로 결정된다(테스트가 바로 이 함수를 본다).
+// 칸마다: 시작 지연 = fallStartMs + (아래에서부터의 행 번호) * rowStaggerMs + seed 기반 지터,
+// 낙하 시간 = seed 기반 minMs~maxMs. 그 다음 두 번 보정한다:
+// 1) 시작 시각을 열 안에서 아래->위로 단조 증가하게 다짐(지터가 행 간격보다 커도 "맨 아래 행이
+//    가장 먼저 시작"이 항상 성립해야 하므로 - 문서의 날 숫자 그대로 쓰면 지터(0~60) > 행
+//    간격(45)이라 가끔 역전될 수 있다).
+// 2) 착지 시각을 열 안에서 아래->위로 최소 minGapMs 간격이 벌어지게 다짐(위 젬이 아래 젬을
+//    추월/겹치지 않게) - 그다음 전체가 fallEndMs를 넘지 않게 넘친 만큼만 낙하 시간을 줄인다.
+export function computeShuffleFallTiming(seed, rows, cols, shuffleAnimConfig) {
+  const { phases = {}, fall = {} } = shuffleAnimConfig ?? {};
+  const fallStartMs = phases.fallStartMs ?? 150;
+  const fallEndMs = phases.fallEndMs ?? 860;
+  const rowStaggerMs = fall.rowStaggerMs ?? 45;
+  const jitterMaxMs = fall.jitterMaxMs ?? 60;
+  const minMs = fall.minMs ?? 280;
+  const maxMs = fall.maxMs ?? 380;
+  const minGapMs = fall.minGapMs ?? 30;
+
+  const rng = createRng(seed ?? 0);
+  const timing = new Array(rows * cols);
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const jitter = rng() * jitterMaxMs;
+      const durationMs = minMs + rng() * (maxMs - minMs);
+      const startMs = fallStartMs + (rows - 1 - r) * rowStaggerMs + jitter;
+      timing[r * cols + c] = { startMs, durationMs };
+    }
+  }
+
+  for (let c = 0; c < cols; c++) {
+    for (let r = rows - 2; r >= 0; r--) {
+      const upper = timing[r * cols + c];
+      const lowerStart = timing[(r + 1) * cols + c].startMs;
+      if (upper.startMs < lowerStart) upper.startMs = lowerStart;
+    }
+  }
+
+  for (let i = 0; i < timing.length; i++) {
+    timing[i].landMs = timing[i].startMs + timing[i].durationMs;
+  }
+
+  for (let c = 0; c < cols; c++) {
+    for (let r = rows - 2; r >= 0; r--) {
+      const upper = timing[r * cols + c];
+      const minLand = timing[(r + 1) * cols + c].landMs + minGapMs;
+      if (upper.landMs < minLand) {
+        upper.landMs = minLand;
+        upper.durationMs = Math.max(1, upper.landMs - upper.startMs);
+      }
+    }
+  }
+
+  for (let i = 0; i < timing.length; i++) {
+    const entry = timing[i];
+    if (entry.landMs > fallEndMs) {
+      entry.landMs = fallEndMs;
+      entry.durationMs = Math.max(1, entry.landMs - entry.startMs);
+    }
+  }
+
+  return timing;
 }
 
-// center 기준으로 (fromRow,fromCol) 벡터를 반경 radiusScale배로 줄이고 angleRad만큼 돌린
-// 지점을 돌려준다(셔플 1단계 "소용돌이"). col을 x, row를 y로 보고 표준 2D 회전행렬을 쓴다.
-function rotateAroundCenter(center, fromRow, fromCol, radiusScale, angleRad) {
-  const vx = (fromCol - center.col) * radiusScale;
-  const vy = (fromRow - center.row) * radiusScale;
-  const cos = Math.cos(angleRad);
-  const sin = Math.sin(angleRad);
-  return {
-    row: center.row + (vx * sin + vy * cos),
-    col: center.col + (vx * cos - vy * sin),
-  };
+// 셔플 이펙트의 "실효 경과 시간". 입장 연출(effect.skipClear)은 §0 비우기 구간이 없으므로 그
+// 길이만큼 타임라인을 앞당긴다 - 낙하 그리기/착지 사운드가 모두 이 함수 하나를 거쳐야 서로
+// 어긋나지 않는다(gameState.shuffleBoard({skipClear}) 주석 참고).
+export function shuffleElapsedMs(effect, shuffleAnimConfig) {
+  if (!effect.skipClear) return effect.elapsedMs;
+  return effect.elapsedMs + (shuffleAnimConfig?.phases?.clearMs ?? 150);
 }
 
-// board.shuffle()이 내보낸 move 하나를, 셔플 연출 시작(0ms) 기준 경과 시간에서의 위치/균일
-// scale로 바꾸는 순수 함수(테스트는 0ms/phases.convergeMs/phases.totalMs 세 지점만 본다 -
-// 그 경계들이 서로 이어지는지가 핵심이라 중간 값은 굳이 스냅샷하지 않았다). config는
-// config/effects.json의 shuffleAnim(phases/pop/converge/scatter) 그대로 넘기면 된다.
-// 단계 0 [0,popMs): 제자리에서 scale 1 -> pop.scale로 커짐(§0 팝).
-// 단계 1 [popMs,convergeMs): 중심 쪽으로 끌려가며(반경 1 -> 1-pullRatio) easeInQuad로 최대
-//   maxRotationDeg까지 회전(§1 모으기/소용돌이). scale pop.scale -> converge.scale.
-// 단계 2 [convergeMs,scatterMs): 1단계가 끝난 지점에서 to 칸으로 easeOutBack 이동 - to.row가
-//   클수록(아래 행일수록) scatter.rowStaggerMs만큼 늦게 시작해 위->아래로 차르르 정렬되지만
-//   전부 scatterMs에는 도착한다(§2 흩어져 정렬). scale converge.scale -> scatter.scaleTo.
-// 단계 3 [scatterMs,totalMs]: to 칸에 고정(scale은 scatter.scaleTo로 유지) - 착지 바운스는
-//   이 함수가 책임지지 않는다. CanvasRenderer의 landingSquash 메커니즘을 그대로 재사용한다
-//   (낙하 착지와 같은 비대칭 세로 스쿼시이므로 또 만들 필요가 없다).
-export function computeShuffleMovePose(move, elapsedMs, config, rows, cols) {
-  const { phases, pop, converge, scatter } = config;
-  const center = { row: (rows - 1) / 2, col: (cols - 1) / 2 };
+// move 하나를 주어진 칸 타이밍(computeShuffleFallTiming의 한 항목)과 경과 시간으로 위치/스케일로
+// 바꾼다. 시작 전이면 null(아직 안 그림). 낙하 중엔 목표 칸보다 (rows+1)칸 위에서 일직선으로
+// easeInQuad(중력 가속) 낙하(좌우 흔들림/회전 없음). 착지 후 bounceMs 동안 세로 스케일
+// squashScale->1.0 바운스를 "아래 기준"(바닥 고정, row를 0.5*(1-scale)만큼 밀어 올려 보정)으로 준다.
+export function computeShuffleFallPose(move, elapsedMs, timing, rows, shuffleAnimConfig) {
+  if (!timing || elapsedMs < timing.startMs) return null;
+  const land = shuffleAnimConfig?.land ?? {};
+  const squashScale = land.squashScale ?? 0.85;
+  const bounceMs = land.bounceMs ?? 40;
 
-  if (elapsedMs < phases.popMs) {
-    const t0 = phases.popMs > 0 ? elapsedMs / phases.popMs : 1;
-    return { row: move.from.row, col: move.from.col, scale: 1 + (pop.scale - 1) * t0 };
+  if (elapsedMs < timing.landMs) {
+    const t = timing.durationMs > 0 ? (elapsedMs - timing.startMs) / timing.durationMs : 1;
+    const e = easeInQuad(Math.min(1, Math.max(0, t)));
+    const startRow = move.to.row - (rows + 1);
+    return { row: startRow + (move.to.row - startRow) * e, col: move.to.col, scale: 1 };
   }
 
-  if (elapsedMs < phases.convergeMs) {
-    const t1 = (elapsedMs - phases.popMs) / Math.max(1, phases.convergeMs - phases.popMs);
-    const e = easeInQuad(t1);
-    const pos = rotateAroundCenter(
-      center,
-      move.from.row,
-      move.from.col,
-      1 - converge.pullRatio * e,
-      (converge.maxRotationDeg * e * Math.PI) / 180
-    );
-    return { row: pos.row, col: pos.col, scale: pop.scale + (converge.scale - pop.scale) * t1 };
-  }
-
-  const convergeEndPos = rotateAroundCenter(
-    center,
-    move.from.row,
-    move.from.col,
-    1 - converge.pullRatio,
-    (converge.maxRotationDeg * Math.PI) / 180
-  );
-
-  if (elapsedMs < phases.scatterMs) {
-    const rowStart = phases.convergeMs + move.to.row * scatter.rowStaggerMs;
-    const duration = Math.max(1, phases.scatterMs - rowStart);
-    const t2 = Math.min(1, Math.max(0, (elapsedMs - rowStart) / duration));
-    const e = easeOutBack(t2);
-    return {
-      row: convergeEndPos.row + (move.to.row - convergeEndPos.row) * e,
-      col: convergeEndPos.col + (move.to.col - convergeEndPos.col) * e,
-      scale: converge.scale + (scatter.scaleTo - converge.scale) * e,
-    };
-  }
-
-  return { row: move.to.row, col: move.to.col, scale: scatter.scaleTo };
+  const bt = bounceMs > 0 ? Math.min(1, (elapsedMs - timing.landMs) / bounceMs) : 1;
+  const scale = squashScale + (1 - squashScale) * bt;
+  return { row: move.to.row + 0.5 * (1 - scale), col: move.to.col, scale };
 }
 
 // 과거의 Animator는 core가 내보낸 이벤트 배열을 큐에 담아 순서대로 재생하면서
@@ -123,9 +139,10 @@ export class Animator {
   }
 
   // { row, col, value, special, opacity, scale } 목록. row/col은 전환 중에는 소수일 수 있다.
-  // gameState를 같이 넘기면 specialCreate/specialTransform 중인 칸을 idle 렌더링 대신
-  // bounce 오버레이로 대체한다(그 칸들은 core가 이미 즉시 커밋해 cellStates가 idle이므로,
-  // 여기서 가려주지 않으면 bounce 없이 그냥 조용히 나타나 보인다).
+  // gameState를 같이 넘기면 specialCreate 중인 칸을 idle 렌더링 대신 bounce 오버레이로
+  // 대체한다(그 칸은 core가 이미 즉시 커밋해 cellStates가 idle이므로, 여기서 가려주지
+  // 않으면 bounce 없이 그냥 조용히 나타나 보인다). specialTransform은 더 이상 여기서
+  // 가리지 않는다 - CanvasRenderer가 transform_{색} 스프라이트로 그린다(manifest.combo).
   getDisplayList(board, gameState, effectsConfig) {
     const { rows, cols, grid, specials, cellStates, attachments } = board;
     const hasAttachments = Array.isArray(attachments);
@@ -157,23 +174,6 @@ export class Animator {
             opacity: 1,
             scale,
           });
-        } else if (effect.type === 'specialTransform') {
-          const t = Math.min(1, effect.elapsedMs / effect.durationMs);
-          const scale = bounceScale(t);
-          for (const cell of effect.cells) {
-            const i = cell.row * cols + cell.col;
-            bounceOverride.add(i);
-            const value = grid[i];
-            if (value === EMPTY) continue;
-            list.push({
-              row: cell.row,
-              col: cell.col,
-              value,
-              special: { kind: effect.kind, direction: cell.direction },
-              opacity: 1,
-              scale,
-            });
-          }
         }
       }
     }
@@ -259,20 +259,24 @@ export class Animator {
     return list;
   }
 
-  // getDisplayList가 셔플 이펙트를 발견하면 대신 호출한다 - moves를 computeShuffleMovePose로
-  // 보간해 그릴 목록을 만든다. effectsConfig는 config/effects.json 전체(settings.reduceMotion/
-  // shuffleAnim)를 그대로 받는다(없으면 - 테스트 등 - 연출 없이 최종 배치만 보여준다).
+  // getDisplayList가 셔플 이펙트를 발견하면 대신 호출한다 - "비우기(§0) -> 떨어지기(§1) ->
+  // 착지 바운스" 연출을 moves로 그린다. effectsConfig는 config/effects.json 전체
+  // (settings.reduceMotion/shuffleAnim)를 그대로 받는다(없으면 - 테스트 등 - 연출 없이 최종
+  // 배치만 보여준다).
   _getShuffleDisplayList(effect, rows, cols, effectsConfig) {
     const list = [];
     if (effectsConfig?.settings?.reduceMotion) {
       const { fadeOutMs = 150, fadeInMs = 150 } = effectsConfig.shuffleAnim?.reducedMotion ?? {};
+      // 입장 연출은 "사라지는" 전반부를 건너뛴다(치울 이전 보드가 없다) - 낙하 경로의
+      // shuffleElapsedMs와 같은 발상이지만, 줄인 연출은 clearMs가 아니라 fadeOutMs가 기준이다.
+      const elapsed = effect.skipClear ? effect.elapsedMs + fadeOutMs : effect.elapsedMs;
       for (const move of effect.moves) {
         if (move.value === EMPTY || move.value === OBSTACLE) continue;
-        if (effect.elapsedMs < fadeOutMs) {
-          const opacity = 1 - effect.elapsedMs / fadeOutMs;
+        if (elapsed < fadeOutMs) {
+          const opacity = 1 - elapsed / fadeOutMs;
           list.push({ row: move.from.row, col: move.from.col, value: move.value, special: move.special, opacity, scale: 1 });
         } else {
-          const opacity = Math.min(1, (effect.elapsedMs - fadeOutMs) / fadeInMs);
+          const opacity = Math.min(1, (elapsed - fadeOutMs) / fadeInMs);
           list.push({ row: move.to.row, col: move.to.col, value: move.value, special: move.special, opacity, scale: 1 });
         }
       }
@@ -280,15 +284,59 @@ export class Animator {
     }
 
     const cfg = effectsConfig?.shuffleAnim;
+    if (!cfg) {
+      for (const move of effect.moves) {
+        if (move.value === EMPTY || move.value === OBSTACLE) continue;
+        list.push({ row: move.to.row, col: move.to.col, value: move.value, special: move.special, opacity: 1, scale: 1 });
+      }
+      return list;
+    }
+
+    // skipClear면 elapsed가 항상 clearMs 이상이라 아래 §0 블록이 자연히 건너뛰어진다.
+    const elapsed = shuffleElapsedMs(effect, cfg);
+    const clearMs = cfg.phases?.clearMs ?? 150;
+
+    // §0 비우기 - 기존 칸(from)에서 조금 가라앉으며 페이드아웃.
+    if (elapsed < clearMs) {
+      const t = clearMs > 0 ? elapsed / clearMs : 1;
+      const sinkCells = cfg.clear?.sinkCells ?? 0.3;
+      for (const move of effect.moves) {
+        if (move.value === EMPTY || move.value === OBSTACLE) continue;
+        list.push({
+          row: move.from.row + sinkCells * t,
+          col: move.from.col,
+          value: move.value,
+          special: move.special,
+          opacity: 1 - t,
+          scale: 1,
+        });
+      }
+      return list;
+    }
+
+    // §1 떨어지기 + 착지 바운스 - 칸별 타이밍은 seed로만 결정되는 순수 함수(테스트 대상).
+    const timing = computeShuffleFallTiming(effect.seed, rows, cols, cfg);
+    const byColumn = Array.from({ length: cols }, () => []);
     for (const move of effect.moves) {
       if (move.value === EMPTY || move.value === OBSTACLE) continue;
-      if (!cfg) {
-        list.push({ row: move.to.row, col: move.to.col, value: move.value, special: move.special, opacity: 1, scale: 1 });
-        continue;
-      }
-      const pose = computeShuffleMovePose(move, effect.elapsedMs, cfg, rows, cols);
-      list.push({ row: pose.row, col: pose.col, value: move.value, special: move.special, opacity: 1, scale: pose.scale });
+      const pose = computeShuffleFallPose(move, elapsed, timing[move.to.row * cols + move.to.col], rows, cfg);
+      if (!pose) continue; // 아직 시작 전 - 그리지 않는다(위 칸이 보드 밖에서 대기).
+      const item = { row: pose.row, col: pose.col, value: move.value, special: move.special, opacity: 1, scale: pose.scale };
+      list.push(item);
+      byColumn[move.to.col].push({ targetRow: move.to.row, item });
     }
+
+    // 같은 열에서 위 젬이 아래 젬을 추월/겹치지 않도록, 아래(큰 행)부터 위로 올라가며
+    // 그리기 위치를 한 칸 이상 위로 다진다(데이터는 이미 확정돼 있으니 그리기 좌표만 보정).
+    for (const col of byColumn) {
+      col.sort((a, b) => a.targetRow - b.targetRow);
+      for (let i = col.length - 2; i >= 0; i--) {
+        const upper = col[i].item;
+        const lower = col[i + 1].item;
+        if (upper.row > lower.row - 1) upper.row = lower.row - 1;
+      }
+    }
+
     return list;
   }
 
@@ -372,106 +420,29 @@ export class Animator {
     return newly;
   }
 
-  // gameState.effects를 CanvasRenderer._drawEffects가 기대하는
-  // { kind: 'beamRow'|'beamCol'|'burst'|'wipe'|'flash'|'glow'|'projectile', ... } 형태로
-  // 변환한다.
+  // gameState.effects를 CanvasRenderer._drawEffects가 기대하는 { kind: 'glow', ... } 형태로
+  // 변환한다. 특수 잼 발동(specialActivate)/조합(comboActivate)/변환(specialTransform)은 더
+  // 이상 여기서 도형으로 그리지 않는다 - CanvasRenderer._spawnSpecialFx/_spawnComboFx가 그
+  // effect를 보는 즉시 assets/effects 스프라이트 재생 일정을 자체 타이머로 만들어 처리한다
+  // (core의 effect 수명보다 스프라이트가 더 오래갈 수 있어서 - README #2~#5 + manifest.combo).
+  // 그래서 지금 남은 도형은 특수 잼 생성(specialCreate)의 짧은 글로우 하나뿐이다.
   getEffects(gameState, effectsConfig) {
     const effects = [];
     const flashColor = effectsConfig?.events?.specialCreate?.flash?.color ?? '#ffffff';
-    const transformGlowColor = effectsConfig?.events?.specialTransform?.glow?.color ?? flashColor;
 
     for (const effect of gameState.effects) {
+      if (effect.type !== 'specialCreate') continue;
       const t = Math.min(1, effect.elapsedMs / effect.durationMs);
-
-      if (effect.type === 'specialActivate') {
-        // line/bomb/box(일반)/color 발동 연출은 더 이상 여기서 도형으로 그리지 않는다 -
-        // CanvasRenderer._spawnSpecialFx가 이 effect를 보는 즉시 assets/effects 스프라이트
-        // 재생 일정을 자체 타이머로 만들어 처리한다(core의 specialActivate.durationMs보다
-        // 스프라이트가 더 오래갈 수 있어서 - README #2/#3/#4/#5, 점 4).
-        // 예외: box+color 조합이 noActivate 변환 대신 터뜨리는 랜덤 박스 타겟(color!=null로
-        // 구분됨, gameState.js 참고)은 조합 전용 경로라 손대지 않는다(§5) - 기존 투사체 연출을
-        // 그대로 유지한다(CanvasRenderer._spawnSpecialFx도 같은 조건으로 건너뛴다).
-        if (effect.kind === 'box' && effect.color != null) {
-          const flightMs = ANIMATION_DURATIONS_MS.clear;
-          if (effect.elapsedMs < flightMs) {
-            const flightT = effect.elapsedMs / flightMs;
-            for (const cell of effect.affected) {
-              if (cell.row === effect.position.row && cell.col === effect.position.col) continue;
-              effects.push({
-                kind: 'projectile',
-                fromRow: effect.position.row,
-                fromCol: effect.position.col,
-                toRow: cell.row,
-                toCol: cell.col,
-                t: flightT,
-              });
-            }
-          }
-        }
-      } else if (effect.type === 'comboActivate') {
-        const opacity = 1 - easeInQuad(t);
-        const { row, col } = effect.position;
-        // 조합 종류별 색은 config/effects.json의 events.comboActivate_<kind>.color에서 읽는다
-        // (CanvasRenderer._colorForEffect의 파티클 색과 같은 소스 - 한쪽만 고치면 어긋나는
-        // 숨은 결합을 없애기 위함).
-        const comboColor = effectsConfig?.events?.[`comboActivate_${effect.comboKind}`]?.color ?? '#ffffff';
-        switch (effect.comboKind) {
-          case 'line_line':
-            effects.push({ kind: 'beamRow', row, opacity, glow: true, color: comboColor });
-            effects.push({ kind: 'beamCol', col, opacity, glow: true, color: comboColor });
-            break;
-          case 'bomb_bomb':
-            effects.push({ kind: 'burst', row, col, t, opacity, radiusScale: 2.6, color: comboColor });
-            break;
-          case 'box_box':
-            effects.push({ kind: 'burst', row, col, t, opacity, radiusScale: 2.0, color: comboColor });
-            break;
-          case 'line_bomb':
-            effects.push({ kind: 'beamRow', row, opacity, thickness: 3, color: comboColor });
-            effects.push({ kind: 'beamCol', col, opacity, thickness: 3, color: comboColor });
-            break;
-          case 'color_color':
-            effects.push({ kind: 'flash', t, opacity });
-            break;
-          default:
-            // line_color / bomb_color / box_line / box_bomb / box_color: 변환형 조합(선택한
-            // 색의 잼들이 다른 특수 잼으로 바뀐 뒤 연쇄 발동)이라 comboActivate 자체는 작은
-            // 효과면 충분하다(진짜 볼거리는 뒤따르는 sequential specialActivate/
-            // specialTransform들이 처리한다).
-            effects.push({ kind: 'wipe', row, col, t, opacity });
-            break;
-        }
-      } else if (effect.type === 'specialCreate') {
-        // 특수 잼 생성: 그 칸 자체의 "뽕" 스케일은 getDisplayList가 처리하고, 여기서는
-        // 짧은 빛 번쩍임(글로우)만 덧붙인다. 색은 config/effects.json의
-        // events.specialCreate.flash.color에서 읽는다(데이터만 바꿔 교체 가능해야 함).
-        effects.push({
-          kind: 'glow',
-          row: effect.position.row,
-          col: effect.position.col,
-          opacity: 1 - easeInQuad(t),
-          color: flashColor,
-        });
-      } else if (effect.type === 'specialTransform') {
-        // 변환되는 칸들이 "하나씩" 빛나는 느낌 - cells 배열의 등장 순서를 인덱스로 간주하고,
-        // 실제 core의 변환 스케줄(DETONATION_CONFIG.transformStepMs)과 같은 리듬으로 각 칸의
-        // glow 시작 시각을 늦춘다(core가 실제로 그 간격으로 cell을 하나씩 바꾸므로 맞아떨어진다).
-        const glowColor = transformGlowColor;
-        effect.cells.forEach((cell, i) => {
-          const startMs = i * DETONATION_CONFIG.transformStepMs;
-          if (effect.elapsedMs < startMs) return;
-          const span = Math.max(1, effect.durationMs - startMs);
-          const cellT = Math.min(1, (effect.elapsedMs - startMs) / span);
-          effects.push({
-            kind: 'glow',
-            row: cell.row,
-            col: cell.col,
-            opacity: 1 - easeInQuad(cellT),
-            color: glowColor,
-          });
-        });
-      }
-      // specialCreate는 위에서 짧은 glow를 추가로 낸다.
+      // 특수 잼 생성: 그 칸 자체의 "뽕" 스케일은 getDisplayList가 처리하고, 여기서는 짧은
+      // 빛 번쩍임(글로우)만 덧붙인다. 색은 config/effects.json의
+      // events.specialCreate.flash.color에서 읽는다(데이터만 바꿔 교체 가능해야 함).
+      effects.push({
+        kind: 'glow',
+        row: effect.position.row,
+        col: effect.position.col,
+        opacity: 1 - easeInQuad(t),
+        color: flashColor,
+      });
     }
 
     return effects;

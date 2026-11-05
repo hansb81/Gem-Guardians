@@ -13,15 +13,15 @@ export const ko = {
     play: '플레이',
     icon: { attendance: '출석', event: '이벤트', settings: '설정', shop: '상점' },
     mode: { title: '모드 선택', normal: '일반 모드', competitive: '경쟁 모드', locked: '잠김 — 해금 조건 추가 예정' },
-    settings: { title: '설정', sfx: '효과음', bgm: '배경음' },
+    settings: { title: '설정', sfx: '효과음', bgm: '배경음', mute: '음소거', unmute: '음소거 해제', help: '도움말', about: '게임 정보' },
     shop: { title: '상점', body: '상품 목록 자리 (빈 목록)' },
     attendance: { title: '출석 체크', body: '콘텐츠 자리 (추후 결정)' },
     event: { title: '이벤트', body: '콘텐츠 자리 (추후 결정)' },
   },
   hud: {
-    cascade: '연쇄 x{count}',
-    combo: 'COMBO x{count}',
-    comboBreak: 'Combo x{count} Break!',
+    cascade: '연쇄 x {count}',
+    combo: 'COMBO x {count}',
+    comboBreak: 'Combo x {count} Break!',
   },
   puzzle: {
     shuffle: '섞는 중',
@@ -36,7 +36,6 @@ export const ko = {
   },
   battle: {
     floor: '{floor}층',
-    wave: '웨이브 {wave}/{total}',
   },
   popup: {
     pause: { title: '일시정지', desc: '전투와 퍼즐이 멈춘 상태입니다.' },

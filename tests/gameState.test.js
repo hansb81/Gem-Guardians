@@ -206,3 +206,37 @@ test('shuffle 연출이 재생 중엔 trySwap이 아무 것도 하지 않고 fal
   const accepted2 = state.trySwap(0, 0, 0, 1);
   assert.notEqual(accepted2, undefined, '셔플이 끝나면 다시 입력을 받아야 한다');
 });
+
+// settleHold(렌더의 발동/조합 스프라이트가 아직 재생 중) - clearing까지는 그대로 진행하되
+// 중력/리필만 미뤄서, "아직 안 터진 칸 옆으로 새 잼이 떨어지는" 문제를 막는다.
+test('settleHold가 켜져 있으면 clearing이 끝나도 중력/리필이 돌지 않는다', () => {
+  const grid = [0, 0, 1, 1, 2, 0, 2, 1, 0];
+  const board = boardFromGrid(3, 3, grid, 7);
+  const state = new GameState({ board });
+  state.settleHold = true;
+
+  state.trySwap(0, 2, 1, 2);
+
+  // clearing이 끝날 시간(스왑 + 클리어)보다 넉넉히 돌린다.
+  for (let i = 0; i < 100; i++) state.update(0.016);
+
+  assert.equal(state.resolutions.length, 1, 'settleHold 동안 Resolution이 끝나지 않아야 한다');
+  assert.equal(
+    board.grid.filter((v) => v === EMPTY).length,
+    3,
+    '매치된 3칸은 지워진 채 빈 자리로 남아 있어야 한다(연출이 그 자리를 덮는다)'
+  );
+  assert.ok(
+    board.cellStates.every((cs) => cs === null || cs.phase === 'clearing'),
+    'falling/spawning이 시작되면 안 된다'
+  );
+
+  state.settleHold = false;
+  let guard = 0;
+  while (state.resolutions.length > 0 && guard < 10000) {
+    state.update(0.016);
+    guard++;
+  }
+  assert.ok(guard < 10000, 'settleHold를 풀면 해소가 끝나야 한다');
+  assert.ok(!board.grid.includes(EMPTY), '리필이 돌아 EMPTY가 남지 않아야 한다');
+});

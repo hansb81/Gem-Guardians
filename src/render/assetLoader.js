@@ -3,6 +3,8 @@
 // 모든 fetch/파싱 실패도 throw하지 않고 빈 설정으로 계속 진행한다 -
 // CanvasRenderer는 이 결과가 비어있어도(this.assets===null과 동일하게) 색 도형으로
 // fallback해서 그릴 수 있어야 한다.
+import { audio } from '../audio/AudioManager.js';
+
 async function fetchJson(path) {
   try {
     const res = await fetch(path);
@@ -77,14 +79,15 @@ const GEM_VARIANTS = ['normal', 'line_h', 'line_v', 'bomb', 'box'];
 // onProgress(loadedCount, totalCount)를 받아 로드 진행률을 알려준다.
 // 반환값: CanvasRenderer.setAssets()에 그대로 꽂아 쓸 수 있는 형태.
 export async function loadAssets(onProgress) {
-  const [manifest, gemManifest, effectsConfig, soundsConfig, towerManifest, statueManifest, uiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest] = await Promise.all([
+  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest] = await Promise.all([
     fetchJson('assets/manifest.json'),
     fetchJson('assets/gems/manifest.json'),
     fetchJson('src/config/effects.json'),
-    fetchJson('src/config/sounds.json'),
+    fetchJson('assets/sfx/manifest.json'),
     fetchJson('assets/towers/manifest.json'),
     fetchJson('assets/statues/manifest.json'),
     fetchJson('assets/ui/manifest.json'),
+    fetchJson('assets/ui/menu/manifest.json'),
     fetchJson('assets/ui/font/font.json'),
     fetchJson('assets/obstacles/manifest.json'),
     fetchJson('assets/effects/manifest.json'),
@@ -94,6 +97,11 @@ export async function loadAssets(onProgress) {
   ]);
 
   const jobs = [];
+  // 효과음(assets/sfx) - 이미지와 같은 jobs/bucket 패턴으로 프리로더 진행률에 포함시킨다.
+  // 디코드 실패는 AudioManager가 흡수한다(그 소리만 무음, 게임은 계속).
+  audio.setManifest(sfxManifest);
+  for (const file of audio.fileNames()) jobs.push({ bucket: 'sfx', file });
+
   for (const [color, variants] of Object.entries(gemManifest.gems ?? {})) {
     for (const variant of GEM_VARIANTS) {
       const src = variants?.[variant];
@@ -143,6 +151,14 @@ export async function loadAssets(onProgress) {
   // 인게임 UI(assets/ui) - manifest.json에 나열된 모든 파일을 키(예: "icons/gold.png")
   // 그대로 Map 키로 써서 로드한다. font.json의 변형(variants)은 색상별 데미지 숫자 폰트.
   for (const path of Object.keys(uiManifest.assets ?? {})) {
+    jobs.push({ bucket: 'ui', key: path, src: `assets/ui/${path}` });
+  }
+  // 메인 메뉴 UI(assets/ui/menu)는 manifest가 따로지만 규격이 같아, "menu/<파일>" 경로를
+  // 키로 같은 uiImages/uiManifest에 합쳐 넣는다 - uiKit의 getUi/getUiMeta/drawNine을 그대로 쓴다.
+  uiManifest.assets ??= {};
+  for (const meta of Object.values(menuUiManifest.assets ?? {})) {
+    const path = `menu/${meta.file}`;
+    uiManifest.assets[path] = meta;
     jobs.push({ bucket: 'ui', key: path, src: `assets/ui/${path}` });
   }
   for (const [variant, relPath] of Object.entries(uiFont.variants ?? {})) {
@@ -210,6 +226,12 @@ export async function loadAssets(onProgress) {
 
   await Promise.all(
     jobs.map(async (job) => {
+      if (job.bucket === 'sfx') {
+        await audio.loadFile(job.file);
+        loaded += 1;
+        onProgress?.(loaded, total);
+        return;
+      }
       const state = await loadImage(job.src);
       loaded += 1;
       onProgress?.(loaded, total);
@@ -323,6 +345,5 @@ export async function loadAssets(onProgress) {
     obstacleBodySize: obstacleManifest.bodySize ?? 32,
     obstacleDrawScale: obstacleManifest.drawScale ?? 2,
     effectsConfig,
-    soundsConfig,
   };
 }

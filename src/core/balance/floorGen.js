@@ -81,9 +81,10 @@ function firstSeen(E) {
   return seen;
 }
 
-// 층 f의 구성(웨이브·적·방해요소 등장 수)을 생성한다. 1~100층은 game/loadBalanceData가
-// 읽은 config/floors.json 결과를 그대로 쓰므로, 보통은 getFloor()를 통해서만 호출된다
-// (101층부터는 매번 이 함수로 즉석 생성).
+// 층 f의 구성(적·방해요소 등장 수)을 생성한다. 웨이브 구분 없이 층 전체가 spawns 한 줄이다
+// (spawnInterval초마다 1마리, 전부 처치하면 클리어). 1~100층은 game/loadBalanceData가 읽은
+// config/floors.json 결과를 그대로 쓰므로, 보통은 getFloor()를 통해서만 호출된다(101층부터는
+// 매번 이 함수로 즉석 생성).
 export function genFloor(B, E, O, f) {
   const rng = createRng(f * 7919);
   const fs = B.floorShape;
@@ -95,73 +96,62 @@ export function genFloor(B, E, O, f) {
 
   const tb = fs.threatBudget;
   const budget = Math.min(tb.max, tb.base + tb.perFloor * (f - 1));
-  const nWaves = fs.waves.filter((w) => w.fromFloor <= f).at(-1).count;
   const isBoss = f % fs.bossEvery === 0;
   const isElite = f % fs.eliteEvery.mod === fs.eliteEvery.rem;
 
-  const wts = Array.from({ length: nWaves }, (_, i) => i + 2);
-  const sumWts = wts.reduce((a, b) => a + b, 0);
-  const budgets = wts.map((w) => (budget * w) / sumWts);
-  if (isElite) budgets[budgets.length - 1] *= fs.eliteFloorBudgetMul;
+  let wb = budget;
+  if (isElite) wb *= fs.eliteFloorBudgetMul;
+  if (isBoss) wb = wb * fs.bossEscortRatio;
 
-  const waves = [];
-  for (let wi = 0; wi < budgets.length; wi++) {
-    let wb = budgets[wi];
-    const units = [];
-    const last = wi === nWaves - 1;
-    if (last && isBoss) wb = wb * fs.bossEscortRatio;
-
-    let spent = 0;
-    if (wi === 0) {
-      for (const nt of newTypes.slice(0, 2)) {
-        for (let i = 0; i < 2; i++) {
-          units.push(nt);
-          spent += types[nt].threat;
-        }
-      }
+  const units = [];
+  let spent = 0;
+  for (const nt of newTypes.slice(0, 2)) {
+    for (let i = 0; i < 2; i++) {
+      units.push(nt);
+      spent += types[nt].threat;
     }
-    while (spent < wb - 0.25 || units.length === 0) {
-      const room = wb - spent + 0.5;
-      let cand = unlocked.filter(([k]) => types[k].threat <= room);
-      if (cand.length === 0) {
-        cand = [unlocked.reduce((min, kw) => (types[kw[0]].threat < types[min[0]].threat ? kw : min))];
-      }
-      const u = pickWeighted(rng, cand);
-      units.push(u);
-      spent += types[u].threat;
-    }
-
-    // Fisher-Yates(결정적 rng).
-    for (let i = units.length - 1; i > 0; i--) {
-      const j = Math.floor(rng() * (i + 1));
-      [units[i], units[j]] = [units[j], units[i]];
-    }
-
-    let eliteN = 0;
-    if (last && isElite) eliteN = f < 55 ? 1 : 2;
-    const ec = fs.eliteChanceFrom50;
-    if (f >= ec.from && !(last && (isBoss || isElite)) && rng() < ec.chancePerWave) eliteN += 1;
-
-    const emul = fs.eliteMul.hp;
-    for (let i = 0; i < eliteN; i++) {
-      const idx = units.length - 1 - i * 2;
-      if (idx < 0) break;
-      const base = units[idx];
-      units[idx] = `${base}@elite`;
-      let extra = types[base].threat * (emul - 1);
-      while (extra > 0.25) {
-        const j = units.findIndex((u) => !u.includes('@'));
-        if (j === -1 || units.length <= 2) break;
-        extra -= types[units[j]].threat;
-        units.splice(j, 1);
-      }
-    }
-
-    if (last && isBoss) units.push(`${chap.boss}@boss`);
-
-    const interval = Math.max(fs.spawnInterval.min, fs.spawnInterval.base + fs.spawnInterval.perFloor * (f - 1));
-    waves.push({ interval: rdec(interval, 3), spawns: units });
   }
+  while (spent < wb - 0.25 || units.length === 0) {
+    const room = wb - spent + 0.5;
+    let cand = unlocked.filter(([k]) => types[k].threat <= room);
+    if (cand.length === 0) {
+      cand = [unlocked.reduce((min, kw) => (types[kw[0]].threat < types[min[0]].threat ? kw : min))];
+    }
+    const u = pickWeighted(rng, cand);
+    units.push(u);
+    spent += types[u].threat;
+  }
+
+  // Fisher-Yates(결정적 rng).
+  for (let i = units.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [units[i], units[j]] = [units[j], units[i]];
+  }
+
+  let eliteN = 0;
+  if (isElite) eliteN = f < 55 ? 1 : 2;
+  const ec = fs.eliteChanceFrom50;
+  if (f >= ec.from && !(isBoss || isElite) && rng() < ec.chancePerFloor) eliteN += 1;
+
+  const emul = fs.eliteMul.hp;
+  for (let i = 0; i < eliteN; i++) {
+    const idx = units.length - 1 - i * 2;
+    if (idx < 0) break;
+    const base = units[idx];
+    units[idx] = `${base}@elite`;
+    let extra = types[base].threat * (emul - 1);
+    while (extra > 0.25) {
+      const j = units.findIndex((u) => !u.includes('@'));
+      if (j === -1 || units.length <= 2) break;
+      extra -= types[units[j]].threat;
+      units.splice(j, 1);
+    }
+  }
+
+  if (isBoss) units.push(`${chap.boss}@boss`);
+
+  const interval = Math.max(fs.spawnInterval.min, fs.spawnInterval.base + fs.spawnInterval.perFloor * (f - 1));
+  const spawnInterval = rdec(interval, 3);
 
   const S = O.schedule;
   const obstacles = {};
@@ -201,8 +191,9 @@ export function genFloor(B, E, O, f) {
     chapter: chap.name,
     wallHp: wallHp(B, f),
     scaling: scaling(B, f),
-    waveBreak: fs.waveBreak,
-    waves,
+    spawnInterval,
+    totalEnemies: units.length,
+    spawns: units,
     obstacles,
   };
 }
@@ -249,16 +240,13 @@ export function unitStats(B, E, floor, spawn) {
   };
 }
 
-// floor.waves의 소환 문자열을 전투가 바로 쓸 수 있는 스탯 객체로 바꾼다(이름/애니메이션 같은
+// floor.spawns의 소환 문자열을 전투가 바로 쓸 수 있는 스탯 객체로 바꾼다(이름/애니메이션 같은
 // 표시용 필드도 enemies.json에서 붙인다) - BattleState는 이 결과만 받고 balance/enemies.json을
 // 모른다(src/battle은 core를 import하지 않으므로 이 변환은 항상 game 쪽에서 끝내둔다).
-export function resolveFloorWaves(B, E, floor) {
-  return floor.waves.map((w) => ({
-    interval: w.interval,
-    spawns: w.spawns.map((s) => {
-      const stat = unitStats(B, E, floor, s);
-      const m = E.monsters[stat.type];
-      return { ...stat, name: m.name, anim: m.anim };
-    }),
-  }));
+export function resolveFloorSpawns(B, E, floor) {
+  return floor.spawns.map((s) => {
+    const stat = unitStats(B, E, floor, s);
+    const m = E.monsters[stat.type];
+    return { ...stat, name: m.name, anim: m.anim };
+  });
 }

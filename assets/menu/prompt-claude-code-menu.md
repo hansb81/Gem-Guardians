@@ -1,15 +1,15 @@
-# Claude Code 적용 프롬프트: 메인 메뉴 배경
+# Claude Code 적용 프롬프트: 메인 메뉴 배경 (v2 경량 구조)
 
-아래를 Claude Code에 그대로 붙여 넣으세요. 먼저 `gem-guardians-menu.zip`을 풀어서 `assets/menu/`를 프로젝트의 assets 폴더에 넣어 두세요.
+아래를 Claude Code에 그대로 붙여 넣으세요. 먼저 `gem-guardians-menu.zip`을 풀어서 `assets/menu/`를 프로젝트의 assets 폴더에 덮어쓰세요(예전 `menu_bg_anim.png`, `menu_bg_x3.png`는 지워도 됩니다).
 
 ---
 
-메인 메뉴 화면에 배경 이미지를 넣어줘. 에셋은 `assets/menu/`에 있고 설명은 `assets/menu/README.md`, `manifest.json`에 있어.
+메인 메뉴 배경을 "정지 베이스 + 작은 애니 조각 + 코드 입자" 방식으로 넣어줘(이미 전체 화면 시트 방식으로 되어 있으면 이 방식으로 바꿔줘). 에셋은 `assets/menu/`, 설명은 `assets/menu/README.md`와 `manifest.json`에 있어. 타이틀 화면에 만든 `drawLayeredBg(manifest.background, now)` 같은 공용 함수를 그대로 써(없으면 만들어서 둘 다 쓰게).
 
-1. 메인 메뉴는 ui-ux-pro-max로 만든 시안 A 배치(`mockups/main-menu.html`)를 기준으로 해. 아직 게임 코드에 메인 메뉴 화면이 없으면, 타이틀에서 화면을 터치하면 메인 메뉴로 가고, 메인 메뉴의 플레이 → 일반 모드를 누르면 지금의 게임으로 들어가게 만들어줘. 경쟁 모드는 잠금 상태, 설정/상점/출석/이벤트는 시안처럼 자리만 있는 팝업이면 돼.
-2. 배경은 애니 시트 `menu_bg_anim.png`(180x320 프레임 64개, 8열, 100ms 반복)를 화면 기준 540x960에 3배로 그려. 프레임 `i = floor(now / 100) % 64`, `sx = (i % 8) * 180`, `sy = floor(i / 8) * 320`. 시트 로딩 전에는 정지 이미지 `menu_bg.png`를 써. 실제 캔버스가 다르면 정수 배율 중 가장 큰 값 + 가운데 정렬, 남는 곳은 #0d0a10. 스무딩은 꺼. (DOM으로 만든다면 배경만 캔버스 하나로 그리고 그 위에 DOM UI를 올려.)
-3. 배경 위에 시안 A의 UI(재화 바, 출석/이벤트, 설정/상점, 플레이 버튼)를 그대로 올려. 위치는 manifest의 `layoutA_screenPx`. 가운데 centerpiece 자리의 점선 박스는 이제 지워(배경의 봉인 원석이 그 자리를 채워).
-4. 아이콘은 아직 최종 그림이 없으니 지금처럼 자리만 유지해.
-5. 팝업이 열려 있는 동안에도 배경 애니는 계속 돌아도 돼. 이미지 로딩 전이나 실패 시엔 #221c2b 단색 배경으로.
+1. 화면 540x960(네이티브 180x320의 3배), 정수 배율 + 가운데 정렬, 남는 곳 #0d0a10, 스무딩 끔. manifest 좌표는 네이티브 px라 3배(`layoutA_screenPx`만 화면 px).
+2. 매 프레임: `menu_base.png` 전체 → `manifest.background.pieces` 각 조각(`f = floor(now / frameMs) % loopFrames`, `k = seq[f % periodFrames]`, 시트에서 `sx = (k % cols) * w`, `sy = floor(k / cols) * h`를 `(x, y)`에) → `particles.sparks` 10개를 공식대로 1px(3x3 fillRect)씩 → 그 위에 UI.
+3. 시트 로딩 전에는 `menu_bg.png` 한 장을 그려. 둘 다 없으면 #221c2b 단색.
+4. UI는 시안 A(`layoutA_screenPx`)대로: 재화 바, 출석/이벤트, 설정/상점, 플레이 버튼. 가운데 centerpiece 자리의 점선 박스는 지워(배경의 봉인 원석이 그 자리). 팝업이 열려 있어도 배경 애니는 계속.
+5. 타이틀 → 터치 → 메인 메뉴 → 플레이 → 일반 모드 → 지금의 게임. 경쟁 모드는 잠금.
 
 끝나면 바꾼 파일과 확인 방법을 알려줘.

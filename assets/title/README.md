@@ -1,18 +1,24 @@
-# 타이틀 화면 (title)
+# 타이틀 화면 (title) v2 — 경량 구조
 
 디자인 E "잊혀진 지하 신단". 세로 화면, 네이티브 180x320을 3배(540x960)로 그린다. `imageSmoothingEnabled = false`.
+v1의 전체 화면 64프레임 시트(`title_bg.png`, 1440x2560)는 없앴다. 대신 **정지 베이스 한 장 + 움직이는 부분만 잘라낸 작은 시트 + 코드로 그리는 입자**.
 
 ## 파일
-- `title_bg.png`: 배경 애니 시트. 프레임 180x320, 64프레임, 8열 x 8행, 100ms, 반복(6.4초, 끊김 없음). 동굴, 봉인된 문, 문 틈에서 새는 금빛, 빛줄기, 먼지, 네온 고대 문자, 촛불, 사슬, 물방울, 로고 뒤 어두운 판이 다 들어 있다.
-- `logo.png`: GEM GUARDIANS 로고(빛 없음) 114x56. 위치 네이티브 (33, 21).
-- `logo_shine.png`: 로고 위를 금빛 띠가 지나가는 12프레임(114x56, 100ms, 한 번 재생). 3200ms마다 재생하고, 재생 중이 아닐 땐 `logo.png`를 그린다.
-- `manifest.json`: 크기, 프레임, 위치, 글자(부제, 터치 안내, 버전) 위치와 색.
-- `preview.gif`, `preview.png`: 완성 화면 미리보기(글자는 임시 글꼴 Unifont).
+- `title_base.png` 180x320: 배경 전체 정지 그림(동굴, 문, 문자, 촛불, 사슬, 로고 뒤 어두운 판 포함).
+- `title_p00.png` ~ `title_p03.png`: 움직이는 부분의 프레임 시트. 각 조각의 위치(x, y, w, h), 프레임 수, 열 수, 재생 순서(`seq`)는 `manifest.json`의 `background.pieces`에 있다. 200ms/프레임, 32프레임 = 6.4초 끊김 없는 반복.
+  - p00: 문 + 문틈 빛 + 빛줄기 + 제단 룬 깜빡임 (83x147)
+  - p01, p02: 좌우 벽의 네온 고대 문자 숨쉬기 (12x77, 11x73)
+  - p03: 촛불 불꽃 하나 (2x3)
+- `manifest.json` `background.particles`: 먼지(14개)와 물방울(6개)은 1픽셀짜리라 코드로 그린다. 공식과 상수가 그대로 들어 있다(네이티브 px 기준).
+- `logo.png` 114x56 네이티브 (33, 21), `logo_shine.png` 12프레임(100ms, 3200ms마다 한 번) — v1과 같다.
+- `preview.gif`: 이 구조로 합성한 결과. `preview.png`: 정지 미리보기.
 
-## 그리기 순서
-1. 배경 프레임 `i = floor(now / 100) % 64`, `sx = (i % 8) * 180`, `sy = floor(i / 8) * 320`
-2. 로고: `t = now % 3200`, `t < 1200`이면 `logo_shine` 프레임 `floor(t / 100)`, 아니면 `logo.png`
-3. 글자(코드에서 Galmuri11, 외곽선 #0d0a10 2px): 부제 "잊혀진 지하 신단" #f2d264 16px 가운데 (270, 266) + 양옆 짧은 선 #7a5212, 터치 안내 #f2d264 22px (270, 880) 500ms 깜빡임, 버전 v0.1 오른쪽 아래.
-글자 좌표는 manifest `text`에 화면 px(이미 3배)로 들어 있다.
+## 그리기 순서 (매 프레임, `now` = ms)
+1. `title_base.png`를 (0,0)에.
+2. 각 piece: `f = floor(now / 200) % 32`, `k = seq[f % periodFrames]`, 시트에서 `sx = (k % cols) * w`, `sy = floor(k / cols) * h` 영역을 `(x, y)`에.
+3. 입자: manifest의 `particles` 공식대로 1px씩(`fillRect(x*3, y*3, 3, 3)`).
+4. 로고(+shine), 글자(manifest `text`, 화면 px) — v1과 동일.
+- 모든 좌표는 네이티브 px이므로 3배. 합성 결과는 v1 시트와 픽셀 단위로 같다(물방울이 밝은 돌 위를 지날 때 1px 차이뿐).
 
-생성기: `art/title/build_title.py` (장면 코드 `art/title/title_v2.py`의 `scene_E`).
+크기: v1 시트 363KB / GPU 텍스처 약 14.7MB → v2 전체 111KB / 약 2.2MB.
+생성기: `art/title/build_title_layers.py` (장면 코드 `art/title/title_v2.py` `scene_E`, 분리 도구 `art/tools/split_anim.py`).

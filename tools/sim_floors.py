@@ -52,7 +52,7 @@ def simulate(floor, levels, active, seed=1, power=1.0):
     moves = 0
     next_move = 1.0
     auto_cd = [0.2 * i for i in range(5)]
-    for wi, wave in enumerate(floor['waves']):
+    for wi, wave in enumerate([{'spawns': floor['spawns'], 'interval': floor['spawnInterval']}]):
         queue = [unit_stats(B, E, floor, s) for s in wave['spawns']]
         alive = []
         spawn_t = t
@@ -105,7 +105,6 @@ def simulate(floor, levels, active, seed=1, power=1.0):
                     if wall <= 0:
                         return False, 0.0, t
             alive = [u for u in alive if u['hp'] > 0]
-        t += floor['waveBreak']
     return True, wall / wall_max, t
 
 
@@ -152,24 +151,23 @@ def main():
             w, r, _ = simulate(fl, levels, True, seed)
             wins_a += w; walls_a.append(r)
         need_a = need_power(fl, levels, True)
-        units = [unit_stats(B, E, fl, s) for w in fl['waves'] for s in w['spawns']]
+        units = [unit_stats(B, E, fl, s) for s in fl['spawns']]
         kill_gold = sum(u['gold'] for u in units)
         gold += kill_gold * (1 + B['economy']['clearBonusMul'])
         comp = {}
-        for w in fl['waves']:
-            for s in w['spawns']:
-                comp[s] = comp.get(s, 0) + 1
+        for s in fl['spawns']:
+            comp[s] = comp.get(s, 0) + 1
         boss = [u for u in units if u['rank'] == 'boss']
         ob = fl['obstacles']
         rows.append({
-            'floor': f, 'tag': fl['tag'], 'chapter': fl['chapter'], 'waves': len(fl['waves']), 'enemies': len(units),
+            'floor': f, 'tag': fl['tag'], 'chapter': fl['chapter'], 'enemies': len(units),
             'composition': ' '.join(f'{k}x{v}' for k, v in sorted(comp.items())),
             'hpMul': fl['scaling']['hpMul'], 'speedMul': fl['scaling']['speedMul'],
             'wallDmgMul': fl['scaling']['wallDmgMul'], 'defAdd': fl['scaling']['defAdd'],
             'totalEnemyHp': sum(u['hp'] for u in units),
             'bossHp': boss[0]['hp'] if boss else '',
             'wallHp': fl['wallHp'],
-            'spawnInterval': fl['waves'][0]['interval'],
+            'spawnInterval': fl['spawnInterval'],
             'crate': fmt_ob(ob.get('crate')),
             'stone': fmt_ob(ob.get('stone')),
             'timeBomb': f"1/{ob['timeBomb']['everyMoves']}moves timer{ob['timeBomb']['timer']} -{int(ob['timeBomb']['wallDamagePct']*1000)/10}%" if 'timeBomb' in ob else '',

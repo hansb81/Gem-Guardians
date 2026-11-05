@@ -1,0 +1,156 @@
+{
+  "_doc": "밸런스 시뮬레이션 설정 (tools/sim 전용, 게임은 안 씀). docs/simulation.md 참고.",
+  "seeds": 5,
+  "dt": 0.05,
+  "maxFloorSeconds": 600,
+  "players": {
+    "_doc": "봇 플레이어 성향. secondsPerMove = 스왑 1번에 걸리는 시간(연쇄 연출 포함). pick = 수 고르는 방법: best(지우는 잼 최대 + 특수 잼 우선), top3(상위 3수 중 무작위), random(가능한 수 중 무작위). bombAware = 시한폭탄 붙은 잼을 우선 지우려 함",
+    "fast": {
+      "secondsPerMove": 1.8,
+      "pick": "best",
+      "bombAware": true
+    },
+    "normal": {
+      "secondsPerMove": 2.5,
+      "pick": "top3",
+      "bombAware": true
+    },
+    "casual": {
+      "secondsPerMove": 3.5,
+      "pick": "random",
+      "bombAware": false
+    }
+  },
+  "levelStrategies": {
+    "_doc": "골드 쓰는 법. even = 가장 낮은 탑부터, byUse = 많이 쏜 색 탑부터(봇이 실제로 지운 색 비율), none = 레벨업 안 함",
+    "list": [
+      "even",
+      "byUse",
+      "none"
+    ]
+  },
+  "modifiers": {
+    "_doc": "아직 없는 잼 특수 효과를 미리 시험하는 가상 효과. 시뮬레이션 전용 훅이지만 나중에 실제 스킬도 같은 자리(피해 계산 파이프라인)에 들어가게 만든다. trigger: allShots(모든 퍼즐 사격) / special(특수 잼이 터진 사격만) / color:red 등(그 색 탑만).",
+    "none": [],
+    "dmg+20%": [
+      {
+        "type": "dmgMul",
+        "value": 1.2,
+        "trigger": "allShots"
+      }
+    ],
+    "burst": [
+      {
+        "type": "burst",
+        "every": 5,
+        "mul": 3.0,
+        "trigger": "allShots",
+        "_doc": "5발마다 3배"
+      }
+    ],
+    "specialx2": [
+      {
+        "type": "dmgMul",
+        "value": 2.0,
+        "trigger": "special"
+      }
+    ],
+    "dot": [
+      {
+        "type": "dot",
+        "ratio": 0.5,
+        "seconds": 3,
+        "trigger": "color:red",
+        "_doc": "맞은 피해의 50%를 3초에 나눠 추가"
+      }
+    ],
+    "slow": [
+      {
+        "type": "slow",
+        "speedMul": 0.6,
+        "seconds": 2,
+        "trigger": "color:blue"
+      }
+    ],
+    "aoe": [
+      {
+        "type": "splash",
+        "radius": 0.08,
+        "ratio": 0.5,
+        "trigger": "special",
+        "_doc": "맞은 적 주변(길 길이 기준 0.08) 적에게 50%"
+      }
+    ],
+    "pierce2": [
+      {
+        "type": "pierce",
+        "targets": 2,
+        "ratio": 0.7,
+        "trigger": "color:blue"
+      }
+    ],
+    "chain3": [
+      {
+        "type": "chain",
+        "jumps": 2,
+        "ratio": 0.6,
+        "trigger": "color:yellow"
+      }
+    ],
+    "allBasic": [
+      "dot",
+      "slow",
+      "pierce2",
+      "chain3"
+    ]
+  },
+  "targets": {
+    "_doc": "판정 기준 v6(2026-11-05). 보스층(10의 배수)이 관문. 레벨 없이 normal은 첫/둘째 보스(9~19층)에서 막히는 게 목표.",
+    "noLevelReach": {
+      "fast": [
+        15,
+        29
+      ],
+      "normal": [
+        9,
+        19
+      ],
+      "casual": [
+        5,
+        12
+      ]
+    },
+    "floorSeconds": [
+      45,
+      150
+    ],
+    "wallLeftOnClear": {
+      "tooEasyAbove": 0.95,
+      "tooHardBelow": 0.15
+    },
+    "retriesPerFloor": {
+      "normal": [
+        0,
+        1
+      ],
+      "boss": [
+        1,
+        3
+      ],
+      "wallFlag": 4
+    },
+    "minutesTo100": {
+      "normal": [
+        120,
+        300
+      ]
+    },
+    "levelsPerFirstClear": {
+      "_doc": "첫 클리어 골드로 '그 층에 도달했을 때의 실제 탑 레벨' 기준으로 오르는 탑 레벨 합(5개 탑 합계). Lv1 기준으로 계산하지 말 것.",
+      "range": [
+        2,
+        5
+      ]
+    }
+  }
+}

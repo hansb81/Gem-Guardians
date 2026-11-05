@@ -3,10 +3,13 @@
 const SWIPE_THRESHOLD_PX = 16;
 
 export class PointerInput {
-  constructor(canvas, { getBoardRect, onSwap, canInteract }) {
+  constructor(canvas, { getBoardRect, onSwap, canInteract, onSelect }) {
     this.canvas = canvas;
     this.getBoardRect = getBoardRect;
     this.onSwap = onSwap;
+    // onSelect(row, col): 보드 칸을 처음 누른 순간(gem_select 효과음용). 선택 자체는
+    // 상태를 바꾸지 않으므로 알림만 보낸다.
+    this.onSelect = onSelect ?? (() => {});
     this.canInteract = canInteract ?? (() => true);
     // canInteract(row, col): 눌린 칸 기준으로 입력을 허용할지 판정한다. 드래그 목표 칸
     // (active.row+dr, active.col+dc) 쪽은 따로 검사하지 않는다 - gameState.trySwap()이
@@ -59,6 +62,7 @@ export class PointerInput {
       startY: e.clientY,
       resolved: false,
     };
+    this.onSelect(cell.row, cell.col);
   }
 
   _onPointerMove(e) {

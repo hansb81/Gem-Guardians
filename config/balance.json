@@ -6,6 +6,13 @@
     "baseAtk": 10,
     "atkGrowthPerLevel": 1.05,
     "maxLevel": 200,
+    "towers": [
+      { "id": "tower_red", "color": "red", "name": "화염 수정탑", "shape": "octagon_square" },
+      { "id": "tower_blue", "color": "blue", "name": "서리 첨탑", "shape": "triangle" },
+      { "id": "tower_yellow", "color": "yellow", "name": "뇌전탑", "shape": "inverted_triangle" },
+      { "id": "tower_green", "color": "green", "name": "가시독탑", "shape": "diamond" },
+      { "id": "tower_purple", "color": "purple", "name": "저주 오벨리스크", "shape": "pentagon" }
+    ],
     "autoAttack": {
       "_doc": "2026-11-03 쑹: 탑은 퍼즐로만 공격한다(자동 공격 없음). 나중에 방치형(1-4)이나 업그레이드로 켤 수 있게 값만 남겨둠.",
       "enabled": false,
@@ -20,15 +27,8 @@
     "projectileSpeed": 1.6,
     "levelCost": {
       "base": 20,
-      "growth": 1.06
-    },
-    "towers": [
-      { "id": "tower_red", "color": "red", "name": "화염 수정탑", "shape": "octagon_square" },
-      { "id": "tower_blue", "color": "blue", "name": "서리 첨탑", "shape": "triangle" },
-      { "id": "tower_yellow", "color": "yellow", "name": "뇌전탑", "shape": "inverted_triangle" },
-      { "id": "tower_green", "color": "green", "name": "가시독탑", "shape": "diamond" },
-      { "id": "tower_purple", "color": "purple", "name": "저주 오벨리스크", "shape": "pentagon" }
-    ]
+      "growth": 1.08
+    }
   },
   "wall": {
     "_doc": "층마다 가득 찬 상태로 시작. 성벽 업그레이드가 생기면 wallHp(f) 대신 플레이어 스탯으로 옮긴다.",
@@ -37,40 +37,25 @@
   },
   "scaling": {
     "_doc": "f = 층(1부터). hpMul = hpGrowth^(f-1), atkMul = wallDmgGrowth^(f-1), speedMul = min(speedCap, 1 + speedPerFloor*(f-1)), defAdd = floor((f-1)/defEvery)",
-    "hpGrowth": 1.037,
-    "wallDmgGrowth": 1.025,
+    "hpGrowth": 1.0235,
+    "wallDmgGrowth": 1.015,
     "speedPerFloor": 0.0035,
     "speedCap": 1.35,
     "defEvery": 25,
-    "goldGrowth": 1.04
+    "goldGrowth": 1.035
   },
   "floorShape": {
-    "_doc": "웨이브 수와 적 수. 층 예산(threat 점수) = threatBudget.base + perFloor*(f-1). 웨이브 i의 예산 = 층 예산 x (i+2)/합. 예산이 찰 때까지 그 층 지역(chapter)의 pool 중 역할이 해금된 몬스터를 weight 확률로 뽑는다(남은 예산보다 너무 무거운 몬스터는 제외). 보스층(10의 배수)은 마지막 웨이브가 보스+호위, 엘리트층(끝자리 5)은 마지막 웨이브에 엘리트.",
+    "_doc": "층 = 웨이브 구분 없이 몬스터가 한 줄로 계속 나온다. 층 예산(threat 점수) = threatBudget.base + perFloor*(f-1). 예산이 찰 때까지 그 층 지역(chapter)의 pool 중 역할이 해금된 몬스터를 weight 확률로 뽑는다(남은 예산보다 너무 무거운 몬스터는 제외). spawnInterval초마다 1마리. 보스층(10의 배수)은 예산 절반의 호위 뒤에 보스가 마지막으로, 엘리트층(끝자리 5)은 예산 x eliteFloorBudgetMul에 엘리트가 섞인다. 모두 처치하면 클리어.",
     "threatBudget": {
-      "base": 6,
-      "perFloor": 0.3,
-      "max": 45
+      "base": 14,
+      "perFloor": 0.25,
+      "max": 40
     },
-    "waves": [
-      {
-        "fromFloor": 1,
-        "count": 2
-      },
-      {
-        "fromFloor": 11,
-        "count": 3
-      },
-      {
-        "fromFloor": 41,
-        "count": 4
-      }
-    ],
     "spawnInterval": {
-      "base": 2.0,
-      "perFloor": -0.011,
-      "min": 0.9
+      "base": 2.6,
+      "perFloor": -0.006,
+      "min": 2.0
     },
-    "waveBreak": 2.5,
     "eliteEvery": {
       "mod": 10,
       "rem": 5
@@ -78,7 +63,7 @@
     "bossEvery": 10,
     "eliteChanceFrom50": {
       "from": 50,
-      "chancePerWave": 0.25
+      "chancePerFloor": 0.5
     },
     "eliteMul": {
       "hp": 4,
@@ -90,14 +75,14 @@
     },
     "bossMul": {
       "_doc": "보스는 지역 보스 몬스터(enemies.json chapters[].boss)이고 스탯은 이 값만 쓴다. hp = hpBase x hpMul(f), 방어 = def + 층 방어 추가.",
-      "hpBase": 400,
+      "hpBase": 1700,
       "wallDmgBase": 40,
-      "travelTime": 30,
+      "travelTime": 36,
       "def": 1,
       "goldBase": 60
     },
     "bossEscortRatio": 0.5,
-    "eliteFloorBudgetMul": 1.4
+    "eliteFloorBudgetMul": 1.15
   },
   "economy": {
     "_doc": "처음 클리어 = 처치 골드 + 클리어 보상. 재도전 실패 시에도 처치 골드는 받는다(막힌 층에서 레벨업 가능).",
@@ -110,47 +95,51 @@
     "colorsPerMove": [
       [
         1,
-        0.7
+        0.35
       ],
       [
         2,
-        0.25
+        0.45
       ],
       [
         3,
-        0.05
+        0.2
       ]
     ],
     "gemsPerColor": [
       [
         3,
-        0.65
+        0.45
       ],
       [
         4,
-        0.2
+        0.27
       ],
       [
         5,
-        0.1
+        0.16
       ],
       [
         7,
-        0.05
+        0.12
       ]
     ],
     "cascade": [
       [
         1,
-        0.7
+        0.35
       ],
       [
         2,
-        0.22
+        0.4
       ],
       [
         3,
-        0.08
+        0.18
+      ],
+      [
+        4,
+        0.07
       ]
     ]
   }

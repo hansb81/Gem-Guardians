@@ -15,8 +15,8 @@ export function pickSummonFrame(elapsedMs, slotIndex, { staggerMs, frameMs }) {
   return { started: true, frame: frameMs.length - 1, done: true };
 }
 
-// 마지막 슬롯(slotCount-1)까지 끝났으면 소환 전체가 끝난 것 - BattleState가 스폰/웨이브
-// 타이머와 퍼즐 입력 차단을 풀 때 쓴다.
+// 마지막 슬롯(slotCount-1)까지 끝났으면 소환 전체가 끝난 것 - BattleState가 스폰 타이머와
+// 퍼즐 입력 차단을 풀 때 쓴다.
 export function isSummonDone(elapsedMs, slotCount, config) {
   if (slotCount <= 0) return true;
   return pickSummonFrame(elapsedMs, slotCount - 1, config).done;

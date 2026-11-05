@@ -166,6 +166,13 @@ export class GameState {
 
     // 셔플 연출 길이 선택(§설정 "흔들림/연출 줄이기") - main.js가 effects.json 로드 후 설정한다.
     this.reduceEffects = false;
+
+    // true면 clearing이 끝난 Resolution이 중력/리필(_settleAfterClear)로 넘어가지 않고 기다린다.
+    // 렌더의 발동/조합 스프라이트 일정(assets/effects/manifest.json의 swapMs 리드인, 컬러 물결,
+    // 변환 조합의 연쇄 지연)은 core의 clear(180ms)보다 훨씬 길어서, 그대로 두면 아직 터지지도
+    // 않은 칸 옆으로 새 잼이 떨어진다. main.js가 매 프레임 "렌더가 아직 터뜨리는 중인가"를
+    // 넣어준다(core는 연출 길이를 모르므로 판단은 렌더 쪽에 둔다 - reduceEffects와 같은 방식).
+    this.settleHold = false;
   }
 
   setReduceEffects(value) {
@@ -569,6 +576,11 @@ export class GameState {
     }
 
     if (!this._cellsComplete(resolution.watchCells)) return; // 아직 애니메이션/체인 발동 중.
+    // 렌더가 아직 이 제거를 연출하는 중이면 중력/리필만 미룬다(이미 지워진 칸은 그대로 빈 자리로
+    // 남고, 연출이 끝나면 한꺼번에 떨어진다). armed 타이머와 체인 발동은 계속 진행한다 -
+    // 렌더의 지연 연출(_deferComboChain)이 core의 specialActivate를 기다리고 있으므로 여기서
+    // 같이 멈추면 서로 기다려 영원히 안 끝난다.
+    if (resolution.phase === 'clearing' && this.settleHold) return;
     this._clearCellStates(resolution.watchCells);
 
     if (resolution.phase === 'swap') {
@@ -1290,19 +1302,29 @@ export class GameState {
   // board.shuffle()의 moves를 그대로 shuffle 이펙트에 실어 렌더가 연출을 재생하게 한다.
   // reduceEffects(§설정 "흔들림/연출 줄이기")가 켜져 있으면 연출 전체 길이를 줄인 값을 쓴다 -
   // 렌더가 그 안에서 페이드아웃->페이드인으로 대체한다(render/animator.js 참고).
-  _shuffleBoard(fixed) {
+  // skipClear는 렌더에게만 의미가 있는 플래그다(core는 연출 길이·단계를 모른다) - 아래
+  // shuffleBoard() 주석 참고.
+  _shuffleBoard(fixed, skipClear = false) {
     const moves = this.board.shuffle(fixed);
     this._invalidSwapCells = []; // 자리가 통째로 바뀌므로 남아있을 수 있던 참조를 정리.
     const durationMs = this.reduceEffects ? ANIMATION_DURATIONS_MS.shuffleReduced : ANIMATION_DURATIONS_MS.shuffle;
-    this._pushEffect({ type: 'shuffle', moves, durationMs });
+    // seed 기반 RNG만 쓰는 규칙(§규칙) - 연출용 난수(칸별 낙하 시작/속도 지터)도 보드의
+    // rng에서 뽑아 effect에 실어 보낸다. 같은 seed면 렌더가 같은 낙하 타이밍을 재생한다.
+    const seed = Math.floor(this.board.rng() * 2147483647);
+    this._pushEffect({ type: 'shuffle', moves, durationMs, seed, skipClear });
   }
 
   // 층 전환(다음 스테이지로 이동) 등 "조건 없이" 셔플 연출을 보여주고 싶을 때 호출하는
   // 공개 진입점 - _maybeReshuffle과 같은 연출을 재사용한다(docs에 별도 기획이 없어 기존
   // 셔플 연출을 그대로 입장 연출로도 쓰기로 함 - 보고 사항).
-  shuffleBoard() {
+  //
+  // skipClear:true면 렌더가 "비우기" 단계(기존 젬이 가라앉으며 페이드아웃)를 건너뛰고 낙하만
+  // 재생한다 - 입장에는 치울 이전 보드가 없어서, 그 단계를 그대로 쓰면 방금 만든 보드가
+  // 내려가며 사라졌다가 다시 위에서 떨어지는 것처럼 보인다. 재배치(수가 없을 때)는 기본값
+  // false로 두 단계를 모두 쓴다.
+  shuffleBoard({ skipClear = false } = {}) {
     const fixed = this.obstaclesRegistry ? occupantIndices(this.board) : undefined;
-    this._shuffleBoard(fixed);
+    this._shuffleBoard(fixed, skipClear);
   }
 
   // 활성 Resolution이 하나도 없는 상태로 막 전이한 틱에만(edge-triggered) 호출된다.

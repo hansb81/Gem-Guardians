@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { genFloor, getFloor, unitStats, resolveFloorWaves } from '../src/core/balance/floorGen.js';
+import { genFloor, getFloor, unitStats, resolveFloorSpawns } from '../src/core/balance/floorGen.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CFG = join(__dirname, '..', 'config');
@@ -46,7 +46,7 @@ test('unitStats: 10층 보스(거대 버섯) - 종류와 무관하게 bossMul �
   const floor = getFloor(B, E, O, floorsData, 10);
   const boss = unitStats(B, E, floor, 'large_mushroom@boss');
   assert.equal(boss.rank, 'boss');
-  assert.equal(boss.hp, 555); // 400 * hpMul(1.3868) 반올림
+  assert.equal(boss.hp, 783); // 600 * hpMul(1.3048) 반올림
   assert.equal(boss.def, 1); // defAdd(0) + bossMul.def(1)
   assert.equal(boss.wallDmg, 50); // 40 * wallDmgMul(1.2489) 반올림
   assert.equal(boss.gold, 85); // 60 * goldMul(1.4233) 반올림
@@ -63,12 +63,11 @@ test('unitStats: 엘리트(brute 역할) - HP x4, 성벽공격 x2, 방어 +1, �
   assert.equal(elite.gold, 25); // 5 * 5
 });
 
-test('resolveFloorWaves: 소환 문자열을 이름/애니메이션이 붙은 스탯 객체로 바꾼다', () => {
-  const floor = getFloor(B, E, O, floorsData, 10); // 보스층, 마지막 웨이브가 보스로 끝난다.
-  const resolved = resolveFloorWaves(B, E, floor);
-  assert.equal(resolved.length, floor.waves.length);
-  const lastWave = resolved[resolved.length - 1];
-  const boss = lastWave.spawns[lastWave.spawns.length - 1];
+test('resolveFloorSpawns: 소환 문자열을 이름/애니메이션이 붙은 스탯 객체로 바꾼다', () => {
+  const floor = getFloor(B, E, O, floorsData, 10); // 보스층, 마지막 소환이 보스로 끝난다.
+  const resolved = resolveFloorSpawns(B, E, floor);
+  assert.equal(resolved.length, floor.spawns.length);
+  const boss = resolved[resolved.length - 1];
   assert.equal(boss.rank, 'boss');
   assert.equal(boss.name, E.monsters.large_mushroom.name);
   assert.deepEqual(boss.anim, E.monsters.large_mushroom.anim);

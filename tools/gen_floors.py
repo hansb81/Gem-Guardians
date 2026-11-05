@@ -118,7 +118,7 @@ def gen_floor(B, E, O, f):
 
     tb = fs['threatBudget']
     budget = min(tb['max'], tb['base'] + tb['perFloor'] * (f - 1))
-    n_waves = [w['count'] for w in fs['waves'] if w['fromFloor'] <= f][-1]
+    n_waves = 1  # 웨이브 구분 없음: 층 전체가 한 줄
     is_boss = f % fs['bossEvery'] == 0
     is_elite = f % fs['eliteEvery']['mod'] == fs['eliteEvery']['rem']
 
@@ -159,7 +159,7 @@ def gen_floor(B, E, O, f):
         if last and is_elite:
             elite_n = 1 if f < 55 else 2
         ec = fs['eliteChanceFrom50']
-        if f >= ec['from'] and not (last and (is_boss or is_elite)) and rng() < ec['chancePerWave']:
+        if f >= ec['from'] and not (last and (is_boss or is_elite)) and rng() < ec['chancePerFloor']:
             elite_n += 1
         # elite = upgrade a unit; remove other units worth the extra threat (budget-neutral)
         emul = fs['eliteMul']['hp']
@@ -215,8 +215,9 @@ def gen_floor(B, E, O, f):
         'floor': f, 'tag': tag, 'chapter': chap['name'],
         'wallHp': wall_hp(B, f),
         'scaling': scaling(B, f),
-        'waveBreak': fs['waveBreak'],
-        'waves': waves,
+        'spawnInterval': waves[0]['interval'],
+        'totalEnemies': len(waves[0]['spawns']),
+        'spawns': waves[0]['spawns'],
         'obstacles': obs,
     }
 

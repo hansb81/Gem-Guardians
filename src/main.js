@@ -11,6 +11,9 @@ import { PuzzleBattleBridge } from './game/puzzleBattleBridge.js';
 import { BattleController } from './game/battleController.js';
 import { playerState } from './game/playerState.js';
 import { setupDevPanel } from './game/devPanel.js';
+import { setupSfxTestPanel } from './game/sfxTestPanel.js';
+import { audio } from './audio/AudioManager.js';
+import { ANIMATION_DURATIONS_MS } from './config/animation.js';
 import { LAYOUT_CONFIG } from './config/layout.js';
 import { t } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
@@ -18,6 +21,10 @@ import { towerAttack } from './core/economy/economy.js';
 
 const canvas = document.getElementById('game-canvas');
 const loadingEl = document.getElementById('loading-indicator');
+
+// 자동재생 정책(첫 입력에서 resume) + 탭 숨김 시 suspend. 에셋 로드보다 먼저 걸어 둬야
+// 첫 터치가 로딩 중에 들어와도 잠금이 풀린다.
+audio.install();
 
 // 층이 바뀌면(resetPuzzleBoard) 새 GameState로 재대입된다 - 그래서 let이다. 전투/층 데이터가
 // 로드되기 전까지는 방해요소 없는 임시 보드로 퍼즐만 동작한다.
@@ -41,9 +48,42 @@ const mainMenuScreen = new MainMenuScreen();
 function exitTitle() {
   if (scene === 'title') titleScreen.startExit();
 }
+// 메뉴 <-> 인게임 화면 전환 페이드 - { phase: 'out'|'in', elapsedMs, onBlack }. 검게 덮고
+// (out) 완전히 검은 프레임에 onBlack()으로 scene을 바꾼 뒤 다시 밝혀 온다(in).
+// timeScale과 무관한 실제 경과 시간으로 진행한다.
+let fade = null;
+const FADE_MS = 220;
+function startFade(onBlack) {
+  if (!fade) fade = { phase: 'out', elapsedMs: 0, onBlack };
+}
+// 나가기: 층을 되감아 둬서 다시 플레이할 때 진행 중이던 전투가 아니라 그 층 처음부터 시작한다.
+function startExitToMenu() {
+  startFade(() => {
+    controller?.retryFloor();
+    paused = false;
+    selectedTowerIndex = null;
+    upgradeHold = null;
+    scene = 'menu';
+  });
+}
+// 각 scene을 그린 다음 마지막에 불러 오버레이를 덮는다.
+function drawFade(rawDtMs) {
+  if (!fade) return;
+  fade.elapsedMs += rawDtMs;
+  const progress = Math.min(1, fade.elapsedMs / FADE_MS);
+  renderer.drawFadeOverlay(fade.phase === 'out' ? progress : 1 - progress);
+  if (progress < 1) return;
+  if (fade.phase === 'out') {
+    fade.onBlack();
+    fade = { phase: 'in', elapsedMs: 0 };
+  } else {
+    fade = null;
+  }
+}
 let selectedTowerIndex = null; // null이 아니면 타워 강화 팝업이 열려 있다 - 탭한 탑 줄은 card_selected로 표시.
 let upgradeTab = 'levelUp'; // 팝업 탭('levelUp'|'inventory') - 팝업을 새로 열 때마다 레벨업 탭으로 리셋.
-let upgradeHold = null; // 강화 버튼 꾹 누름 연속 강화 상태 - { index, nextMs, intervalMs } | null.
+let upgradeHold = null;
+let sliderDrag = null; // 일시정지 팝업의 볼륨 슬라이더를 끌고 있는 중 - { channel, rect } | null. // 강화 버튼 꾹 누름 연속 강화 상태 - { index, nextMs, intervalMs } | null.
 let timeScale = 1; // ?dev=1 2배속 토글용.
 // 에셋 로드 전엔 그리지 않는다 - CanvasRenderer.assets===null일 때의 색/도형 fallback이
 // 로딩 인디케이터(작은 텍스트 알약) 뒤로 그대로 보여서 "더미 이미지"처럼 보이는 걸 막는다.
@@ -84,7 +124,9 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
     // 다음 스테이지로 이동할 때도 보드가 뚝 바뀌지 않고 셔플 연출로 자리를 잡는다
     // (§셔플 애니메이션 - "다음 스테이지로 이동할때도 셔플을 사용한다", 보고 사항: 새로
     // 생성된 보드 자신을 한 번 더 섞어서 입장 연출로 재사용함).
-    gameState.shuffleBoard();
+    // skipClear - 입장에는 치울 이전 보드가 없다. 비우기 단계를 그대로 쓰면 방금 만든 보드가
+    // 내려가며 사라졌다가 다시 위에서 떨어져 "두 번 떨어지는" 것처럼 보인다.
+    gameState.shuffleBoard({ skipClear: true });
   }
 
   // 생성자가 이미 첫 _resetBattleState를 한 번 돌렸지만(그때는 onBattleStateChanged가
@@ -102,9 +144,15 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       },
       getTimeScale: () => timeScale,
       triggerSpecialFx: devTriggerSpecialFx,
+      triggerCombo: devTriggerCombo,
       triggerShuffle: () => gameState.shuffleBoard(),
     });
   }
+}).catch((err) => {
+  // 여기서 던져진 예외는 controller를 null로 남겨 전투 화면만 조용히 사라지게 한다(퍼즐은
+  // 계속 돌아가므로 증상이 "전투가 안 보임"뿐이라 원인을 찾기 어렵다 - config/balance.json에서
+  // tower.towers가 빠졌을 때 실제로 겪었다). 복구는 못 해도 최소한 콘솔에 남긴다.
+  console.error('전투/층 데이터 초기화 실패 - 전투 화면 없이 퍼즐만 동작한다:', err);
 });
 
 // 개발용(?dev=1) - line/bomb/box/color 발동 스프라이트(assets/effects)를 실제 보드 위에서
@@ -135,16 +183,43 @@ function devTriggerSpecialFx(kind) {
   gameState.effects.push({ type: 'specialActivate', kind, direction, position, color: null, affected, cascadeIndex: 1, durationMs: 280, elapsedMs: 0 });
 }
 
-// 일시정지 중이거나, 타워 강화 팝업이 열려 있거나, 전투가 끝난(승리/패배) 상태거나, 층
-// 시작 석상 소환 연출이 끝나지 않았으면 퍼즐/전투 로직 진행과 보드 입력을 멈춘다(팝업도
-// 일시정지와 같은 방식으로 게임을 멈춘다).
-function isBlocked() {
+// 개발용(?dev=1) - 특수 잼 조합(10종) 확인. 이건 가짜 effect를 꽂지 않고 보드 가운데에 두
+// 특수 잼을 심어 실제로 스왑한다 - core의 조합 판정/변환/연쇄 발동까지 전부 진짜 경로를
+// 타므로, 렌더러의 조합 연출과 core 스케줄이 어긋나는지도 같이 보인다.
+function devTriggerCombo(kindA, kindB) {
+  const { board } = gameState;
+  // 가운데 행에서 가장 가까운 "평범한 잼 2칸"을 찾는다(방해요소/빈칸/애니메이션 중인 칸 제외).
+  const free = (r, c) => board.get(r, c) >= 0 && board.cellStates[board.index(r, c)] === null;
+  const mid = Math.floor(board.rows / 2);
+  for (let d = 0; d < board.rows; d++) {
+    for (const row of d === 0 ? [mid] : [mid - d, mid + d]) {
+      if (row < 0 || row >= board.rows) continue;
+      for (let col = 0; col < board.cols - 1; col++) {
+        if (!free(row, col) || !free(row, col + 1)) continue;
+        board.setSpecial(row, col, { kind: kindA, direction: kindA === 'line' ? 'horizontal' : null });
+        board.setSpecial(row, col + 1, { kind: kindB, direction: kindB === 'line' ? 'vertical' : null });
+        gameState.trySwap(row, col, row, col + 1);
+        return;
+      }
+    }
+  }
+}
+
+// 보드 쪽(gameState.update)이 멈춰야 하는 조건 - 일시정지/팝업/전투 종료. 소환 연출 중은
+// 뺀다: 입장/다음 스테이지 셔플이 빛기둥 떨어지는 연출과 같은 시점에 돌아가야 해서(보고
+// 사항), 셔플도 gameState.update로 진행되는 보드 effect라 이 틱에 같이 멈추면 안 된다.
+function isBoardUpdateBlocked() {
   return (
     scene !== 'game' ||
     paused ||
     selectedTowerIndex != null ||
-    (controller != null && (controller.battleState.status !== 'active' || controller.battleState.summon.active))
+    (controller != null && controller.battleState.status !== 'active')
   );
+}
+
+// 입력 차단 조건 - 위 조건 + 소환 연출 중(석상이 아직 떨어지는 중엔 스와이프를 막는다).
+function isBlocked() {
+  return isBoardUpdateBlocked() || (controller != null && controller.battleState.summon.active);
 }
 
 function pointInRect(x, y, rect) {
@@ -190,6 +265,7 @@ function handleUpgradePopupPointerDown(popup, x, y) {
 // 재화 바 "+"(상점 자리)/일시정지 버튼/팝업 버튼/탑 탭 클릭 판정. 보드 스와이프
 // (PointerInput)와는 별개의 영역이라 겹치지 않는다.
 canvas.addEventListener('pointerdown', (e) => {
+  if (fade) return; // 화면 전환 페이드 중에는 입력을 받지 않는다.
   if (scene === 'title') {
     exitTitle();
     return;
@@ -200,11 +276,16 @@ canvas.addEventListener('pointerdown', (e) => {
   const y = e.clientY - rect.top;
 
   if (scene === 'menu') {
-    if (mainMenuScreen.handlePointerDown(x, y) === 'startNormalGame') scene = 'game';
+    if (mainMenuScreen.handlePointerDown(x, y) === 'startNormalGame') {
+      startFade(() => {
+        scene = 'game';
+      });
+    }
     return;
   }
 
   const popup = renderer.lastLayout?.popup;
+  if (popup?.audio && handleAudioSettingsPointerDown(popup.audio, x, y)) return;
   if (popup?.kind === 'towerUpgrade') {
     handleUpgradePopupPointerDown(popup, x, y);
     return;
@@ -220,9 +301,7 @@ canvas.addEventListener('pointerdown', (e) => {
         controller?.advanceFloor();
         paused = false;
       } else if (action === 'exit') {
-        // 나가기: 돌아갈 별도 메인 화면이 아직 없어 지금은 다시 시작과 동일하게 처리한다.
-        controller?.retryFloor();
-        paused = false;
+        startExitToMenu();
       }
       return;
     }
@@ -252,12 +331,44 @@ canvas.addEventListener('pointerdown', (e) => {
   }
 });
 
+// 일시정지 팝업의 효과음/배경음 슬라이더 + 음소거 버튼. 누르는 순간 값을 반영하고
+// gem_select를 한 번 들려준다(드래그 중에는 값만 따라온다 - 매 프레임 소리를 내지 않는다).
+function handleAudioSettingsPointerDown(rects, x, y) {
+  if (pointInRect(x, y, rects.mute)) {
+    audio.toggleMute();
+    audio.play('gem_select');
+    return true;
+  }
+  for (const channel of ['sfx', 'bgm']) {
+    if (!pointInRect(x, y, rects[channel])) continue;
+    sliderDrag = { channel, rect: rects[channel] };
+    audio.setVolume(channel, (x - rects[channel].x) / rects[channel].width);
+    audio.play('gem_select');
+    return true;
+  }
+  return false;
+}
+
+canvas.addEventListener('pointermove', (e) => {
+  if (scene === 'menu') {
+    mainMenuScreen.handlePointerMove(e.clientX - canvas.getBoundingClientRect().left);
+    return;
+  }
+  if (!sliderDrag) return;
+  const rect = canvas.getBoundingClientRect();
+  audio.setVolume(sliderDrag.channel, (e.clientX - rect.left - sliderDrag.rect.x) / sliderDrag.rect.width);
+});
+
 // 강화 버튼을 누른 채 손가락/포인터가 캔버스 밖으로 나가거나 뗄 때 연속 강화를 멈춘다.
 window.addEventListener('pointerup', () => {
   upgradeHold = null;
+  sliderDrag = null;
+  mainMenuScreen.handlePointerUp();
 });
 window.addEventListener('pointercancel', () => {
   upgradeHold = null;
+  sliderDrag = null;
+  mainMenuScreen.handlePointerUp();
 });
 
 window.addEventListener('keydown', (e) => {
@@ -310,9 +421,17 @@ new PointerInput(canvas, {
     !isBlocked() &&
     gameState.board.cellStates[gameState.board.index(row, col)] === null &&
     !gameState.board.isColumnLocked(col),
+  onSelect: () => audio.play('gem_select'),
   onSwap: (r1, c1, r2, c2) => {
     if (isBlocked()) return;
-    gameState.trySwap(r1, c1, r2, c2);
+    // trySwap은 매치가 없어 되돌아가는 스왑에도 true를 준다(거절되는 건 인접 아님/잠긴 열 등
+    // 아예 받아들여지지 않은 입력뿐) - 스왑음은 유효/무효 모두 내고, 되돌아감은 cellStates의
+    // bounce로 가려내 그 절반 지점(= 되돌아가기 시작하는 순간)에 실패음을 낸다.
+    if (!gameState.trySwap(r1, c1, r2, c2)) return;
+    audio.play('gem_swap');
+    if (gameState.board.cellStates[gameState.board.index(r1, c1)]?.bounce) {
+      audio.play('gem_swap_fail', { delayMs: ANIMATION_DURATIONS_MS.swap });
+    }
   },
 });
 
@@ -330,8 +449,8 @@ function buildBattleHud() {
     floor: controller.floor,
     chapter: controller.currentFloor.chapter,
     tag: controller.floorTag,
-    wave: battleState.waveNumber,
-    totalWaves: battleState.totalWaves,
+    remainingEnemies: battleState.remainingEnemies,
+    totalEnemies: battleState.totalEnemies,
     gold: playerState.gold,
     towerLevels: playerState.towerLevels,
     towerCosts: playerState.towerLevels.map((_, i) => playerState.nextTowerLevelCost(balance, i)),
@@ -366,20 +485,27 @@ function loop(now) {
 
   if (scene === 'title') {
     renderer.drawTitle(titleScreen, now, rawDtMs);
+    // 문 열림 전환 끝부분(1250~2200ms)은 메인 메뉴를 그 위에 겹쳐 띄운다.
+    const menuAlpha = titleScreen.menuFadeAlpha();
+    if (menuAlpha > 0) renderer.drawMainMenu(mainMenuScreen, playerState, now, menuAlpha);
     if (titleScreen.isExitDone()) scene = 'menu';
+    drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;
   }
 
   if (scene === 'menu') {
     renderer.drawMainMenu(mainMenuScreen, playerState, now);
+    drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;
   }
 
   processUpgradeHold(now);
 
-  if (!isBlocked()) {
+  if (!isBoardUpdateBlocked()) {
+    // 발동/조합 스프라이트가 아직 재생 중이면 중력/리필을 미룬다(GameState.settleHold 주석 참고).
+    gameState.settleHold = assetsReady && renderer.isSpecialFxBusy();
     gameState.update(dt);
   }
   // battleState.update()는 status!=='active'면 내부에서 바로 리턴한다(이벤트 애니메이션만
@@ -412,6 +538,7 @@ function loop(now) {
     );
   }
 
+  drawFade(rawDtMs);
   requestAnimationFrame(loop);
 }
 
@@ -436,6 +563,7 @@ Promise.all([
   .then(([assets]) => {
     renderer.setAssets(assets);
     assetsReady = true;
+    if (new URLSearchParams(location.search).has('sfxtest')) setupSfxTestPanel();
   })
   .catch(() => {
     // 방어적 - loadAssets 내부에서 이미 모든 실패를 흡수하지만, 혹시라도 던지면 그냥 fallback으로 진행.

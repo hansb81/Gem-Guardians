@@ -1,0 +1,275 @@
+{
+ "version": 1,
+ "drawScale": 2,
+ "imageSmoothing": false,
+ "sliceOrder": "[left, top, right, bottom] 원본 px",
+ "layoutA_screenPx": {
+  "currencyBar": [
+   154,
+   28,
+   232,
+   56
+  ],
+  "attendance": [
+   20,
+   28,
+   48,
+   48
+  ],
+  "event": [
+   20,
+   92,
+   48,
+   48
+  ],
+  "settings": [
+   472,
+   28,
+   48,
+   48
+  ],
+  "shop": [
+   472,
+   92,
+   48,
+   48
+  ],
+  "playButton": [
+   90,
+   760,
+   360,
+   64
+  ]
+ },
+ "assets": {
+  "plate": {
+   "file": "plate.png",
+   "w": 24,
+   "h": 24,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "use": "재화 바 바탕 (돌판 + 금 상감)"
+  },
+  "inset": {
+   "file": "inset.png",
+   "w": 12,
+   "h": 12,
+   "slice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "use": "재화 숫자 칸"
+  },
+  "btn_attendance": {
+   "file": "btn_attendance.png",
+   "w": 24,
+   "h": 24,
+   "use": "attendance 아이콘 버튼 24x24"
+  },
+  "btn_attendance_pressed": {
+   "file": "btn_attendance_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "btn_event": {
+   "file": "btn_event.png",
+   "w": 24,
+   "h": 24,
+   "use": "event 아이콘 버튼 24x24"
+  },
+  "btn_event_pressed": {
+   "file": "btn_event_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "btn_settings": {
+   "file": "btn_settings.png",
+   "w": 24,
+   "h": 24,
+   "use": "settings 아이콘 버튼 24x24"
+  },
+  "btn_settings_pressed": {
+   "file": "btn_settings_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "btn_shop": {
+   "file": "btn_shop.png",
+   "w": 24,
+   "h": 24,
+   "use": "shop 아이콘 버튼 24x24"
+  },
+  "btn_shop_pressed": {
+   "file": "btn_shop_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "badge": {
+   "file": "badge.png",
+   "w": 8,
+   "h": 8,
+   "use": "받을 보상 있음 빨간 배지, 아이콘 버튼 오른쪽 위 (x+18, y-2) 원본px"
+  },
+  "btn_play": {
+   "file": "btn_play.png",
+   "w": 40,
+   "h": 32,
+   "slice": [
+    14,
+    8,
+    14,
+    10
+   ],
+   "use": "플레이 버튼 9-slice, 시안 A 크기 180x32 원본px (360x64 화면)"
+  },
+  "btn_play_pressed": {
+   "file": "btn_play_pressed.png",
+   "w": 40,
+   "h": 32,
+   "slice": [
+    14,
+    8,
+    14,
+    10
+   ],
+   "textOffsetY": 2,
+   "use": "눌림 상태 (글자/아이콘 2px 아래로)"
+  },
+  "play_glyph": {
+   "file": "play_glyph.png",
+   "w": 10,
+   "h": 12,
+   "use": "플레이 버튼의 ▶ (글자 왼쪽)"
+  },
+  "popup_menu": {
+   "file": "popup_menu.png",
+   "w": 48,
+   "h": 48,
+   "slice": [
+    16,
+    16,
+    16,
+    16
+   ],
+   "use": "설정/모드 선택 팝업 틀"
+  },
+  "emblem_settings": {
+   "file": "emblem_settings.png",
+   "w": 24,
+   "h": 24,
+   "use": "설정 팝업 윗변 가운데 문장 24x24"
+  },
+  "emblem_mode": {
+   "file": "emblem_mode.png",
+   "w": 24,
+   "h": 24,
+   "use": "모드 선택 팝업 윗변 가운데 문장 24x24"
+  },
+  "btn_close": {
+   "file": "btn_close.png",
+   "w": 16,
+   "h": 16,
+   "use": "팝업 닫기 (기존 upgrade/btn_close와 같음)"
+  },
+  "btn_close_pressed": {
+   "file": "btn_close_pressed.png",
+   "w": 16,
+   "h": 16,
+   "use": "눌림"
+  },
+  "slider_track": {
+   "file": "slider_track.png",
+   "w": 16,
+   "h": 8,
+   "slice": [
+    4,
+    0,
+    4,
+    0
+   ],
+   "fill": {
+    "x": 2,
+    "y": 2,
+    "h": 4,
+    "padRight": 2
+   },
+   "use": "음량 슬라이더 홈 (가로 3-slice)"
+  },
+  "slider_fill": {
+   "file": "slider_fill.png",
+   "w": 4,
+   "h": 4,
+   "use": "슬라이더 채움 (가로로 늘림)"
+  },
+  "slider_knob": {
+   "file": "slider_knob.png",
+   "w": 10,
+   "h": 14,
+   "use": "슬라이더 손잡이, 채움 끝에 가운데 맞춤"
+  },
+  "slider_knob_pressed": {
+   "file": "slider_knob_pressed.png",
+   "w": 10,
+   "h": 14,
+   "use": "드래그 중"
+  },
+  "mode_normal": {
+   "file": "mode_normal.png",
+   "w": 24,
+   "h": 24,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "use": "일반 모드 버튼 9-slice"
+  },
+  "mode_normal_pressed": {
+   "file": "mode_normal_pressed.png",
+   "w": 24,
+   "h": 24,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "use": "눌림"
+  },
+  "mode_locked": {
+   "file": "mode_locked.png",
+   "w": 24,
+   "h": 24,
+   "slice": [
+    8,
+    8,
+    8,
+    8
+   ],
+   "use": "잠긴 모드 버튼 (경쟁 모드), 오른쪽에 icons/lock.png"
+  },
+  "icon_mode_normal": {
+   "file": "icon_mode_normal.png",
+   "w": 20,
+   "h": 20,
+   "use": "일반 모드 아이콘 20x20 (봉인된 문)"
+  },
+  "icon_mode_competitive": {
+   "file": "icon_mode_competitive.png",
+   "w": 20,
+   "h": 20,
+   "use": "경쟁 모드 아이콘 20x20 (교차 검)"
+  }
+ }
+}
