@@ -16,9 +16,8 @@ export function getFontString(targetPx, bold = false) {
   return `${bold ? 'bold ' : ''}${px}px ${FONT_CONFIG.family}`;
 }
 
-// document.fonts.load()로 게임 시작 전에 기다릴 폰트 목록.
-export const FONT_LOAD_SPECS = [
-  `${FONT_CONFIG.baseSize}px Galmuri11`,
-  `${FONT_CONFIG.baseSize}px "Fusion Pixel"`,
-  `${FONT_CONFIG.baseSize}px "Noto Sans"`,
-];
+// document.fonts.load()로 게임 시작 전에 기다릴 폰트 목록 - 실제로 쓰는 Galmuri11만.
+// 폴백인 Fusion Pixel(중국어 701KB)과 Noto Sans(198KB)는 style.css의 @font-face에 그대로
+// 있어서, 그 글꼴이 필요한 글자가 처음 나올 때 브라우저가 알아서 받는다. 여기 적어 두면
+// 로케일이 ko/en뿐인 지금도 시작할 때마다 900KB를 받고 기다린다.
+export const FONT_LOAD_SPECS = [`${FONT_CONFIG.baseSize}px Galmuri11`];

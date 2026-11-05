@@ -14,4 +14,6 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         super().end_headers()
 
 
-http.server.test(HandlerClass=NoCacheHandler, port=port, bind='0.0.0.0')
+# ThreadingHTTPServer가 아니면 요청을 하나씩 처리한다 - 브라우저가 keep-alive 연결을
+# 6개 열어두는 탓에 첫 로딩(파일 수백 개)이 느려지다 못해 멈춰 버린다.
+http.server.test(HandlerClass=NoCacheHandler, ServerClass=http.server.ThreadingHTTPServer, port=port, bind='0.0.0.0')
