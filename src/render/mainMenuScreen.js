@@ -8,7 +8,7 @@
 // (1배 파일, 화면 2배, imageSmoothingEnabled=false, 9-slice는 uiKit의 drawNine)이라
 // assetLoader가 "menu/<파일>" 키로 같은 uiImages/uiManifest에 합쳐 둔다.
 // 아래 좌표는 모두 540x960 기준("basis")이고 _toScreen이 실제 캔버스 크기로 옮긴다.
-// 세부 배치 수치는 assets/ui/menu/preview_*.png에서 잰 값이다.
+// 세부 배치 수치는 art/ui/menu/preview_*.png에서 잰 값이다.
 import { loadImage } from './assetLoader.js';
 import { LayeredBg } from './layeredBg.js';
 import { getFontString } from '../config/fonts.js';

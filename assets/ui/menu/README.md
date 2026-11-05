@@ -21,5 +21,5 @@
 | `icon_mode_normal` (봉인된 문), `icon_mode_competitive` (교차 검) | 20×20 | 모드 버튼 왼쪽 아이콘. 잠김이면 오른쪽에 `../icons/lock.png` |
 
 도움말/게임 정보 버튼은 기존 `../buttons/btn_secondary` 사용.
-미리보기: `preview_menu_ui.png` (메뉴 / 설정 팝업 / 모드 선택 팝업), 각 화면 `preview_menu.png`, `preview_settings.png`, `preview_mode.png`, 부품 `overview.png`.
+미리보기(`art/ui/menu/`): `preview_menu_ui.png` (메뉴 / 설정 팝업 / 모드 선택 팝업), 각 화면 `preview_menu.png`, `preview_settings.png`, `preview_mode.png`, 부품 `overview.png`.
 생성기: `art/ui/build_menu_ui.py`.

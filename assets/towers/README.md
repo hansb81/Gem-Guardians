@@ -28,4 +28,4 @@ const w = a.frameW * 3, h = a.frameH * 3;
 ctx.drawImage(img, frame * a.frameW, 0, a.frameW, a.frameH, fx - w / 2, fy - h, w, h);
 ```
 
-미리보기: `preview.png`(줄마다 대기 4 + 발사 6), `preview.gif`.
+미리보기(`art/towers/`): `preview.png`(줄마다 대기 4 + 발사 6), `preview.gif`.

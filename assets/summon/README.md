@@ -7,7 +7,7 @@
 - `sheets/pillar_front_{color}.png`: 32x48 x16. 석상 **앞**에 그림 (기둥 중심, 고리 앞쪽 절반, 불티). 테두리는 체커 디더라 석상이 비쳐 보임.
 - `sheets/statue_summon_{color}.png`: 16x20 x16. 소환되는 석상 (0~5 안 보임, 6~7 네온 실루엣, 8~11 아래에서 위로 드러남, 12~15 원래 석상).
 - `manifest.json`: 프레임 시간(`frameMs` 배열, 총 920ms), 오프셋, 순서, 시차.
-- `preview.gif`(폐신전), `preview_lava.gif`, `frames_x4.png`: 미리보기.
+- 미리보기는 `art/summon/`: `preview.gif`(폐신전), `preview_lava.gif`. `frames_x4.png`도 미리보기.
 
 ## 그리기
 - 정수 배율(기본 3배), `imageSmoothingEnabled = false`. 색 = 보석 팔레트 + 석상 네온 2색(석상과 같음).

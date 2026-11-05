@@ -1198,7 +1198,7 @@ export class CanvasRenderer {
     fx.audioCues = sortCues(cues);
   }
 
-  // 특수 잼 조합(comboActivate) - manifest.combo + assets/effects/combos/README.md의 10종.
+  // 특수 잼 조합(comboActivate) - manifest.combo + art/effects/combos/README.md의 10종.
   // 공통 리드인(두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 combo_merge_{색}) 다음에,
   // 조합별 연출을 #1~#5 발동 fx의 조합으로 만든다(_spawnDelayedFx가 같은 _spawnSpecialFx
   // 경로를 쓰고 재생만 늦춘다 - 조합 전용 드로잉 엔진을 따로 만들지 않는다).

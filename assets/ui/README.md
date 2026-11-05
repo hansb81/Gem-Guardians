@@ -51,7 +51,7 @@ function drawNine(ctx, img, s, x, y, w, h, k = 2) {
 ```
 
 ## 미리보기
-`preview_screens.png` (HUD / 일시정지 / 승리 / 패배, 432×768 화면), `overview.png` (에셋 6배).
+`art/ui/preview_screens.png` (HUD / 일시정지 / 승리 / 패배, 432×768 화면), `overview.png` (에셋 6배).
 
 ## 데미지 숫자 폰트 (`font/`)
 - 글자: `0123456789+-x!,/` (순서는 `font.json`의 `chars`). 굵은 5×7 글자 + 외곽선 1px = 칸 8×9, 시트는 가로 1줄.
@@ -82,7 +82,7 @@ function drawDamage(ctx, img, font, text, cx, y, k = 2) {   // cx = 가운데 x
 | `coin_small` 8×8 | 버튼 안 가격 옆 |
 | `emblem_upgrade` 24×24 | 팝업 윗변 문장 (모루 + 화살표) |
 
-틀은 `popups/popup_win`(금테), 강화 버튼은 `buttons/btn_gold`, MAX는 `buttons/btn_primary`, 레벨 배지는 `panels/box_floor`, 장착/보유 칸은 `items/slot_*`를 그대로 씁니다. 배치는 `preview_upgrade.png` 참고.
+틀은 `popups/popup_win`(금테), 강화 버튼은 `buttons/btn_gold`, MAX는 `buttons/btn_primary`, 레벨 배지는 `panels/box_floor`, 장착/보유 칸은 `items/slot_*`를 그대로 씁니다. 배치는 `art/ui/upgrade/preview_upgrade.png` 참고.
 
 ## 몬스터 HP 게이지 (`enemy/`)
 | 파일 | 쓰는 곳 |

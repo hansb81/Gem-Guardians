@@ -11,7 +11,7 @@ v1의 전체 화면 64프레임 시트(`title_bg.png`, 1440x2560)는 없앴다. 
   - p03: 촛불 불꽃 하나 (2x3)
 - `manifest.json` `background.particles`: 먼지(14개)와 물방울(6개)은 1픽셀짜리라 코드로 그린다. 공식과 상수가 그대로 들어 있다(네이티브 px 기준).
 - `logo.png` 114x56 네이티브 (33, 21), `logo_shine.png` 12프레임(100ms, 3200ms마다 한 번) — v1과 같다.
-- `preview.gif`: 이 구조로 합성한 결과. `preview.png`: 정지 미리보기.
+- 미리보기는 `art/title/`: `preview.gif`(이 구조로 합성한 결과), `preview.png`(정지), `door_transition_preview.gif`(문 열림 전환).
 
 ## 그리기 순서 (매 프레임, `now` = ms)
 1. `title_base.png`를 (0,0)에.

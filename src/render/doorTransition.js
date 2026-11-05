@@ -155,7 +155,7 @@ export class DoorTransition {
     const lit = phase(elapsed, T.glow);
     this._glowPass(g, lit); // 문 안쪽(문짝 뒤)
 
-    // 회전 전(0~350ms)에는 문틈만 2px까지 벌어져 안쪽 금빛이 새어 나온다 - preview.gif처럼
+    // 회전 전(0~350ms)에는 문틈만 2px까지 벌어져 안쪽 금빛이 새어 나온다 - art/title/door_transition_preview.gif처럼
     // 문짝 자체는 어두운 채로 두고 가운데 줄만 밝아진다.
     const ajar = Math.round(2 * lit);
     const open = easeInOut(phase(elapsed, T.leaves));

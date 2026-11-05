@@ -9,7 +9,7 @@
   - p02: 바닥 5색 룬 돌 + 바닥의 따뜻한 빛 (101x24)
 - `manifest.json` `background.particles`: 원석 균열에서 올라가는 불씨 10개(1px, 코드로). 석상으로 바꾸면 빼면 된다.
 - `menu_bg.png`: 정지 전체 그림(v1 8번 프레임). 로딩 전/저사양 대체용.
-- `preview.gif`: 이 구조로 합성한 결과. `preview_with_ui.png`: 시안 A UI 자리를 겹친 미리보기.
+- 미리보기는 `art/menu/`: `preview.gif`(이 구조로 합성한 결과), `preview_with_ui.png`(시안 A UI 자리를 겹침).
 - `manifest.json` `layoutA_screenPx`: 시안 A UI 위치(화면 px).
 
 그리기 순서는 타이틀과 같다: 베이스 → 각 piece의 현재 프레임(`f = floor(now/200) % 32`, `k = seq[f % periodFrames]`) → 입자 → UI.

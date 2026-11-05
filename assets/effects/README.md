@@ -17,12 +17,12 @@
 | `line_{h\|v}_seg{0\|1}_{색}` | #2 빛줄기가 지나가는 한 칸. 가로 32x64, 세로 64x32 (= 한 칸), 이어 붙이는 조각 | 6 | 320ms |
 | `bomb_{색}` | #3 폭탄: 용암 핵이 끓음 → 번쩍 → 불규칙한 불꽃이 3x3으로 퍼짐 + 파편 → 연기 → 불씨. 128x128 | 8 | 500ms |
 
-## #3 폭탄 쓰는 법 (미리보기 `preview_bomb.gif`)
+## #3 폭탄 쓰는 법 (미리보기 `art/effects/preview_bomb.gif`)
 - 폭탄 칸 중심에 `bomb_{색}`을 2배(256px)로 그린다. 3x3칸(192px)보다 조금 크게 퍼짐.
 - 주변 8칸 잼은 `manifest.bomb.hitMs`(110ms, 번쩍 직후)에 각자 `pop_{그 잼 색}` 시작. 폭탄 이펙트는 pop보다 위에.
 - 화면 흔들림을 넣는다면 hitMs에 맞추면 자연스럽다.
 
-## #2 가로/세로 줄 쓰는 법 (보드 크기와 상관없음, 7x7 기준 미리보기 `preview_line.gif`)
+## #2 가로/세로 줄 쓰는 법 (보드 크기와 상관없음, 7x7 기준 미리보기 `art/effects/preview_line.gif`)
 - 줄 잼 칸에 `line_h_origin_{색}` (세로면 `line_v_...`).
 - 같은 줄의 나머지 칸마다 `line_h_seg0/seg1_{색}`을 칸 번호 짝/홀로 번갈아 그린다(반짝이가 똑같이 반복되지 않게).
 - 각 칸은 줄 잼에서 거리 × `manifest.line.stepMs`(30ms)만큼 늦게 시작 → 빛이 양쪽으로 뻗어 나가는 느낌. 7x7에서 끝 칸까지 최대 180ms.
@@ -39,7 +39,7 @@ ctx.drawImage(img, f * a.frameW, 0, a.frameW, a.frameH, cx - w / 2, cy - h / 2, 
 ```
 이펙트는 잼보다 나중에(위에) 그리세요.
 
-## #4 박스 (랜덤 2칸 번개) - 미리보기 `preview_box.gif`
+## #4 박스 (랜덤 2칸 번개) - 미리보기 `art/effects/preview_box.gif`
 지금 게임의 "박스 칸 → 랜덤 칸 체인 라이트닝" 방식을 그대로 두고, 모양만 픽셀 아트로 바꿉니다.
 대상 칸이 보드 어디든(거리·각도 제각각) 될 수 있어서, 번개 줄기는 이미지가 아니라 **코드로 픽셀을 찍어** 그립니다(아래 `drawPixelBolt`).
 
@@ -88,7 +88,7 @@ function drawPixelBolt(put,{core,branches},t,col){ // col = manifest.box.colors[
 ```
 그리는 순서: 잼 → pop/box_origin → 번개(2배 확대 레이어) → box_soul → box_hit.
 
-## #5 컬러(무지개) - 미리보기 `preview_color.gif`
+## #5 컬러(무지개) - 미리보기 `art/effects/preview_color.gif`
 지금 게임의 무지개 원(wipe) 대신 씁니다. 대상 = 지운 색의 잼 전부(`specialActivate.affected`).
 
 | 키 | 내용 | 크기 | 프레임 | 길이 |
