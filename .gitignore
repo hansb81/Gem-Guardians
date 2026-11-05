@@ -6,3 +6,4 @@ Thumbs.db
 *.log
 .env
 .claude/settings.local.json
+reports/
