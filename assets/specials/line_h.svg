@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 가로 라인 잼 오버레이: 색 잼 이미지 위에 겹쳐 그려진다(투명 배경, 방향이 명확한
+       가로 막대 + 양쪽 화살표). -->
+  <rect x="24" y="108" width="208" height="40" rx="10" fill="#ffffff" fill-opacity="0.85" stroke="#2c2c2c" stroke-width="4"/>
+  <polygon points="24,128 56,104 56,152" fill="#ffffff" stroke="#2c2c2c" stroke-width="4"/>
+  <polygon points="232,128 200,104 200,152" fill="#ffffff" stroke="#2c2c2c" stroke-width="4"/>
+</svg>

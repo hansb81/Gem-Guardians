@@ -1,0 +1,239 @@
+{
+  "version": 1,
+  "sampleRate": 44100,
+  "formats": [
+    "ogg",
+    "mp3"
+  ],
+  "category": "sfx",
+  "note": "loudness pre-balanced; volume = default multiplier. maxInstances = 동시에 울릴 최대 수, minGapMs = 같은 소리 재생 최소 간격",
+  "sounds": {
+    "gem_select": {
+      "event": "보석을 처음 탭/드래그 시작",
+      "files": [
+        "gem_select"
+      ],
+      "durationMs": 129,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 0
+    },
+    "gem_swap": {
+      "event": "스왑 시작 (유효/무효 모두)",
+      "files": [
+        "gem_swap"
+      ],
+      "durationMs": 170,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 0
+    },
+    "gem_swap_fail": {
+      "event": "매치가 없어 되돌아갈 때",
+      "files": [
+        "gem_swap_fail"
+      ],
+      "durationMs": 200,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "gem_pop": {
+      "event": "일반 매치 제거. 연쇄(cascade) 단계 n에 gem_pop_n (8 이상은 8)",
+      "files": [
+        "gem_pop_1",
+        "gem_pop_2",
+        "gem_pop_3",
+        "gem_pop_4",
+        "gem_pop_5",
+        "gem_pop_6",
+        "gem_pop_7",
+        "gem_pop_8"
+      ],
+      "durationMs": 580,
+      "volume": 1.0,
+      "maxInstances": 6,
+      "minGapMs": 25
+    },
+    "gem_land": {
+      "event": "낙하한 보석이 자리에 멈출 때 (열마다 1번, 같은 프레임엔 1번만)",
+      "files": [
+        "gem_land"
+      ],
+      "durationMs": 89,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 40
+    },
+    "special_create": {
+      "event": "특수 보석(line/bomb/box/color) 생성 순간",
+      "files": [
+        "special_create"
+      ],
+      "durationMs": 870,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 0
+    },
+    "line_fire": {
+      "event": "line 보석 발동 (가로/세로 공통)",
+      "files": [
+        "line_fire"
+      ],
+      "durationMs": 790,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 0
+    },
+    "bomb_explode": {
+      "event": "bomb 보석 발동",
+      "files": [
+        "bomb_explode"
+      ],
+      "durationMs": 1453,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 60
+    },
+    "box_open": {
+      "event": "box 보석 발동 시작",
+      "files": [
+        "box_open"
+      ],
+      "durationMs": 680,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 0
+    },
+    "box_zap": {
+      "event": "box 번개가 대상 보석에 맞을 때마다",
+      "files": [
+        "box_zap"
+      ],
+      "durationMs": 370,
+      "volume": 1.0,
+      "maxInstances": 4,
+      "minGapMs": 30
+    },
+    "color_charge": {
+      "event": "color 보석 발동 시작 (소용돌이 수축)",
+      "files": [
+        "color_charge"
+      ],
+      "durationMs": 560,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "color_burst": {
+      "event": "color 보석 폭발 (color_origin 터지는 프레임, charge 끝나고 바로)",
+      "files": [
+        "color_burst"
+      ],
+      "durationMs": 1399,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "color_hit": {
+      "event": "color_wisp 가 대상 보석에 도착할 때마다",
+      "files": [
+        "color_hit"
+      ],
+      "durationMs": 150,
+      "volume": 1.0,
+      "maxInstances": 6,
+      "minGapMs": 20
+    },
+    "combo_great": {
+      "event": "한 번의 이동에서 연쇄 5단계 이상 도달 시 1번",
+      "files": [
+        "combo_great"
+      ],
+      "durationMs": 1210,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "shuffle": {
+      "event": "움직일 수 있는 수가 없어 보드를 섞을 때",
+      "files": [
+        "shuffle"
+      ],
+      "durationMs": 1057,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "hint": {
+      "event": "힌트 표시 시작",
+      "files": [
+        "hint"
+      ],
+      "durationMs": 650,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "crate_break": {
+      "event": "나무 상자 장애물 파괴",
+      "files": [
+        "crate_break"
+      ],
+      "durationMs": 571,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 30
+    },
+    "stone_hit": {
+      "event": "돌 장애물 HP 감소 (파괴 아님)",
+      "files": [
+        "stone_hit"
+      ],
+      "durationMs": 190,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 30
+    },
+    "stone_break": {
+      "event": "돌 장애물 파괴",
+      "files": [
+        "stone_break"
+      ],
+      "durationMs": 876,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 30
+    },
+    "timebomb_tick": {
+      "event": "시한폭탄 남은 수 감소 (매 이동)",
+      "files": [
+        "timebomb_tick"
+      ],
+      "durationMs": 80,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 0
+    },
+    "timebomb_warn": {
+      "event": "시한폭탄 남은 수 1",
+      "files": [
+        "timebomb_warn"
+      ],
+      "durationMs": 230,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "timebomb_explode": {
+      "event": "시한폭탄 0 -> 성벽 피해",
+      "files": [
+        "timebomb_explode"
+      ],
+      "durationMs": 1448,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    }
+  }
+}

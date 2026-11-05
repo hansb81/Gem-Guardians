@@ -1,0 +1,162 @@
+{
+  "version": 2,
+  "design": "A - 받침 위에 떠 있는 잼 수정",
+  "frameW": 16,
+  "frameH": 20,
+  "drawScale": 3,
+  "imageSmoothing": false,
+  "anchor": "bottom-center",
+  "muzzle": {
+    "x": 8,
+    "y": 5,
+    "note": "발사 위치(잼 가운데) - 원본 픽셀 좌표"
+  },
+  "colors": [
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "purple"
+  ],
+  "towers": {
+    "red": "red.png",
+    "blue": "blue.png",
+    "green": "green.png",
+    "yellow": "yellow.png",
+    "purple": "purple.png"
+  },
+  "anims": {
+    "tower_idle_red": {
+      "sheet": "sheets/tower_idle_red.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_attack_red": {
+      "sheet": "sheets/tower_attack_red.png",
+      "frames": 6,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_idle_blue": {
+      "sheet": "sheets/tower_idle_blue.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_attack_blue": {
+      "sheet": "sheets/tower_attack_blue.png",
+      "frames": 6,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_idle_green": {
+      "sheet": "sheets/tower_idle_green.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_attack_green": {
+      "sheet": "sheets/tower_attack_green.png",
+      "frames": 6,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_idle_yellow": {
+      "sheet": "sheets/tower_idle_yellow.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_attack_yellow": {
+      "sheet": "sheets/tower_attack_yellow.png",
+      "frames": 6,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_idle_purple": {
+      "sheet": "sheets/tower_idle_purple.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "tower_attack_purple": {
+      "sheet": "sheets/tower_attack_purple.png",
+      "frames": 6,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "frameW": 16,
+      "frameH": 20
+    }
+  },
+  "projectiles": {
+    "red": {
+      "sheet": "sheets/projectile_red.png",
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "frameW": 8,
+      "frameH": 8,
+      "anchor": "center"
+    },
+    "blue": {
+      "sheet": "sheets/projectile_blue.png",
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "frameW": 8,
+      "frameH": 8,
+      "anchor": "center"
+    },
+    "green": {
+      "sheet": "sheets/projectile_green.png",
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "frameW": 8,
+      "frameH": 8,
+      "anchor": "center"
+    },
+    "yellow": {
+      "sheet": "sheets/projectile_yellow.png",
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "frameW": 8,
+      "frameH": 8,
+      "anchor": "center"
+    },
+    "purple": {
+      "sheet": "sheets/projectile_purple.png",
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "frameW": 8,
+      "frameH": 8,
+      "anchor": "center"
+    }
+  }
+}

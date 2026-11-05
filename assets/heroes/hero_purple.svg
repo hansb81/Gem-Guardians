@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="hPurpleOuter" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#dcb9ef"/>
+      <stop offset="0.5" stop-color="#9b59b6"/>
+      <stop offset="1" stop-color="#6c3483"/>
+    </linearGradient>
+  </defs>
+  <!-- hero_purple: 보라 잼(별) 문장을 단 방패형 수호자 -->
+  <path d="M128,24 L200,52 L200,130 C200,190 128,228 128,228 C128,228 56,190 56,130 L56,52 Z"
+        fill="url(#hPurpleOuter)" stroke="#48245a" stroke-width="4"/>
+  <polygon points="128,83.9 139.13,112.71 169.96,114.39 145.98,133.84 153.91,163.66 128,146.9 102.09,163.66 109.60,133.84 86.04,114.39 116.87,112.71"
+           fill="#ffffff" fill-opacity="0.85" stroke="#48245a" stroke-width="2"/>
+  <ellipse cx="96" cy="78" rx="18" ry="10" fill="#ffffff" opacity="0.5" transform="rotate(-20 96 78)"/>
+</svg>

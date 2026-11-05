@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 세로 라인 잼 오버레이: line_h를 회전시키지 않고 처음부터 별도로 그린 버전. -->
+  <rect x="108" y="24" width="40" height="208" rx="10" fill="#ffffff" fill-opacity="0.85" stroke="#2c2c2c" stroke-width="4"/>
+  <polygon points="128,24 104,56 152,56" fill="#ffffff" stroke="#2c2c2c" stroke-width="4"/>
+  <polygon points="128,232 104,200 152,200" fill="#ffffff" stroke="#2c2c2c" stroke-width="4"/>
+</svg>

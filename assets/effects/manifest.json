@@ -1,0 +1,1011 @@
+{
+  "version": 5,
+  "frameSize": 64,
+  "drawScale": 2,
+  "imageSmoothing": false,
+  "anchor": "center",
+  "note": "프레임 64x64(줄 구간은 32x64/64x32 = 한 칸), 잼 몸통은 가운데 32x32. 칸 중심에 2배로 그린다. 재생 중엔 그 잼을 그리지 않는다.",
+  "line": {
+    "stepMs": 30,
+    "rule": "줄 잼 칸에 line_{h|v}_origin, 같은 줄의 나머지 칸마다 line_{h|v}_seg{0|1}(칸 번호 짝/홀 번갈아)을 거리 x stepMs 늦게 시작. 그 칸 잼의 pop도 같은 시각에 시작. 줄 이펙트는 pop보다 위에 그린다."
+  },
+  "bomb": {
+    "hitMs": 110,
+    "rule": "폭탄 칸에 bomb_{색}(128x128, 2배 = 256px, 칸 중심). 주변 8칸 잼은 hitMs 뒤에 각자 pop 시작. 폭탄 이펙트는 pop보다 위에 그린다. 화면 흔들림은 hitMs에 맞추면 좋다."
+  },
+  "box": {
+    "startMs": 60,
+    "durationMs": 300,
+    "growPart": 0.3,
+    "reshapeMs": 70,
+    "hitMs": 150,
+    "colors": {
+      "red": {
+        "outline": "#0d0a10",
+        "glowDark": "#b82a3c",
+        "glow": "#ec6a6a",
+        "core": "#e8dcc0"
+      },
+      "blue": {
+        "outline": "#0d0a10",
+        "glowDark": "#386cbc",
+        "glow": "#8cc4ee",
+        "core": "#e8dcc0"
+      },
+      "green": {
+        "outline": "#0d0a10",
+        "glowDark": "#3a8a3c",
+        "glow": "#9cd872",
+        "core": "#e8dcc0"
+      },
+      "yellow": {
+        "outline": "#0d0a10",
+        "glowDark": "#c28a20",
+        "glow": "#f2d264",
+        "core": "#e8dcc0"
+      },
+      "purple": {
+        "outline": "#0d0a10",
+        "glowDark": "#7a3cae",
+        "glow": "#c48ce6",
+        "core": "#e8dcc0"
+      }
+    },
+    "rule": "박스 칸에 box_origin_{색}. startMs에 대상 칸마다 픽셀 번개(README의 drawPixelBolt) 시작, 뻗는 동안 머리에 box_soul_{색}. hitMs(번개 도착)에 대상 칸 잼 pop_{그 잼 색} + box_hit_{박스 색} 시작. 대상 잼은 hitMs까지 그대로 그린다."
+  },
+  "color": {
+    "waveStartMs": 240,
+    "stepMs": 45,
+    "minFlightMs": 60,
+    "rule": "컬러 잼 칸에 color_origin(96x96, 2배 = 192px). waveStartMs(터져 나가는 순간)에 대상 칸(지운 색의 잼 전부)마다 color_wisp가 컬러 잼 칸에서 날아감. 비행시간 = max(minFlightMs, 거리(칸, 유클리드) x stepMs), easeInQuad. 도착하면 그 칸에 pop_{그 잼 색} + 위에 color_mark_{그 잼 색}. 대상 잼은 도착까지 그린다."
+  },
+  "anims": {
+    "pop_red": {
+      "sheet": "sheets/pop_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 5,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 270,
+      "loop": false,
+      "hideGemFromFrame": 0
+    },
+    "pop_blue": {
+      "sheet": "sheets/pop_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 5,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 270,
+      "loop": false,
+      "hideGemFromFrame": 0
+    },
+    "pop_green": {
+      "sheet": "sheets/pop_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 5,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 270,
+      "loop": false,
+      "hideGemFromFrame": 0
+    },
+    "pop_yellow": {
+      "sheet": "sheets/pop_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 5,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 270,
+      "loop": false,
+      "hideGemFromFrame": 0
+    },
+    "pop_purple": {
+      "sheet": "sheets/pop_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 5,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 270,
+      "loop": false,
+      "hideGemFromFrame": 0
+    },
+    "line_h_origin_red": {
+      "sheet": "sheets/line_h_origin_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_h_seg0_red": {
+      "sheet": "sheets/line_h_seg0_red.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_seg1_red": {
+      "sheet": "sheets/line_h_seg1_red.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_origin_red": {
+      "sheet": "sheets/line_v_origin_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_v_seg0_red": {
+      "sheet": "sheets/line_v_seg0_red.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_seg1_red": {
+      "sheet": "sheets/line_v_seg1_red.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_origin_blue": {
+      "sheet": "sheets/line_h_origin_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_h_seg0_blue": {
+      "sheet": "sheets/line_h_seg0_blue.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_seg1_blue": {
+      "sheet": "sheets/line_h_seg1_blue.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_origin_blue": {
+      "sheet": "sheets/line_v_origin_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_v_seg0_blue": {
+      "sheet": "sheets/line_v_seg0_blue.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_seg1_blue": {
+      "sheet": "sheets/line_v_seg1_blue.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_origin_green": {
+      "sheet": "sheets/line_h_origin_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_h_seg0_green": {
+      "sheet": "sheets/line_h_seg0_green.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_seg1_green": {
+      "sheet": "sheets/line_h_seg1_green.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_origin_green": {
+      "sheet": "sheets/line_v_origin_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_v_seg0_green": {
+      "sheet": "sheets/line_v_seg0_green.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_seg1_green": {
+      "sheet": "sheets/line_v_seg1_green.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_origin_yellow": {
+      "sheet": "sheets/line_h_origin_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_h_seg0_yellow": {
+      "sheet": "sheets/line_h_seg0_yellow.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_seg1_yellow": {
+      "sheet": "sheets/line_h_seg1_yellow.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_origin_yellow": {
+      "sheet": "sheets/line_v_origin_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_v_seg0_yellow": {
+      "sheet": "sheets/line_v_seg0_yellow.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_seg1_yellow": {
+      "sheet": "sheets/line_v_seg1_yellow.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_origin_purple": {
+      "sheet": "sheets/line_h_origin_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_h_seg0_purple": {
+      "sheet": "sheets/line_h_seg0_purple.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_h_seg1_purple": {
+      "sheet": "sheets/line_h_seg1_purple.png",
+      "frameW": 32,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_origin_purple": {
+      "sheet": "sheets/line_v_origin_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 7,
+      "frameMs": [
+        50,
+        40,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 380,
+      "loop": false
+    },
+    "line_v_seg0_purple": {
+      "sheet": "sheets/line_v_seg0_purple.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "line_v_seg1_purple": {
+      "sheet": "sheets/line_v_seg1_purple.png",
+      "frameW": 64,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": [
+        30,
+        50,
+        50,
+        60,
+        60,
+        70
+      ],
+      "durationMs": 320,
+      "loop": false
+    },
+    "bomb_red": {
+      "sheet": "sheets/bomb_red.png",
+      "frameW": 128,
+      "frameH": 128,
+      "frames": 8,
+      "frameMs": [
+        60,
+        50,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90
+      ],
+      "durationMs": 500,
+      "loop": false
+    },
+    "bomb_blue": {
+      "sheet": "sheets/bomb_blue.png",
+      "frameW": 128,
+      "frameH": 128,
+      "frames": 8,
+      "frameMs": [
+        60,
+        50,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90
+      ],
+      "durationMs": 500,
+      "loop": false
+    },
+    "bomb_green": {
+      "sheet": "sheets/bomb_green.png",
+      "frameW": 128,
+      "frameH": 128,
+      "frames": 8,
+      "frameMs": [
+        60,
+        50,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90
+      ],
+      "durationMs": 500,
+      "loop": false
+    },
+    "bomb_yellow": {
+      "sheet": "sheets/bomb_yellow.png",
+      "frameW": 128,
+      "frameH": 128,
+      "frames": 8,
+      "frameMs": [
+        60,
+        50,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90
+      ],
+      "durationMs": 500,
+      "loop": false
+    },
+    "bomb_purple": {
+      "sheet": "sheets/bomb_purple.png",
+      "frameW": 128,
+      "frameH": 128,
+      "frames": 8,
+      "frameMs": [
+        60,
+        50,
+        40,
+        50,
+        60,
+        70,
+        80,
+        90
+      ],
+      "durationMs": 500,
+      "loop": false
+    },
+    "box_origin_red": {
+      "sheet": "sheets/box_origin_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        60,
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 330,
+      "loop": false
+    },
+    "box_hit_red": {
+      "sheet": "sheets/box_hit_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 220,
+      "loop": false
+    },
+    "box_soul_red": {
+      "sheet": "sheets/box_soul_red.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true
+    },
+    "box_origin_blue": {
+      "sheet": "sheets/box_origin_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        60,
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 330,
+      "loop": false
+    },
+    "box_hit_blue": {
+      "sheet": "sheets/box_hit_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 220,
+      "loop": false
+    },
+    "box_soul_blue": {
+      "sheet": "sheets/box_soul_blue.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true
+    },
+    "box_origin_green": {
+      "sheet": "sheets/box_origin_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        60,
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 330,
+      "loop": false
+    },
+    "box_hit_green": {
+      "sheet": "sheets/box_hit_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 220,
+      "loop": false
+    },
+    "box_soul_green": {
+      "sheet": "sheets/box_soul_green.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true
+    },
+    "box_origin_yellow": {
+      "sheet": "sheets/box_origin_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        60,
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 330,
+      "loop": false
+    },
+    "box_hit_yellow": {
+      "sheet": "sheets/box_hit_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 220,
+      "loop": false
+    },
+    "box_soul_yellow": {
+      "sheet": "sheets/box_soul_yellow.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true
+    },
+    "box_origin_purple": {
+      "sheet": "sheets/box_origin_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 6,
+      "frameMs": [
+        60,
+        40,
+        50,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 330,
+      "loop": false
+    },
+    "box_hit_purple": {
+      "sheet": "sheets/box_hit_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 220,
+      "loop": false
+    },
+    "box_soul_purple": {
+      "sheet": "sheets/box_soul_purple.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true
+    },
+    "color_origin": {
+      "sheet": "sheets/color_origin.png",
+      "frameW": 96,
+      "frameH": 96,
+      "frames": 9,
+      "frameMs": [
+        50,
+        50,
+        50,
+        50,
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 460,
+      "loop": false
+    },
+    "color_mark_red": {
+      "sheet": "sheets/color_mark_red.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60
+      ],
+      "durationMs": 200,
+      "loop": false
+    },
+    "color_mark_blue": {
+      "sheet": "sheets/color_mark_blue.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60
+      ],
+      "durationMs": 200,
+      "loop": false
+    },
+    "color_mark_green": {
+      "sheet": "sheets/color_mark_green.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60
+      ],
+      "durationMs": 200,
+      "loop": false
+    },
+    "color_mark_yellow": {
+      "sheet": "sheets/color_mark_yellow.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60
+      ],
+      "durationMs": 200,
+      "loop": false
+    },
+    "color_mark_purple": {
+      "sheet": "sheets/color_mark_purple.png",
+      "frameW": 64,
+      "frameH": 64,
+      "frames": 4,
+      "frameMs": [
+        40,
+        50,
+        50,
+        60
+      ],
+      "durationMs": 200,
+      "loop": false
+    },
+    "color_wisp": {
+      "sheet": "sheets/color_wisp.png",
+      "frameW": 12,
+      "frameH": 12,
+      "frames": 5,
+      "frameMs": 50,
+      "loop": true
+    }
+  }
+}

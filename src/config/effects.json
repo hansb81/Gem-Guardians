@@ -1,0 +1,137 @@
+{
+  "settings": {
+    "screenShake": true,
+    "intensity": 1,
+    "maxParticles": 240,
+    "hitstop": true,
+    "hitstopMs": 50,
+    "haptics": true,
+    "legacyClearParticles": false,
+    "reduceMotion": false
+  },
+  "_note_reduceMotion": "settings.reduceMotion - true면 셔플 연출이 소용돌이/정렬 대신 전체 페이드아웃->페이드인(shuffleAnim.reducedMotion)으로 대체된다. main.js가 GameState.setReduceEffects로 넘겨 core의 effect 길이도 같이 줄인다(§설정 '흔들림/연출 줄이기').",
+  "_note_legacyClearParticles": "false면 일반 매치 제거의 옛 파편 파티클(events.clear.particles)을 끈다 - pop_{색} 스프라이트(assets/effects)가 이미 번쩍임/산산조각/파편을 그린다. true로 다시 켤 수 있다.",
+  "cascade": { "scalePerStep": 0.1, "maxScale": 1.6 },
+  "events": {
+    "clear": { "particles": { "count": 5, "life": 350, "speed": 140, "size": 4 } },
+    "specialCreate": {
+      "flash": { "color": "#ffffff" },
+      "converge": { "count": 6, "life": 160, "size": 3 }
+    },
+    "specialTransform": { "glow": { "color": "#ffffff" } },
+    "specialActivate_line": { "particles": { "count": 8, "life": 300, "speed": 120, "size": 3 } },
+    "specialActivate_bomb": {
+      "particles": { "count": 16, "life": 420, "speed": 220, "size": 5 },
+      "shake": { "amount": 4, "life": 260 },
+      "haptics": "light"
+    },
+    "specialActivate_color": {
+      "particles": { "count": 10, "life": 300, "speed": 90, "size": 3 },
+      "shake": { "amount": 10, "life": 380 },
+      "haptics": "heavy"
+    },
+    "specialActivate_box": { "particles": { "count": 12, "life": 260, "speed": 260, "size": 4 } },
+    "comboActivate_line_line": {
+      "particles": { "count": 20, "life": 400, "speed": 180, "size": 4 },
+      "color": "#fff6c0"
+    },
+    "comboActivate_bomb_bomb": {
+      "particles": { "count": 30, "life": 480, "speed": 260, "size": 6 },
+      "shake": { "amount": 7, "life": 300 },
+      "haptics": "medium",
+      "color": "#ff6b6b"
+    },
+    "comboActivate_box_box": {
+      "particles": { "count": 28, "life": 440, "speed": 280, "size": 5 },
+      "shake": { "amount": 5, "life": 200 },
+      "color": "#ffe066"
+    },
+    "comboActivate_line_bomb": {
+      "particles": { "count": 24, "life": 420, "speed": 200, "size": 5 },
+      "shake": { "amount": 7, "life": 300 },
+      "haptics": "medium",
+      "color": "#ffb86b"
+    },
+    "comboActivate_color_color": {
+      "particles": { "count": 40, "life": 500, "speed": 240, "size": 5 },
+      "shake": { "amount": 10, "life": 380 },
+      "haptics": "heavy",
+      "color": "#9b59b6"
+    },
+    "_note_comboActivate_line_color_bomb_color": "line_color/bomb_color는 변환형 조합이라 의도적으로 생략됨 - comboActivate 자체는 작은 wipe만 보이고, 실제 효과는 뒤따르는 specialActivate 연쇄가 담당한다(animator.js getEffects 참고). box_line/box_bomb/box_color도 같은 이유(변환형 조합)로 생략됨.",
+    "shuffleStart": {
+      "_note": "셔플 연출 시작 훅(사운드 전용) - particles/shake는 보드 전체 재배치라 불필요. 시간 값/연출 파라미터는 아래 최상위 shuffleAnim 블록에 있다."
+    },
+    "_note_cellDetonate": "cellDetonate 이펙트엔 cell만 있고 cause/color가 없다(core 변경 금지) - cause별로 나누지 않고 단일 키로 묶어 흰색 고정 파편만 낸다. 실제 '순서에 맞춰 터짐'은 이 파티클이 cellDetonate가 뜨는 바로 그 틱에 스폰되는 것으로 충분히 달성된다.",
+    "cellDetonate": { "particles": { "count": 4, "life": 220, "speed": 110, "size": 3 } },
+    "towerAttack": { "particles": { "count": 5, "life": 200, "speed": 120, "size": 3 } },
+    "enemyHit": { "particles": { "count": 8, "life": 220, "speed": 150, "size": 3 } },
+    "enemyDie": { "particles": { "count": 16, "life": 380, "speed": 200, "size": 4 } },
+    "wallDamaged": {
+      "particles": { "count": 10, "life": 260, "speed": 150, "size": 3 },
+      "shake": { "amount": 5, "life": 150 }
+    },
+    "_note_obstacle": "방해요소(상자/돌/시한폭탄) 부서짐/폭발의 실제 스프라이트 애니메이션은 canvasRenderer._spawnObstacleFx가 재생한다 - 여기 particles/shake는 그 위에 곁들이는 작은 파편/흔들림뿐(specialActivate_bomb처럼 함께 쓰는 패턴). id별로 과하게 나누지 않는다.",
+    "obstacleDamaged": { "particles": { "count": 6, "life": 240, "speed": 130, "size": 3 } },
+    "obstacleDestroyed": { "particles": { "count": 10, "life": 300, "speed": 170, "size": 4 } },
+    "obstacleExpire": {
+      "particles": { "count": 16, "life": 340, "speed": 220, "size": 5 },
+      "shake": { "amount": 6, "life": 220 },
+      "haptics": "medium"
+    },
+    "_note_summonLand": "석상 소환 연출(assets/summon) - 슬롯이 landFrame에 들어가는 순간(BattleState._advanceSummon). 파티클 없이 아주 약한 흔들림만(설정의 흔들림 끄기를 그대로 따른다).",
+    "summonLand": { "shake": { "amount": 1.5, "life": 90 } }
+  },
+  "puzzleToTower": {
+    "_note": "퍼즐에서 잼이 터진 위치 -> 같은 색 탑으로 날아가는 빛줄기(CanvasRenderer._advanceAndDrawPuzzleBeams 전용, events 자동 처리 대상 아님).",
+    "durationMs": 260
+  },
+  "armed": {
+    "_note": "board.cellStates의 'armed' phase 연출(§6) - 대기 중인 칸이 남은 시간에 비례해 커지고 떨리고 빛난다.",
+    "scaleMax": 1.25,
+    "jitterPx": 2,
+    "glowColorByCause": {
+      "line": "#ffb86b",
+      "bomb": "#ff6b6b",
+      "box": "#8ef7ff",
+      "color": "#9b59b6",
+      "match": "#ffffff",
+      "combo": "#fff6c0",
+      "chain": "#ffffff",
+      "transform": "#ffffff"
+    }
+  },
+  "shockwave": {
+    "_note": "폭탄 발동(specialActivate kind=bomb, comboActivate bomb_bomb) 중심 주변 칸이 바깥으로 밀렸다 복귀하는 변위(§3).",
+    "radiusCells": 1.5,
+    "amplitudeRatio": 0.12
+  },
+  "boxLightning": {
+    "_note": "박스 잼 체인 라이트닝(§9) - source->target 지그재그 선을 recomputeMs마다 다시 계산한다.",
+    "recomputeMs": 70,
+    "segments": 6,
+    "jitterRatio": 0.18,
+    "wideWidthRatio": 0.22,
+    "wideAlpha": 0.35,
+    "thinWidthRatio": 0.045,
+    "color": "#8ef7ff"
+  },
+  "landingSquash": {
+    "_note": "낙하 착지 스쿼시(§11) - 방금 idle로 settle된 칸이 짧게 눌렸다 복귀한다.",
+    "durationMs": 140,
+    "amount": 0.22
+  },
+  "shuffleAnim": {
+    "_note": "보드 재배치(셔플) 연출(§셔플 애니메이션) - board.shuffle()이 내보낸 moves를 시간에 걸쳐 보간해 그린다(render/animator.js computeShuffleMovePose). phases의 네 값은 config/animation.js의 ANIMATION_DURATIONS_MS.shuffle(=totalMs)과 반드시 같은 전체 길이를 가리켜야 한다 - core는 '얼마나 입력을 막을지'만, 여기는 '그 안에서 어떻게 보일지'만 담당한다.",
+    "phases": { "popMs": 120, "convergeMs": 420, "scatterMs": 780, "totalMs": 900 },
+    "pop": { "scale": 1.1 },
+    "converge": { "pullRatio": 0.7, "maxRotationDeg": 90, "scale": 0.8 },
+    "scatter": { "rowStaggerMs": 25, "scaleTo": 1.0 },
+    "land": { "squashScale": 0.9 },
+    "reducedMotion": {
+      "_note": "settings.reduceMotion이 켜져 있을 때 대신 쓰는 단순 페이드 - fadeOutMs 동안 원래 자리에서 사라지고, fadeInMs 동안 새 자리에서 나타난다. 합이 config/animation.js의 ANIMATION_DURATIONS_MS.shuffleReduced와 같아야 한다.",
+      "fadeOutMs": 150,
+      "fadeInMs": 150
+    }
+  }
+}

@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "design": "E 지하의 숨겨진 신단",
+  "native": [
+    180,
+    320
+  ],
+  "drawScale": 3,
+  "imageSmoothing": false,
+  "layers": [
+    {
+      "name": "bg",
+      "sheet": "title_bg.png",
+      "frameW": 180,
+      "frameH": 320,
+      "frames": 64,
+      "cols": 8,
+      "frameMs": 100,
+      "loop": true,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "name": "logo",
+      "image": "logo.png",
+      "x": 33,
+      "y": 21,
+      "w": 114,
+      "h": 56
+    },
+    {
+      "name": "logo_shine",
+      "sheet": "logo_shine.png",
+      "frameW": 114,
+      "frameH": 56,
+      "frames": 12,
+      "frameMs": 100,
+      "loop": false,
+      "repeatEveryMs": 3200,
+      "x": 33,
+      "y": 21,
+      "note": "play over logo every 3200ms; when not playing draw logo.png"
+    }
+  ],
+  "text": {
+    "space": "screen px (already x3, canvas 540x960)",
+    "font": "Galmuri11",
+    "outlinePx": 2,
+    "outline": "#0d0a10",
+    "subtitle": {
+      "key": "title.subtitle",
+      "ko": "잊혀진 지하 신단",
+      "en": "The Forgotten Shrine",
+      "cx": 270,
+      "cy": 266,
+      "fontPx": 16,
+      "color": "#f2d264",
+      "dashes": {
+        "color": "#7a5212",
+        "w": 18,
+        "h": 2,
+        "leftX": 180,
+        "rightX": 342,
+        "y": 266
+      }
+    },
+    "tapToStart": {
+      "key": "title.tap",
+      "ko": "화면을 터치하세요",
+      "en": "TAP TO START",
+      "cx": 270,
+      "cy": 880,
+      "fontPx": 22,
+      "color": "#f2d264",
+      "blinkMs": 500
+    },
+    "version": {
+      "text": "v0.1",
+      "right": 530,
+      "bottom": 950,
+      "fontPx": 11,
+      "color": "#3b3347"
+    }
+  },
+  "note": "layer x/y are native px (180x320), multiply by drawScale 3; text block is already in screen px"
+}

@@ -1,0 +1,227 @@
+{
+  "version": 2,
+  "tileSize": 48,
+  "bodySize": 32,
+  "padding": 8,
+  "drawScale": 2,
+  "imageSmoothing": false,
+  "anchor": "center",
+  "colors": [
+    "red",
+    "blue",
+    "green",
+    "yellow",
+    "purple"
+  ],
+  "gems": {
+    "red": {
+      "normal": "normal/red.png",
+      "line_h": "line_h/red.png",
+      "line_v": "line_v/red.png",
+      "bomb": "bomb/red.png",
+      "box": "box/red.png"
+    },
+    "blue": {
+      "normal": "normal/blue.png",
+      "line_h": "line_h/blue.png",
+      "line_v": "line_v/blue.png",
+      "bomb": "bomb/blue.png",
+      "box": "box/blue.png"
+    },
+    "green": {
+      "normal": "normal/green.png",
+      "line_h": "line_h/green.png",
+      "line_v": "line_v/green.png",
+      "bomb": "bomb/green.png",
+      "box": "box/green.png"
+    },
+    "yellow": {
+      "normal": "normal/yellow.png",
+      "line_h": "line_h/yellow.png",
+      "line_v": "line_v/yellow.png",
+      "bomb": "bomb/yellow.png",
+      "box": "box/yellow.png"
+    },
+    "purple": {
+      "normal": "normal/purple.png",
+      "line_h": "line_h/purple.png",
+      "line_v": "line_v/purple.png",
+      "bomb": "bomb/purple.png",
+      "box": "box/purple.png"
+    }
+  },
+  "color": {
+    "static": "color/color.png"
+  },
+  "anims": {
+    "line_h_red": {
+      "sheet": "sheets/line_h_idle_red.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_h_blue": {
+      "sheet": "sheets/line_h_idle_blue.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_h_green": {
+      "sheet": "sheets/line_h_idle_green.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_h_yellow": {
+      "sheet": "sheets/line_h_idle_yellow.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_h_purple": {
+      "sheet": "sheets/line_h_idle_purple.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_v_red": {
+      "sheet": "sheets/line_v_idle_red.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_v_blue": {
+      "sheet": "sheets/line_v_idle_blue.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_v_green": {
+      "sheet": "sheets/line_v_idle_green.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_v_yellow": {
+      "sheet": "sheets/line_v_idle_yellow.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "line_v_purple": {
+      "sheet": "sheets/line_v_idle_purple.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 100,
+      "loop": true
+    },
+    "bomb_red": {
+      "sheet": "sheets/bomb_idle_red.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 100,
+      "loop": true
+    },
+    "bomb_blue": {
+      "sheet": "sheets/bomb_idle_blue.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 100,
+      "loop": true
+    },
+    "bomb_green": {
+      "sheet": "sheets/bomb_idle_green.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 100,
+      "loop": true
+    },
+    "bomb_yellow": {
+      "sheet": "sheets/bomb_idle_yellow.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 100,
+      "loop": true
+    },
+    "bomb_purple": {
+      "sheet": "sheets/bomb_idle_purple.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 100,
+      "loop": true
+    },
+    "box_red": {
+      "sheet": "sheets/box_idle_red.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 16,
+      "frameMs": 110,
+      "loop": true
+    },
+    "box_blue": {
+      "sheet": "sheets/box_idle_blue.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 16,
+      "frameMs": 110,
+      "loop": true
+    },
+    "box_green": {
+      "sheet": "sheets/box_idle_green.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 16,
+      "frameMs": 110,
+      "loop": true
+    },
+    "box_yellow": {
+      "sheet": "sheets/box_idle_yellow.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 16,
+      "frameMs": 110,
+      "loop": true
+    },
+    "box_purple": {
+      "sheet": "sheets/box_idle_purple.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 16,
+      "frameMs": 110,
+      "loop": true
+    },
+    "color": {
+      "sheet": "sheets/color_idle.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 20,
+      "frameMs": 100,
+      "loop": true
+    }
+  },
+  "palette": "palette.hex"
+}

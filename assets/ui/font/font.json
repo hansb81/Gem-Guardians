@@ -1,0 +1,38 @@
+{
+  "chars": "0123456789+-x!,/",
+  "cellW": 8,
+  "cellH": 9,
+  "glyphOffsetX": 0,
+  "widths": {
+    "0": 7,
+    "1": 5,
+    "2": 7,
+    "3": 7,
+    "4": 7,
+    "5": 7,
+    "6": 7,
+    "7": 7,
+    "8": 7,
+    "9": 7,
+    "+": 8,
+    "-": 6,
+    "x": 7,
+    "!": 4,
+    ",": 4,
+    "/": 7
+  },
+  "advance": "글자 폭 w + 1 (외곽선끼리 1px 겹침)",
+  "drawScale": {
+    "normal": 2,
+    "crit": 3
+  },
+  "variants": {
+    "white": "font/damage_white.png",
+    "crit": "font/damage_crit.png",
+    "red": "font/damage_red.png",
+    "blue": "font/damage_blue.png",
+    "yellow": "font/damage_yellow.png",
+    "green": "font/damage_green.png",
+    "purple": "font/damage_purple.png"
+  }
+}

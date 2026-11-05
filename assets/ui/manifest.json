@@ -1,0 +1,513 @@
+{
+  "version": 1,
+  "drawScale": 2,
+  "imageSmoothing": false,
+  "palette": "../gems/palette.hex",
+  "sliceOrder": "[left, top, right, bottom] 원본 px",
+  "assets": {
+    "icons/gold.png": {
+      "w": 16,
+      "h": 16,
+      "use": "골드 재화 아이콘"
+    },
+    "icons/diamond.png": {
+      "w": 16,
+      "h": 16,
+      "use": "다이아 재화 아이콘"
+    },
+    "icons/wall.png": {
+      "w": 16,
+      "h": 16,
+      "use": "성벽 HP 게이지 왼쪽 아이콘"
+    },
+    "icons/lock.png": {
+      "w": 12,
+      "h": 12,
+      "use": "잠긴 슬롯 자물쇠"
+    },
+    "buttons/btn_plus.png": {
+      "w": 16,
+      "h": 16,
+      "use": "plus 아이콘 버튼(고정 크기)"
+    },
+    "buttons/btn_plus_pressed.png": {
+      "w": 16,
+      "h": 16,
+      "use": "눌림 상태"
+    },
+    "buttons/btn_pause.png": {
+      "w": 16,
+      "h": 16,
+      "use": "pause 아이콘 버튼(고정 크기)"
+    },
+    "buttons/btn_pause_pressed.png": {
+      "w": 16,
+      "h": 16,
+      "use": "눌림 상태"
+    },
+    "buttons/btn_primary.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textColor": "#e8dcc0",
+      "use": "9-slice 텍스트 버튼"
+    },
+    "buttons/btn_primary_pressed.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textOffsetY": 1,
+      "use": "눌림 상태(글자 1px 아래로)"
+    },
+    "buttons/btn_secondary.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textColor": "#e8dcc0",
+      "use": "9-slice 텍스트 버튼"
+    },
+    "buttons/btn_secondary_pressed.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textOffsetY": 1,
+      "use": "눌림 상태(글자 1px 아래로)"
+    },
+    "buttons/btn_danger.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textColor": "#e8dcc0",
+      "use": "9-slice 텍스트 버튼"
+    },
+    "buttons/btn_danger_pressed.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textOffsetY": 1,
+      "use": "눌림 상태(글자 1px 아래로)"
+    },
+    "buttons/btn_gold.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textColor": "#0d0a10",
+      "use": "9-slice 텍스트 버튼"
+    },
+    "buttons/btn_gold_pressed.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textOffsetY": 1,
+      "use": "눌림 상태(글자 1px 아래로)"
+    },
+    "panels/panel_iron.png": {
+      "w": 24,
+      "h": 24,
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "use": "재화 바/전투 패널/하단 아이템 바 배경"
+    },
+    "panels/panel_inset.png": {
+      "w": 12,
+      "h": 12,
+      "slice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "use": "숫자 칸(골드/다이아/점수) 파인 홈"
+    },
+    "panels/box_floor.png": {
+      "w": 16,
+      "h": 14,
+      "slice": [
+        5,
+        5,
+        5,
+        5
+      ],
+      "use": "층수 표시 박스"
+    },
+    "panels/board_frame.png": {
+      "w": 24,
+      "h": 24,
+      "slice": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "use": "퍼즐 보드 테두리(가운데 투명), 보드 바깥으로 5px"
+    },
+    "gauges/hp_frame.png": {
+      "w": 24,
+      "h": 12,
+      "slice": [
+        6,
+        0,
+        6,
+        0
+      ],
+      "fill": {
+        "x": 4,
+        "y": 3,
+        "h": 6,
+        "padRight": 4
+      },
+      "use": "성벽 HP 게이지 틀(가로 3-slice)"
+    },
+    "gauges/fill_red.png": {
+      "w": 4,
+      "h": 6,
+      "use": "게이지 채움(가로로 늘려 그림)"
+    },
+    "gauges/fill_green.png": {
+      "w": 4,
+      "h": 6,
+      "use": "게이지 채움(가로로 늘려 그림)"
+    },
+    "gauges/fill_yellow.png": {
+      "w": 4,
+      "h": 6,
+      "use": "게이지 채움(가로로 늘려 그림)"
+    },
+    "gauges/fill_blue.png": {
+      "w": 4,
+      "h": 6,
+      "use": "게이지 채움(가로로 늘려 그림)"
+    },
+    "gauges/fill_purple.png": {
+      "w": 4,
+      "h": 6,
+      "use": "게이지 채움(가로로 늘려 그림)"
+    },
+    "gauges/fill_lag.png": {
+      "w": 4,
+      "h": 6,
+      "use": "HP 깎일 때 잠깐 남는 잔상 채움"
+    },
+    "gauges/combo_frame.png": {
+      "w": 20,
+      "h": 8,
+      "slice": [
+        5,
+        0,
+        5,
+        0
+      ],
+      "fill": {
+        "x": 3,
+        "y": 3,
+        "h": 2,
+        "padRight": 3
+      },
+      "use": "콤보 게이지 틀"
+    },
+    "gauges/combo_fill.png": {
+      "w": 4,
+      "h": 2,
+      "use": "콤보 채움(정지)"
+    },
+    "gauges/combo_fill_anim.png": {
+      "w": 16,
+      "h": 2,
+      "frames": 4,
+      "frameW": 4,
+      "frameH": 2,
+      "frameMs": 90,
+      "loop": true,
+      "use": "콤보 채움 흐르는 빛(타일 반복)"
+    },
+    "enemy/bar_normal.png": {
+      "w": 8,
+      "h": 4,
+      "slice": [
+        1,
+        0,
+        1,
+        0
+      ],
+      "fill": {
+        "x": 1,
+        "y": 1,
+        "h": 2,
+        "padRight": 1
+      },
+      "use": "일반 적 HP 게이지 틀"
+    },
+    "enemy/bar_elite.png": {
+      "w": 10,
+      "h": 6,
+      "slice": [
+        2,
+        0,
+        2,
+        0
+      ],
+      "fill": {
+        "x": 2,
+        "y": 2,
+        "h": 2,
+        "padRight": 2
+      },
+      "use": "엘리트 적 HP 게이지 틀(금선)"
+    },
+    "enemy/bar_boss.png": {
+      "w": 32,
+      "h": 12,
+      "slice": [
+        14,
+        0,
+        4,
+        0
+      ],
+      "fill": {
+        "x": 14,
+        "y": 3,
+        "h": 6,
+        "padRight": 3
+      },
+      "use": "보스 HP 게이지 틀(왼쪽 해골), 채움은 gauges/fill_red·fill_lag"
+    },
+    "enemy/fill_red.png": {
+      "w": 4,
+      "h": 2,
+      "use": "적 HP 채움(가로로 늘려 그림)"
+    },
+    "enemy/fill_lag.png": {
+      "w": 4,
+      "h": 2,
+      "use": "맞을 때 깎인 HP 잔상"
+    },
+    "enemy/fill_blue.png": {
+      "w": 4,
+      "h": 2,
+      "use": "예비(보호막) 채움"
+    },
+    "popups/popup_pause.png": {
+      "w": 48,
+      "h": 48,
+      "slice": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "use": "pause 팝업 틀"
+    },
+    "popups/emblem_pause.png": {
+      "w": 24,
+      "h": 24,
+      "use": "팝업 상단 가운데 문장(틀 윗변에 반쯤 걸치게)"
+    },
+    "popups/popup_win.png": {
+      "w": 48,
+      "h": 48,
+      "slice": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "use": "win 팝업 틀"
+    },
+    "popups/emblem_win.png": {
+      "w": 24,
+      "h": 24,
+      "use": "팝업 상단 가운데 문장(틀 윗변에 반쯤 걸치게)"
+    },
+    "popups/popup_lose.png": {
+      "w": 48,
+      "h": 48,
+      "slice": [
+        16,
+        16,
+        16,
+        16
+      ],
+      "use": "lose 팝업 틀"
+    },
+    "popups/emblem_lose.png": {
+      "w": 24,
+      "h": 24,
+      "use": "팝업 상단 가운데 문장(틀 윗변에 반쯤 걸치게)"
+    },
+    "board/tile_a.png": {
+      "w": 32,
+      "h": 32,
+      "use": "보드 칸 배경(체크무늬 A)"
+    },
+    "board/tile_b.png": {
+      "w": 32,
+      "h": 32,
+      "use": "보드 칸 배경(체크무늬 B)"
+    },
+    "items/slot_normal.png": {
+      "w": 22,
+      "h": 22,
+      "item": {
+        "x": 4,
+        "y": 4,
+        "w": 14,
+        "h": 14
+      },
+      "use": "아이템 슬롯 normal"
+    },
+    "items/slot_selected.png": {
+      "w": 22,
+      "h": 22,
+      "item": {
+        "x": 4,
+        "y": 4,
+        "w": 14,
+        "h": 14
+      },
+      "use": "아이템 슬롯 selected"
+    },
+    "items/slot_locked.png": {
+      "w": 22,
+      "h": 22,
+      "item": {
+        "x": 4,
+        "y": 4,
+        "w": 14,
+        "h": 14
+      },
+      "use": "아이템 슬롯 locked"
+    },
+    "upgrade/tab_on.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        6,
+        6,
+        6,
+        3
+      ],
+      "overlapBody": 3,
+      "use": "선택된 탭(아래가 본문과 이어짐)"
+    },
+    "upgrade/tab_off.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        6,
+        6,
+        6,
+        3
+      ],
+      "use": "선택 안 된 탭"
+    },
+    "upgrade/tab_body.png": {
+      "w": 12,
+      "h": 12,
+      "slice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "use": "탭 본문 바탕"
+    },
+    "upgrade/card.png": {
+      "w": 12,
+      "h": 12,
+      "slice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "use": "타워 한 줄 카드"
+    },
+    "upgrade/card_selected.png": {
+      "w": 12,
+      "h": 12,
+      "slice": [
+        4,
+        4,
+        4,
+        4
+      ],
+      "use": "터치해서 연 타워 줄(금테)"
+    },
+    "upgrade/btn_disabled.png": {
+      "w": 24,
+      "h": 16,
+      "slice": [
+        4,
+        4,
+        4,
+        5
+      ],
+      "textColor": "#655a74",
+      "use": "골드 부족 버튼"
+    },
+    "upgrade/btn_close.png": {
+      "w": 16,
+      "h": 16,
+      "use": "팝업 닫기 X (16x16)"
+    },
+    "upgrade/btn_close_pressed.png": {
+      "w": 16,
+      "h": 16,
+      "use": "눌림"
+    },
+    "upgrade/coin_small.png": {
+      "w": 8,
+      "h": 8,
+      "use": "버튼 안 가격 옆 작은 동전 8x8"
+    },
+    "upgrade/emblem_upgrade.png": {
+      "w": 24,
+      "h": 24,
+      "use": "강화 팝업 상단 문장(모루+화살표)"
+    }
+  }
+}

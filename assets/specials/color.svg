@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- 컬러 잼: 색이 정해지지 않은 특수 잼 전용 단일 이미지(무지개 5색 원). -->
+  <g stroke="#ffffff" stroke-width="2">
+    <path d="M128,128 L128,28 A100,100 0 0 1 223.1,97.1 Z" fill="#e74c3c"/>
+    <path d="M128,128 L223.1,97.1 A100,100 0 0 1 186.8,208.9 Z" fill="#f1c40f"/>
+    <path d="M128,128 L186.8,208.9 A100,100 0 0 1 69.2,208.9 Z" fill="#2ecc71"/>
+    <path d="M128,128 L69.2,208.9 A100,100 0 0 1 32.9,97.1 Z" fill="#3498db"/>
+    <path d="M128,128 L32.9,97.1 A100,100 0 0 1 128,28 Z" fill="#9b59b6"/>
+  </g>
+  <circle cx="128" cy="128" r="100" fill="none" stroke="#ffffff" stroke-width="6"/>
+  <ellipse cx="98" cy="90" rx="22" ry="13" fill="#ffffff" opacity="0.5" transform="rotate(-30 98 90)"/>
+</svg>

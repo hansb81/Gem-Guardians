@@ -1,0 +1,109 @@
+{
+  "version": 1,
+  "design": "보석 석상 (머리만, 완전한 옆모습)",
+  "frameW": 16,
+  "frameH": 20,
+  "drawScale": 3,
+  "imageSmoothing": false,
+  "anchor": "bottom-center",
+  "facing": "left",
+  "flipForRight": true,
+  "muzzle": {
+    "x": 8,
+    "y": 8,
+    "note": "투사체 발사 위치(석상 머리 가운데) - 원본 픽셀 좌표"
+  },
+  "colors": [
+    "red",
+    "blue",
+    "yellow",
+    "green",
+    "purple"
+  ],
+  "statues": {
+    "red": {
+      "file": "red.png",
+      "name": "루비 모아이"
+    },
+    "blue": {
+      "file": "blue.png",
+      "name": "사파이어 포세이돈"
+    },
+    "yellow": {
+      "file": "yellow.png",
+      "name": "토파즈 파라오"
+    },
+    "green": {
+      "file": "green.png",
+      "name": "에메랄드 나무정령"
+    },
+    "purple": {
+      "file": "purple.png",
+      "name": "자수정 메두사"
+    }
+  },
+  "anims": {
+    "statue_idle_red": {
+      "sheet": "sheets/statue_idle_red.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "statue_idle_blue": {
+      "sheet": "sheets/statue_idle_blue.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "statue_idle_yellow": {
+      "sheet": "sheets/statue_idle_yellow.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "statue_idle_green": {
+      "sheet": "sheets/statue_idle_green.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    },
+    "statue_idle_purple": {
+      "sheet": "sheets/statue_idle_purple.png",
+      "frames": 4,
+      "frameMs": 150,
+      "loop": true,
+      "frameW": 16,
+      "frameH": 20
+    }
+  },
+  "neon": {
+    "red": [
+      "#ff2b4e",
+      "#ffb3c0"
+    ],
+    "blue": [
+      "#3ff0ff",
+      "#c8fbff"
+    ],
+    "yellow": [
+      "#ffe14a",
+      "#fff3b8"
+    ],
+    "green": [
+      "#b8ff3c",
+      "#eaffb0"
+    ],
+    "purple": [
+      "#d94dff",
+      "#f2c4ff"
+    ]
+  }
+}

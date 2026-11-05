@@ -1,0 +1,172 @@
+{
+ "version": 1,
+ "drawScale": 3,
+ "imageSmoothing": false,
+ "frames": 16,
+ "frameMs": [
+  70,
+  60,
+  60,
+  40,
+  40,
+  50,
+  60,
+  60,
+  60,
+  60,
+  60,
+  60,
+  70,
+  70,
+  80,
+  90
+ ],
+ "totalMs": 990,
+ "pillarFrame": {
+  "w": 32,
+  "h": 48,
+  "offsetFromStatue": {
+   "x": -8,
+   "y": -24
+  }
+ },
+ "statueFrame": {
+  "w": 16,
+  "h": 20
+ },
+ "statueShowFrame": 6,
+ "landFrame": 4,
+ "statueSolidFrame": 12,
+ "staggerMs": 120,
+ "order": [
+  "red",
+  "blue",
+  "yellow",
+  "green",
+  "purple"
+ ],
+ "drawOrder": [
+  "background",
+  "plinth",
+  "pillar_back",
+  "statue_summon",
+  "pillar_front",
+  "enemies/projectiles",
+  "ui"
+ ],
+ "afterEnd": "statue_idle_{color} (statues/manifest.json)",
+ "colors": [
+  "red",
+  "blue",
+  "yellow",
+  "green",
+  "purple"
+ ],
+ "anims": {
+  "pillar_back_red": {
+   "sheet": "sheets/pillar_back_red.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "pillar_front_red": {
+   "sheet": "sheets/pillar_front_red.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "statue_summon_red": {
+   "sheet": "sheets/statue_summon_red.png",
+   "frames": 16,
+   "frameW": 16,
+   "frameH": 20,
+   "loop": false
+  },
+  "pillar_back_blue": {
+   "sheet": "sheets/pillar_back_blue.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "pillar_front_blue": {
+   "sheet": "sheets/pillar_front_blue.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "statue_summon_blue": {
+   "sheet": "sheets/statue_summon_blue.png",
+   "frames": 16,
+   "frameW": 16,
+   "frameH": 20,
+   "loop": false
+  },
+  "pillar_back_yellow": {
+   "sheet": "sheets/pillar_back_yellow.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "pillar_front_yellow": {
+   "sheet": "sheets/pillar_front_yellow.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "statue_summon_yellow": {
+   "sheet": "sheets/statue_summon_yellow.png",
+   "frames": 16,
+   "frameW": 16,
+   "frameH": 20,
+   "loop": false
+  },
+  "pillar_back_green": {
+   "sheet": "sheets/pillar_back_green.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "pillar_front_green": {
+   "sheet": "sheets/pillar_front_green.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "statue_summon_green": {
+   "sheet": "sheets/statue_summon_green.png",
+   "frames": 16,
+   "frameW": 16,
+   "frameH": 20,
+   "loop": false
+  },
+  "pillar_back_purple": {
+   "sheet": "sheets/pillar_back_purple.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "pillar_front_purple": {
+   "sheet": "sheets/pillar_front_purple.png",
+   "frames": 16,
+   "frameW": 32,
+   "frameH": 48,
+   "loop": false
+  },
+  "statue_summon_purple": {
+   "sheet": "sheets/statue_summon_purple.png",
+   "frames": 16,
+   "frameW": 16,
+   "frameH": 20,
+   "loop": false
+  }
+ }
+}

@@ -1,0 +1,1111 @@
+{
+ "_doc": "적 데이터. 몬스터 = 역할(roles) 스탯 + 스프라이트. 층은 10층씩 지역(chapters)으로 나뉘고, 그 층에는 그 지역 pool의 몬스터만(역할이 해금된 것만) 나온다. 10층마다 그 지역 boss. 101층부터 지역을 처음부터 반복(HP 배율은 계속 오름). 실제 수치 = 역할 기본값 x 층 배율(balance.json scaling).",
+ "attackInterval": 1.0,
+ "spriteDir": "assets/enemies/",
+ "spriteRules": {
+  "_doc": "파일 이름 = anim.walk의 {i}를 frames 값으로 바꾸고 .png. idle이 null이면 walk를 그대로 씀(Idle+Walk 한 줄짜리 시트, Default Anim). 실제 파일 이름이 다르면 이 패턴만 고친다.",
+  "displayScale": 2,
+  "anchor": "feet",
+  "frameMs": {
+   "walk": 110,
+   "idle": 150
+  },
+  "facing": {
+   "0x72": "right",
+   "other": "right",
+   "game": "right",
+   "_doc": "원본이 보는 방향. 적은 왼쪽으로 걸으므로 right면 좌우 반전해서 그림. other 팩은 실제 이미지 보고 확인 필요"
+  },
+  "eliteScale": 1.25,
+  "bossScaleIfSmall": {
+   "maxFrameH": 24,
+   "scale": 1.5,
+   "_doc": "보스 이미지 높이가 24px 이하면 1.5배 더 크게, 이미 큰 스프라이트는 그대로"
+  },
+  "retouch": "색감 리터치(25색 팔레트, 외곽선 #0d0a10)는 추후 작업"
+ },
+ "roles": {
+  "_doc": "역할(archetype)별 1층 기준 스탯. 몬스터는 역할 스탯을 그대로 쓰고, 몬스터 항목에 같은 키가 있으면 덮어쓴다. threat = 웨이브 예산 점수, weight = 뽑힐 확률 가중치, unlockFloor = 이 역할이 처음 나오는 층.",
+  "swarm": {
+   "hp": 14,
+   "def": 0,
+   "travelTime": 15,
+   "wallDmg": 4,
+   "gold": 1,
+   "threat": 0.5,
+   "weight": 8,
+   "unlockFloor": 1,
+   "desc": "작고 약한 떼"
+  },
+  "grunt": {
+   "hp": 30,
+   "def": 0,
+   "travelTime": 20,
+   "wallDmg": 8,
+   "gold": 2,
+   "threat": 1.0,
+   "weight": 10,
+   "unlockFloor": 1,
+   "desc": "기본 보병"
+  },
+  "runner": {
+   "hp": 22,
+   "def": 0,
+   "travelTime": 11,
+   "wallDmg": 6,
+   "gold": 2,
+   "threat": 0.9,
+   "weight": 8,
+   "unlockFloor": 3,
+   "desc": "빠름"
+  },
+  "brute": {
+   "hp": 75,
+   "def": 1,
+   "travelTime": 19,
+   "wallDmg": 15,
+   "gold": 5,
+   "threat": 2.0,
+   "weight": 5,
+   "unlockFloor": 6,
+   "desc": "탱커"
+  },
+  "caster": {
+   "hp": 55,
+   "def": 0,
+   "travelTime": 16,
+   "wallDmg": 28,
+   "gold": 7,
+   "threat": 2.4,
+   "weight": 4,
+   "unlockFloor": 21,
+   "desc": "성벽에 닿으면 아픔. 우선 처치. 나중에 원거리·버프",
+   "later": "원거리 공격, 아군 보호막"
+  },
+  "armored": {
+   "hp": 90,
+   "def": 3,
+   "travelTime": 20,
+   "wallDmg": 20,
+   "gold": 8,
+   "threat": 3.0,
+   "weight": 4,
+   "unlockFloor": 41,
+   "desc": "중장갑. 적게 모은 사격은 덜 박힘",
+   "later": "방패"
+  },
+  "heavy": {
+   "hp": 160,
+   "def": 2,
+   "travelTime": 24,
+   "wallDmg": 35,
+   "gold": 14,
+   "threat": 5.0,
+   "weight": 2,
+   "unlockFloor": 31,
+   "desc": "큰 몸집의 거한. 예산을 많이 씀"
+  }
+ },
+ "monsters": {
+  "tiny_slug": {
+   "name": "꼬마 민달팽이",
+   "role": "swarm",
+   "anim": {
+    "pack": "0x72",
+    "walk": "tiny_slug_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "slug": {
+   "name": "민달팽이",
+   "role": "grunt",
+   "anim": {
+    "pack": "0x72",
+    "walk": "slug_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "small_mushroom": {
+   "name": "꼬마 버섯",
+   "role": "runner",
+   "anim": {
+    "pack": "other",
+    "walk": "SmallMushroom_Walk_{i}",
+    "idle": "SmallMushroom_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "normal_mushroom": {
+   "name": "버섯",
+   "role": "grunt",
+   "anim": {
+    "pack": "other",
+    "walk": "NormalMushroom_Walk_{i}",
+    "idle": "NormalMushroom_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "muddy": {
+   "name": "진흙 덩이",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "muddy_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "swampy": {
+   "name": "늪지기",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "swampy_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "large_mushroom": {
+   "name": "거대 버섯",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "LargeMushroom_Walk_{i}",
+    "idle": "LargeMushroom_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "goblin": {
+   "name": "고블린",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "goblin_run_anim_f{i}",
+    "idle": "goblin_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "imp": {
+   "name": "임프",
+   "role": "swarm",
+   "anim": {
+    "pack": "0x72",
+    "walk": "imp_run_anim_f{i}",
+    "idle": "imp_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "bandit": {
+   "name": "도적",
+   "role": "grunt",
+   "anim": {
+    "pack": "other",
+    "walk": "Bandit_Walk_{i}",
+    "idle": "Bandit_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "wolf": {
+   "name": "늑대",
+   "role": "runner",
+   "anim": {
+    "pack": "other",
+    "walk": "Wolf_Walk_{i}",
+    "idle": "Wolf_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "lizard_m": {
+   "name": "도마뱀 전사",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "lizard_m_run_anim_f{i}",
+    "idle": "lizard_m_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "hit": "lizard_m_hit_anim_f0"
+   }
+  },
+  "lizard_f": {
+   "name": "도마뱀 사냥꾼",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "lizard_f_run_anim_f{i}",
+    "idle": "lizard_f_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ],
+    "hit": "lizard_f_hit_anim_f0"
+   }
+  },
+  "bear": {
+   "name": "동굴 곰",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "Bear_Walk_{i}",
+    "idle": "Bear_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "gnoll_scout": {
+   "name": "놀 정찰병",
+   "role": "runner",
+   "anim": {
+    "pack": "other",
+    "walk": "GnollScout_Walk_{i}",
+    "idle": "GnollScout_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "gnoll_shaman": {
+   "name": "놀 주술사",
+   "role": "caster",
+   "anim": {
+    "pack": "other",
+    "walk": "GnollShaman_Walk_{i}",
+    "idle": "GnollShaman_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "gnoll_brute": {
+   "name": "놀 투사",
+   "role": "brute",
+   "anim": {
+    "pack": "other",
+    "walk": "GnollBrute_Walk_{i}",
+    "idle": "GnollBrute_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "gnoll_overseer": {
+   "name": "놀 감독관",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "GnollOverseer_Walk_{i}",
+    "idle": "GnollOverseer_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "masked_orc": {
+   "name": "가면 오크",
+   "role": "grunt",
+   "anim": {
+    "pack": "0x72",
+    "walk": "masked_orc_run_anim_f{i}",
+    "idle": "masked_orc_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "orc_warrior": {
+   "name": "오크 전사",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "orc_warrior_run_anim_f{i}",
+    "idle": "orc_warrior_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "orc_shaman": {
+   "name": "오크 주술사",
+   "role": "caster",
+   "anim": {
+    "pack": "0x72",
+    "walk": "orc_shaman_run_anim_f{i}",
+    "idle": "orc_shaman_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "ogre": {
+   "name": "오우거",
+   "role": "heavy",
+   "anim": {
+    "pack": "0x72",
+    "walk": "ogre_run_anim_f{i}",
+    "idle": "ogre_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "troll": {
+   "name": "트롤",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "Troll_Walk_{i}",
+    "idle": "Troll_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "skelet": {
+   "name": "해골",
+   "role": "grunt",
+   "anim": {
+    "pack": "0x72",
+    "walk": "skelet_run_anim_f{i}",
+    "idle": "skelet_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "tiny_zombie": {
+   "name": "꼬마 좀비",
+   "role": "swarm",
+   "anim": {
+    "pack": "0x72",
+    "walk": "tiny_zombie_run_anim_f{i}",
+    "idle": "tiny_zombie_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "zombie": {
+   "name": "좀비",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "zombie_anim_f{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     10
+    ]
+   }
+  },
+  "ice_zombie": {
+   "name": "얼음 좀비",
+   "role": "armored",
+   "anim": {
+    "pack": "0x72",
+    "walk": "ice_zombie_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "doc": {
+   "name": "역병 의사",
+   "role": "caster",
+   "anim": {
+    "pack": "0x72",
+    "walk": "doc_run_anim_f{i}",
+    "idle": "doc_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "pumpkin_dude": {
+   "name": "호박 머리",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "pumpkin_dude_run_anim_f{i}",
+    "idle": "pumpkin_dude_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "big_zombie": {
+   "name": "거대 좀비",
+   "role": "boss",
+   "anim": {
+    "pack": "0x72",
+    "walk": "big_zombie_run_anim_f{i}",
+    "idle": "big_zombie_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "fairy": {
+   "name": "타락 요정",
+   "role": "swarm",
+   "anim": {
+    "pack": "other",
+    "walk": "Fairy_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "centaur_m": {
+   "name": "켄타우로스 전사",
+   "role": "heavy",
+   "anim": {
+    "pack": "other",
+    "walk": "Centaur_M_Walk_{i}",
+    "idle": "Centaur_M_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "centaur_f": {
+   "name": "켄타우로스 궁수",
+   "role": "runner",
+   "anim": {
+    "pack": "other",
+    "walk": "Centaur_F_Walk_{i}",
+    "idle": "Centaur_F_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "ent": {
+   "name": "오염된 고목",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "Ent_Walk_{i}",
+    "idle": "Ent_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "elf_m": {
+   "name": "엘프 척후병",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "elf_m_run_anim_f{i}",
+    "idle": "elf_m_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "elf_f": {
+   "name": "엘프 검무사",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "elf_f_run_anim_f{i}",
+    "idle": "elf_f_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "ranger": {
+   "name": "레인저",
+   "role": "grunt",
+   "anim": {
+    "pack": "other",
+    "walk": "Ranger_Walk_{i}",
+    "idle": "Ranger_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "high_elf_f": {
+   "name": "하이엘프 마법사",
+   "role": "caster",
+   "anim": {
+    "pack": "other",
+    "walk": "HighElf_F_Walk_{i}",
+    "idle": "HighElf_F_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "high_elf_m": {
+   "name": "하이엘프 현자",
+   "role": "caster",
+   "anim": {
+    "pack": "other",
+    "walk": "HighElf_M_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "elven_knight": {
+   "name": "엘프 기사",
+   "role": "armored",
+   "anim": {
+    "pack": "other",
+    "walk": "ElvenKnight_Walk_{i}",
+    "idle": "ElvenKnight_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "forest_guardian": {
+   "name": "숲의 수호자",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "ForestGuardian_walk_{i}",
+    "idle": "ForestGuardian_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "knight_m": {
+   "name": "타락 기사",
+   "role": "armored",
+   "anim": {
+    "pack": "0x72",
+    "walk": "knight_m_run_anim_f{i}",
+    "idle": "knight_m_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "knight_f": {
+   "name": "타락 여기사",
+   "role": "armored",
+   "anim": {
+    "pack": "0x72",
+    "walk": "knight_f_run_anim_f{i}",
+    "idle": "knight_f_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "dwarf_m": {
+   "name": "드워프 전사",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "dwarf_m_run_anim_f{i}",
+    "idle": "dwarf_m_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "dwarf_f": {
+   "name": "드워프 도끼병",
+   "role": "brute",
+   "anim": {
+    "pack": "0x72",
+    "walk": "dwarf_f_run_anim_f{i}",
+    "idle": "dwarf_f_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "wizzard_m": {
+   "name": "어둠 마법사",
+   "role": "caster",
+   "anim": {
+    "pack": "0x72",
+    "walk": "wizzard_m_run_anim_f{i}",
+    "idle": "wizzard_m_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "wizzard_f": {
+   "name": "어둠 마녀",
+   "role": "caster",
+   "anim": {
+    "pack": "0x72",
+    "walk": "wizzard_f_run_anim_f{i}",
+    "idle": "wizzard_f_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "wizard": {
+   "name": "방랑 마법사",
+   "role": "caster",
+   "anim": {
+    "pack": "other",
+    "walk": "Wizard_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "normal_cleric": {
+   "name": "타락 사제",
+   "role": "grunt",
+   "anim": {
+    "pack": "other",
+    "walk": "NormalCleric_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "golem": {
+   "name": "고대 골렘",
+   "role": "boss",
+   "anim": {
+    "pack": "other",
+    "walk": "Golem_Walk_{i}",
+    "idle": "Golem_Idle_{i}",
+    "frames": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6
+    ]
+   }
+  },
+  "fat_cleric": {
+   "name": "살찐 사제",
+   "role": "brute",
+   "anim": {
+    "pack": "other",
+    "walk": "FatCleric_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "tall_cleric": {
+   "name": "장신 사제",
+   "role": "caster",
+   "anim": {
+    "pack": "other",
+    "walk": "TallCleric_Idle + Walk_{i}",
+    "idle": null,
+    "frames": [
+     1,
+     2,
+     3,
+     4
+    ]
+   }
+  },
+  "angel": {
+   "name": "타락 천사",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "angel_run_anim_f{i}",
+    "idle": "angel_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "necromancer": {
+   "name": "네크로맨서",
+   "role": "boss",
+   "anim": {
+    "pack": "0x72",
+    "walk": "necromancer_anim_f{i}",
+    "idle": null,
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "chort": {
+   "name": "초트",
+   "role": "runner",
+   "anim": {
+    "pack": "0x72",
+    "walk": "chort_run_anim_f{i}",
+    "idle": "chort_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "wogol": {
+   "name": "워골",
+   "role": "grunt",
+   "anim": {
+    "pack": "0x72",
+    "walk": "wogol_run_anim_f{i}",
+    "idle": "wogol_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  },
+  "big_demon": {
+   "name": "대악마",
+   "role": "boss",
+   "anim": {
+    "pack": "0x72",
+    "walk": "big_demon_run_anim_f{i}",
+    "idle": "big_demon_idle_anim_f{i}",
+    "frames": [
+     0,
+     1,
+     2,
+     3
+    ]
+   }
+  }
+ },
+ "chapters": [
+  {
+   "from": 1,
+   "name": "버섯 늪",
+   "pool": [
+    "tiny_slug",
+    "slug",
+    "small_mushroom",
+    "normal_mushroom",
+    "muddy",
+    "swampy"
+   ],
+   "boss": "large_mushroom"
+  },
+  {
+   "from": 11,
+   "name": "도적 숲길",
+   "pool": [
+    "imp",
+    "goblin",
+    "bandit",
+    "wolf",
+    "lizard_f",
+    "lizard_m"
+   ],
+   "boss": "bear"
+  },
+  {
+   "from": 21,
+   "name": "놀 부족",
+   "pool": [
+    "imp",
+    "gnoll_scout",
+    "bandit",
+    "wolf",
+    "gnoll_brute",
+    "gnoll_shaman"
+   ],
+   "boss": "gnoll_overseer"
+  },
+  {
+   "from": 31,
+   "name": "오크 요새",
+   "pool": [
+    "goblin",
+    "masked_orc",
+    "orc_warrior",
+    "orc_shaman",
+    "ogre"
+   ],
+   "boss": "troll"
+  },
+  {
+   "from": 41,
+   "name": "저주받은 묘지",
+   "pool": [
+    "tiny_zombie",
+    "skelet",
+    "pumpkin_dude",
+    "zombie",
+    "doc",
+    "ice_zombie"
+   ],
+   "boss": "big_zombie"
+  },
+  {
+   "from": 51,
+   "name": "타락한 숲",
+   "pool": [
+    "fairy",
+    "normal_mushroom",
+    "wolf",
+    "centaur_f",
+    "gnoll_brute",
+    "high_elf_m",
+    "centaur_m",
+    "elven_knight"
+   ],
+   "boss": "ent"
+  },
+  {
+   "from": 61,
+   "name": "엘프 왕국",
+   "pool": [
+    "fairy",
+    "elf_m",
+    "elf_f",
+    "ranger",
+    "high_elf_f",
+    "high_elf_m",
+    "elven_knight",
+    "centaur_m"
+   ],
+   "boss": "forest_guardian"
+  },
+  {
+   "from": 71,
+   "name": "배신한 성채",
+   "pool": [
+    "normal_cleric",
+    "dwarf_m",
+    "dwarf_f",
+    "wizzard_m",
+    "wizzard_f",
+    "wizard",
+    "knight_m",
+    "knight_f",
+    "ogre"
+   ],
+   "boss": "golem"
+  },
+  {
+   "from": 81,
+   "name": "망자의 성소",
+   "pool": [
+    "tiny_zombie",
+    "skelet",
+    "angel",
+    "fat_cleric",
+    "tall_cleric",
+    "doc",
+    "ice_zombie",
+    "zombie"
+   ],
+   "boss": "necromancer"
+  },
+  {
+   "from": 91,
+   "name": "지옥문",
+   "pool": [
+    "imp",
+    "chort",
+    "wogol",
+    "masked_orc",
+    "orc_shaman",
+    "knight_m",
+    "ogre"
+   ],
+   "boss": "big_demon"
+  }
+ ]
+}

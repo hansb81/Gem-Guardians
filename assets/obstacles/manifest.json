@@ -1,0 +1,112 @@
+{
+  "version": 1,
+  "tileSize": 48,
+  "bodySize": 32,
+  "padding": 8,
+  "drawScale": 2,
+  "imageSmoothing": false,
+  "anchor": "center",
+  "obstacles": {
+    "crate": {
+      "image": "crate.png"
+    },
+    "stone": {
+      "hpImages": {
+        "2": "stone.png",
+        "1": "stone_cracked.png"
+      }
+    },
+    "timeBomb": {
+      "image": "time_bomb.png",
+      "layer": "overlay",
+      "idle": "time_bomb_idle",
+      "warn": "time_bomb_warn",
+      "warnAt": 2,
+      "digits": {
+        "sheet": "timer_digits.png",
+        "glyphW": 5,
+        "glyphH": 7,
+        "rows": {
+          "normal": 0,
+          "warn": 1
+        },
+        "center": [
+          34,
+          14
+        ],
+        "_doc": "숫자 가운데를 48 프레임 좌표 center에 맞춰 drawScale배로 그린다. 두 자리면 글리프 간격 4px(겹쳐 외곽선 공유)."
+      }
+    }
+  },
+  "anims": {
+    "time_bomb_idle": {
+      "sheet": "sheets/time_bomb_idle.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 4,
+      "frameMs": 120,
+      "loop": true
+    },
+    "time_bomb_warn": {
+      "sheet": "sheets/time_bomb_warn.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 4,
+      "frameMs": 90,
+      "loop": true
+    },
+    "crate_break": {
+      "sheet": "sheets/crate_break.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 60,
+      "loop": false
+    },
+    "stone_hit": {
+      "sheet": "sheets/stone_hit.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 5,
+      "frameMs": 60,
+      "loop": false
+    },
+    "stone_break": {
+      "sheet": "sheets/stone_break.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 6,
+      "frameMs": 60,
+      "loop": false
+    },
+    "time_bomb_explode": {
+      "sheet": "sheets/time_bomb_explode.png",
+      "frameW": 48,
+      "frameH": 48,
+      "frames": 8,
+      "frameMs": 70,
+      "loop": false
+    },
+    "time_bomb_bolt": {
+      "sheet": "sheets/time_bomb_bolt.png",
+      "frameW": 16,
+      "frameH": 16,
+      "frames": 4,
+      "frameMs": 60,
+      "loop": true,
+      "facing": "right",
+      "pivot": [
+        11,
+        8
+      ]
+    },
+    "wall_hit": {
+      "sheet": "sheets/wall_hit.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 6,
+      "frameMs": 60,
+      "loop": false
+    }
+  }
+}

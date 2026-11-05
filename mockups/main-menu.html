@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Gem Guardians - 메인 메뉴 시안</title>
+<style>
+  @font-face {
+    font-family: 'Galmuri11';
+    src: url('../assets/fonts/Galmuri11.woff2') format('woff2');
+    font-display: swap;
+  }
+
+  :root {
+    /* palette.hex 25색 */
+    --p-outline: #0d0a10;
+    --p-bg1: #221c2b;
+    --p-bg2: #3b3347;
+    --p-bg3: #655a74;
+    --p-bone: #e8dcc0;
+    --p-blue-dark: #0c1838;
+    --p-blue-mid: #1c3a76;
+    --p-blue: #386cbc;
+    --p-blue-light: #8cc4ee;
+    --p-purple-dark: #220e38;
+    --p-purple-mid: #48206e;
+    --p-purple: #7a3cae;
+    --p-purple-light: #c48ce6;
+    --p-red-dark: #3a0814;
+    --p-red-mid: #741426;
+    --p-red: #b82a3c;
+    --p-red-light: #ec6a6a;
+    --p-brown-dark: #3a2808;
+    --p-brown-mid: #7a5212;
+    --p-gold: #c28a20;
+    --p-gold-light: #f2d264;
+    --p-green-dark: #0c2814;
+    --p-green-mid: #1c5228;
+    --p-green: #3a8a3c;
+    --p-green-light: #9cd872;
+    /* 네온 */
+    --n-yellow: #ffe14a;
+    --n-cyan: #3ff0ff;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    background: #000;
+    color: var(--p-bone);
+    font-family: 'Galmuri11', monospace;
+    font-size: 11px;
+    -webkit-font-smoothing: none;
+  }
+
+  body { padding: 20px; overflow-x: auto; }
+
+  img, .pixelated {
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+  }
+
+  /* ---------- 페이지 크롬 (게임 UI 아님, 검토용) ---------- */
+
+  .toolbar {
+    max-width: 900px;
+    margin: 0 auto 16px;
+    background: var(--p-bg1);
+    border: 2px solid var(--p-outline);
+    padding: 12px 16px;
+  }
+
+  .toolbar h1 {
+    font-size: 11px;
+    color: var(--n-yellow);
+    margin-bottom: 8px;
+    letter-spacing: 1px;
+  }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
+
+  .tab-btn {
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--p-bone);
+    background: var(--p-bg2);
+    border: 2px solid var(--p-outline);
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: var(--p-purple);
+    color: var(--p-bone);
+    border-color: var(--n-cyan);
+  }
+
+  .variant-desc {
+    font-size: 11px;
+    color: var(--p-bone);
+    line-height: 1.8;
+    margin-bottom: 8px;
+    min-height: 32px;
+  }
+
+  .variant-desc b { color: var(--n-yellow); }
+
+  .guide-toggle {
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--p-bg3);
+  }
+
+  .note {
+    max-width: 900px;
+    margin: 0 auto 16px;
+    font-size: 11px;
+    color: var(--p-bg3);
+  }
+
+  /* ---------- 디바이스 프레임 (540x960 = 180x320 x3) ---------- */
+
+  .device-wrap { width: 540px; margin: 0 auto; }
+
+  .device {
+    position: relative;
+    width: 540px;
+    height: 960px;
+    background: var(--p-bg1);
+    border: 3px solid var(--p-outline);
+    overflow: hidden;
+  }
+
+  .centerpiece-glow {
+    position: absolute;
+    left: 50px; top: 180px; width: 440px; height: 374px;
+    background: var(--n-cyan);
+    opacity: 0.06;
+  }
+
+  /* 안내선 (가이드 토글용, 실제 게임 UI 아님) */
+  .guide {
+    position: absolute;
+    display: none;
+    pointer-events: none;
+    font-size: 11px;
+    color: var(--n-cyan);
+    z-index: 50;
+  }
+
+  .device[data-guides="on"] .guide { display: block; }
+
+  .guide-line {
+    position: absolute;
+    left: 0; right: 0;
+    border-top: 1px dashed var(--n-cyan);
+  }
+
+  .guide-reach {
+    position: absolute;
+    left: 10px; right: 10px; top: 620px; bottom: 40px;
+    border: 1px dashed var(--n-cyan);
+  }
+
+  .guide-reach span {
+    position: absolute; left: 4px; top: 4px;
+    background: var(--p-outline); padding: 2px 4px;
+  }
+
+  .device[data-guides="on"] .tap-target {
+    outline: 1px dashed var(--n-yellow);
+    outline-offset: 2px;
+  }
+
+  /* ---------- 상단 재화 바 ---------- */
+
+  .currency-bar {
+    position: absolute;
+    top: 28px; left: 50%; transform: translateX(-50%);
+    width: 232px; height: 56px;
+    display: flex; align-items: center; justify-content: space-around;
+    background: var(--p-bg2);
+    border: 2px solid var(--p-outline);
+    box-shadow: inset 0 0 0 2px var(--p-bg3);
+  }
+
+  .currency-item { display: flex; align-items: center; gap: 6px; }
+
+  .currency-icon {
+    width: 20px; height: 20px;
+    border: 1px solid var(--p-outline);
+  }
+
+  .currency-icon.gold { background: var(--p-gold-light); }
+  .currency-icon.diamond { background: var(--p-blue-light); }
+
+  .currency-value {
+    background: var(--p-bg1);
+    border: 1px solid var(--p-outline);
+    padding: 3px 6px;
+    min-width: 44px;
+    text-align: right;
+    font-size: 11px;
+  }
+
+  /* ---------- 코너 아이콘 버튼 (출석/이벤트/설정/상점) ---------- */
+
+  .icon-slot {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .icon-slot[data-pos="attendance"] { left: 20px; top: 28px; }
+  .icon-slot[data-pos="event"]      { left: 20px; top: 92px; }
+  .icon-slot[data-pos="settings"]   { right: 20px; top: 28px; }
+  .icon-slot[data-pos="shop"]       { right: 20px; top: 92px; }
+
+  /* 시안 C: 라벨 한 줄만큼 아래 줄을 더 띄움 */
+  .device[data-variant="c"] .icon-slot[data-pos="event"],
+  .device[data-variant="c"] .icon-slot[data-pos="shop"] {
+    top: 108px;
+  }
+
+  .icon-btn {
+    position: relative;
+    width: var(--icon-size, 48px);
+    height: var(--icon-size, 48px);
+    border: 2px solid var(--p-outline);
+    background: var(--p-bg2);
+    color: var(--p-bone);
+    font-family: inherit;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    cursor: pointer;
+    padding: 2px;
+  }
+
+  .icon-btn.attendance { border-color: var(--p-gold); }
+  .icon-btn.event      { border-color: var(--p-purple); }
+  .icon-btn.settings   { border-color: var(--p-bg3); }
+  .icon-btn.shop       { border-color: var(--p-blue); }
+
+  .icon-btn .badge {
+    position: absolute;
+    top: -5px; right: -5px;
+    width: 12px; height: 12px;
+    background: var(--p-red-light);
+    border: 1px solid var(--p-outline);
+  }
+
+  .icon-label {
+    font-size: 11px;
+    color: var(--p-bone);
+    display: none;
+  }
+
+  /* 시안 C: 아이콘 아래 텍스트 라벨 */
+  .device[data-variant="c"] .icon-label { display: block; }
+
+  /* ---------- 가운데 주인공 자리 ---------- */
+
+  .centerpiece {
+    position: absolute;
+    left: 50px; top: 180px;
+    width: 440px; height: 374px;
+    border: 2px dashed var(--p-bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--p-bg3);
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.8;
+  }
+
+  /* ---------- 플레이 버튼 (시안별로 모양 차이) ---------- */
+
+  .play-btn {
+    position: absolute;
+    left: 50%; transform: translateX(-50%);
+    border: 3px solid var(--p-outline);
+    background: var(--p-gold-light);
+    color: var(--p-outline);
+    font-family: inherit;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: inset 0 0 0 3px var(--p-gold);
+  }
+
+  .play-btn:active { transform: translateX(-50%) translateY(2px); }
+
+  /* 시안 A: 넓은 필(알약형이 아니라 각진 바) 버튼 */
+  .device[data-variant="a"] .play-btn {
+    top: 760px; width: 360px; height: 64px; font-size: 22px;
+  }
+
+  /* 시안 B: 크고 정사각형에 가까운 버튼 */
+  .device[data-variant="b"] .play-btn {
+    top: 700px; width: 148px; height: 148px; font-size: 22px;
+    flex-direction: column;
+  }
+  .device[data-variant="b"] .play-btn .play-glyph { font-size: 32px; }
+
+  /* 시안 C: 더 큰 리본형 버튼 */
+  .device[data-variant="c"] .play-btn {
+    top: 756px; width: 440px; height: 76px; font-size: 22px;
+  }
+
+  /* ---------- 팝업 ---------- */
+
+  .popup-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(13, 10, 16, 0.75);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+
+  .popup-overlay.open { display: flex; }
+
+  .popup-card {
+    position: relative;
+    background: var(--p-bg1);
+    border: 3px solid var(--p-outline);
+    box-shadow: inset 0 0 0 2px var(--p-bg3);
+    width: 400px;
+    padding: 20px;
+  }
+
+  .popup-card.wide { width: 480px; height: 860px; overflow-y: auto; }
+
+  .popup-title {
+    font-size: 22px;
+    color: var(--n-yellow);
+    margin-bottom: 16px;
+  }
+
+  .popup-close {
+    position: absolute;
+    top: 8px; right: 8px;
+    width: 44px; height: 44px;
+    background: var(--p-bg2);
+    border: 2px solid var(--p-outline);
+    color: var(--p-bone);
+    font-family: inherit;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .popup-body { font-size: 11px; line-height: 1.8; }
+
+  .mode-btn {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    margin-bottom: 12px;
+    border: 2px solid var(--p-outline);
+    background: var(--p-purple);
+    color: var(--p-bone);
+    font-family: inherit;
+    font-size: 22px;
+    cursor: pointer;
+  }
+
+  .mode-btn.locked {
+    background: var(--p-bg2);
+    color: var(--p-bg3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+
+  .mode-btn .lock-icon {
+    width: 14px; height: 14px;
+    background: var(--p-bg3);
+    border: 1px solid var(--p-outline);
+    display: inline-block;
+  }
+
+  .lock-hint {
+    font-size: 11px;
+    color: var(--p-red-light);
+    display: none;
+    margin-top: -4px;
+    margin-bottom: 12px;
+  }
+
+  .lock-hint.show { display: block; }
+
+  .setting-row { margin-bottom: 18px; }
+
+  .setting-row label { display: block; margin-bottom: 6px; }
+
+  .setting-row input[type="range"] {
+    width: 100%;
+    accent-color: var(--n-cyan);
+  }
+
+  .ghost-btn {
+    width: 100%;
+    min-height: 44px;
+    margin-bottom: 10px;
+    border: 2px solid var(--p-outline);
+    background: var(--p-bg2);
+    color: var(--p-bone);
+    font-family: inherit;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .info-panel {
+    display: none;
+    border: 1px dashed var(--p-bg3);
+    padding: 8px;
+    margin-bottom: 10px;
+    font-size: 11px;
+    color: var(--p-bg3);
+  }
+
+  .info-panel.show { display: block; }
+
+  .shop-list {
+    margin-top: 12px;
+    border: 2px dashed var(--p-bg3);
+    height: 600px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--p-bg3);
+    font-size: 11px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="toolbar">
+    <h1>GEM GUARDIANS — 메인 메뉴 시안 (배치/흐름 검토용, 최종 그림 아님)</h1>
+    <div class="tabs">
+      <button class="tab-btn active" data-variant="a">시안 A — 콤팩트 아이콘 / 바 버튼</button>
+      <button class="tab-btn" data-variant="b">시안 B — 큰 아이콘 / 정사각 버튼</button>
+      <button class="tab-btn" data-variant="c">시안 C — 라벨 아이콘 / 리본 버튼</button>
+    </div>
+    <div class="variant-desc" id="variantDesc"></div>
+    <label class="guide-toggle">
+      <input type="checkbox" id="guideToggle" checked>
+      안전 영역 / 터치 영역(44px) / 엄지 도달 영역 가이드선 표시
+    </label>
+  </div>
+  <div class="note">540×960 = 네이티브 180×320 × 3. 플레이 → 모드 선택, 설정 → 옵션, 상점/출석/이벤트 → 자리 확인용 팝업이 열립니다. 팝업 바깥을 탭하거나 닫기(X)로 닫힙니다.</div>
+
+  <div class="device-wrap">
+    <div class="device" data-variant="a" data-guides="on" id="device">
+
+      <div class="centerpiece-glow"></div>
+
+      <!-- 안전 영역 가이드 -->
+      <div class="guide guide-line" style="top:28px;"></div>
+      <div class="guide guide-line" style="top:920px;"></div>
+      <div class="guide guide-reach"><span>엄지 도달 영역</span></div>
+
+      <!-- 상단 재화 바 -->
+      <div class="currency-bar tap-target">
+        <div class="currency-item">
+          <div class="currency-icon gold pixelated"></div>
+          <div class="currency-value">12,400</div>
+        </div>
+        <div class="currency-item">
+          <div class="currency-icon diamond pixelated"></div>
+          <div class="currency-value">320</div>
+        </div>
+      </div>
+
+      <!-- 왼쪽 위: 출석 / 이벤트 -->
+      <div class="icon-slot" data-pos="attendance">
+        <button class="icon-btn attendance tap-target" data-popup="popupAttendance">
+          출석
+          <span class="badge"></span>
+        </button>
+        <span class="icon-label">출석</span>
+      </div>
+      <div class="icon-slot" data-pos="event">
+        <button class="icon-btn event tap-target" data-popup="popupEvent">
+          이벤트
+          <span class="badge"></span>
+        </button>
+        <span class="icon-label">이벤트</span>
+      </div>
+
+      <!-- 오른쪽 위: 설정 / 상점 -->
+      <div class="icon-slot" data-pos="settings">
+        <button class="icon-btn settings tap-target" data-popup="popupSettings">설정</button>
+        <span class="icon-label">설정</span>
+      </div>
+      <div class="icon-slot" data-pos="shop">
+        <button class="icon-btn shop tap-target" data-popup="popupShop">상점</button>
+        <span class="icon-label">상점</span>
+      </div>
+
+      <!-- 가운데: 주인공 그림 자리 -->
+      <div class="centerpiece">centerpiece<br>(주인공 그림 자리 — 추후 결정)</div>
+
+      <!-- 아래: 플레이 버튼 -->
+      <button class="play-btn tap-target" data-popup="popupMode">
+        <span class="play-glyph">▶</span><span>플레이</span>
+      </button>
+
+      <!-- ===== 팝업들 ===== -->
+
+      <div class="popup-overlay" id="popupMode">
+        <div class="popup-card">
+          <button class="popup-close" data-close>✕</button>
+          <div class="popup-title">모드 선택</div>
+          <div class="popup-body">
+            <button class="mode-btn">일반 모드</button>
+            <button class="mode-btn locked" id="competitiveBtn">
+              <span class="lock-icon"></span> 경쟁 모드
+            </button>
+            <div class="lock-hint" id="competitiveHint">잠김 — 해금 조건 추가 예정</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="popup-overlay" id="popupSettings">
+        <div class="popup-card">
+          <button class="popup-close" data-close>✕</button>
+          <div class="popup-title">설정</div>
+          <div class="popup-body">
+            <div class="setting-row">
+              <label>효과음</label>
+              <input type="range" min="0" max="100" value="80">
+            </div>
+            <div class="setting-row">
+              <label>배경음</label>
+              <input type="range" min="0" max="100" value="60">
+            </div>
+            <button class="ghost-btn" data-toggle="helpPanel">도움말</button>
+            <div class="info-panel" id="helpPanel">보드를 스와이프해 잼을 맞추고, 상단 전투 영역의 성벽을 적에게서 지키세요. (자리 — 실제 문구는 추후 결정)</div>
+            <button class="ghost-btn" data-toggle="aboutPanel">게임 정보</button>
+            <div class="info-panel" id="aboutPanel">Gem Guardians v0.1.0 (mockup)</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="popup-overlay" id="popupShop">
+        <div class="popup-card wide">
+          <button class="popup-close" data-close>✕</button>
+          <div class="popup-title">상점</div>
+          <div class="shop-list">상품 목록 자리 (빈 목록)</div>
+        </div>
+      </div>
+
+      <div class="popup-overlay" id="popupAttendance">
+        <div class="popup-card">
+          <button class="popup-close" data-close>✕</button>
+          <div class="popup-title">출석 체크</div>
+          <div class="popup-body">콘텐츠 자리 (추후 결정)</div>
+        </div>
+      </div>
+
+      <div class="popup-overlay" id="popupEvent">
+        <div class="popup-card">
+          <button class="popup-close" data-close>✕</button>
+          <div class="popup-title">이벤트</div>
+          <div class="popup-body">콘텐츠 자리 (추후 결정)</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+  var device = document.getElementById('device');
+
+  var descriptions = {
+    a: '아이콘 48px, 플레이 버튼은 하단에 넓은 각진 바(360×64). 정보 밀도가 낮고 한 손 엄지 도달 영역 안에서 가로로 넓게 눌림. <b>가장 무난한 기본안.</b>',
+    b: '아이콘 56px로 키움, 플레이 버튼은 거의 정사각형(148×148)으로 시각적 무게가 가장 큼. 버튼은 더 커졌지만 세로 공간을 많이 차지해 센터피스가 눌림.',
+    c: '아이콘은 48px 그대로 두고 아래에 텍스트 라벨(출석/이벤트/설정/상점)을 붙여 처음 보는 사용자에게 더 명확함. 플레이 버튼은 리본형(440×76)으로 가장 넓지만 키는 낮음.'
+  };
+
+  function setVariant(v) {
+    device.setAttribute('data-variant', v);
+    document.getElementById('variantDesc').innerHTML = descriptions[v];
+    document.querySelectorAll('.tab-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.variant === v);
+    });
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { setVariant(btn.dataset.variant); });
+  });
+
+  document.getElementById('guideToggle').addEventListener('change', function (e) {
+    device.setAttribute('data-guides', e.target.checked ? 'on' : 'off');
+  });
+
+  // 팝업 열기
+  document.querySelectorAll('[data-popup]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById(btn.dataset.popup).classList.add('open');
+    });
+  });
+
+  // 닫기 버튼
+  document.querySelectorAll('[data-close]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      btn.closest('.popup-overlay').classList.remove('open');
+    });
+  });
+
+  // 바깥 탭으로 닫기
+  document.querySelectorAll('.popup-overlay').forEach(function (overlay) {
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) overlay.classList.remove('open');
+    });
+  });
+
+  // 경쟁 모드 잠김 안내
+  document.getElementById('competitiveBtn').addEventListener('click', function () {
+    document.getElementById('competitiveHint').classList.toggle('show');
+  });
+
+  // 도움말 / 게임정보 토글
+  document.querySelectorAll('[data-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.getElementById(btn.dataset.toggle).classList.toggle('show');
+    });
+  });
+
+  setVariant('a');
+</script>
+
+</body>
+</html>

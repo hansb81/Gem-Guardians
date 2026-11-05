@@ -1,0 +1,38 @@
+{
+  "gems": {
+    "red": "assets/gems/red.png",
+    "blue": "assets/gems/blue.png",
+    "yellow": "assets/gems/yellow.png",
+    "green": "assets/gems/green.png",
+    "purple": "assets/gems/purple.png"
+  },
+  "specialOverlays": {
+    "line_h": "assets/specials/line_h.svg",
+    "line_v": "assets/specials/line_v.svg",
+    "bomb": "assets/specials/bomb.svg",
+    "box": "assets/specials/box.svg"
+  },
+  "specialPerColor": {
+    "red_bomb": "assets/specials/red_bomb.png",
+    "red_box": "assets/specials/red_box.png",
+    "red_line_h": "assets/specials/red_line_h.png",
+    "red_line_v": "assets/specials/red_line_v.png",
+    "blue_bomb": "assets/specials/blue_bomb.png",
+    "blue_box": "assets/specials/blue_box.png",
+    "blue_line_h": "assets/specials/blue_line_h.png",
+    "blue_line_v": "assets/specials/blue_line_v.png",
+    "yellow_bomb": "assets/specials/yellow_bomb.png",
+    "yellow_box": "assets/specials/yellow_box.png",
+    "yellow_line_h": "assets/specials/yellow_line_h.png",
+    "yellow_line_v": "assets/specials/yellow_line_v.png",
+    "green_bomb": "assets/specials/green_bomb.png",
+    "green_box": "assets/specials/green_box.png",
+    "green_line_h": "assets/specials/green_line_h.png",
+    "green_line_v": "assets/specials/green_line_v.png",
+    "purple_bomb": "assets/specials/purple_bomb.png",
+    "purple_box": "assets/specials/purple_box.png",
+    "purple_line_h": "assets/specials/purple_line_h.png",
+    "purple_line_v": "assets/specials/purple_line_v.png"
+  },
+  "color": "assets/specials/color.svg"
+}

@@ -1,0 +1,157 @@
+{
+  "_doc": "Gem Guardians 밸런스 파라미터. floors.json은 이 파일로 tools/gen_floors.py가 만든다. 101층부터는 게임이 같은 공식으로 즉석 생성한다. 단위: 거리 = 길 전체 길이 1.0(lane), 시간 = 초.",
+  "version": 1,
+  "tower": {
+    "_doc": "5개 탑 모두 같은 수치로 시작. 레벨업은 타워 강화 팝업에서 탑마다 따로, 가진 골드만큼 연속으로.",
+    "baseAtk": 10,
+    "atkGrowthPerLevel": 1.05,
+    "maxLevel": 200,
+    "autoAttack": {
+      "_doc": "2026-11-03 쑹: 탑은 퍼즐로만 공격한다(자동 공격 없음). 나중에 방치형(1-4)이나 업그레이드로 켤 수 있게 값만 남겨둠.",
+      "enabled": false,
+      "ratio": 0.3,
+      "shotsPerSec": 1.0,
+      "range": 0.75
+    },
+    "puzzleShot": {
+      "cascadeBonus": 0.1,
+      "range": "unlimited"
+    },
+    "projectileSpeed": 1.6,
+    "levelCost": {
+      "base": 20,
+      "growth": 1.06
+    },
+    "towers": [
+      { "id": "tower_red", "color": "red", "name": "화염 수정탑", "shape": "octagon_square" },
+      { "id": "tower_blue", "color": "blue", "name": "서리 첨탑", "shape": "triangle" },
+      { "id": "tower_yellow", "color": "yellow", "name": "뇌전탑", "shape": "inverted_triangle" },
+      { "id": "tower_green", "color": "green", "name": "가시독탑", "shape": "diamond" },
+      { "id": "tower_purple", "color": "purple", "name": "저주 오벨리스크", "shape": "pentagon" }
+    ]
+  },
+  "wall": {
+    "_doc": "층마다 가득 찬 상태로 시작. 성벽 업그레이드가 생기면 wallHp(f) 대신 플레이어 스탯으로 옮긴다.",
+    "baseHp": 1000,
+    "hpGrowthPerFloor": 0.025
+  },
+  "scaling": {
+    "_doc": "f = 층(1부터). hpMul = hpGrowth^(f-1), atkMul = wallDmgGrowth^(f-1), speedMul = min(speedCap, 1 + speedPerFloor*(f-1)), defAdd = floor((f-1)/defEvery)",
+    "hpGrowth": 1.037,
+    "wallDmgGrowth": 1.025,
+    "speedPerFloor": 0.0035,
+    "speedCap": 1.35,
+    "defEvery": 25,
+    "goldGrowth": 1.04
+  },
+  "floorShape": {
+    "_doc": "웨이브 수와 적 수. 층 예산(threat 점수) = threatBudget.base + perFloor*(f-1). 웨이브 i의 예산 = 층 예산 x (i+2)/합. 예산이 찰 때까지 그 층 지역(chapter)의 pool 중 역할이 해금된 몬스터를 weight 확률로 뽑는다(남은 예산보다 너무 무거운 몬스터는 제외). 보스층(10의 배수)은 마지막 웨이브가 보스+호위, 엘리트층(끝자리 5)은 마지막 웨이브에 엘리트.",
+    "threatBudget": {
+      "base": 6,
+      "perFloor": 0.3,
+      "max": 45
+    },
+    "waves": [
+      {
+        "fromFloor": 1,
+        "count": 2
+      },
+      {
+        "fromFloor": 11,
+        "count": 3
+      },
+      {
+        "fromFloor": 41,
+        "count": 4
+      }
+    ],
+    "spawnInterval": {
+      "base": 2.0,
+      "perFloor": -0.011,
+      "min": 0.9
+    },
+    "waveBreak": 2.5,
+    "eliteEvery": {
+      "mod": 10,
+      "rem": 5
+    },
+    "bossEvery": 10,
+    "eliteChanceFrom50": {
+      "from": 50,
+      "chancePerWave": 0.25
+    },
+    "eliteMul": {
+      "hp": 4,
+      "wallDmg": 2,
+      "def": 1,
+      "speed": 0.9,
+      "scale": 1.25,
+      "gold": 5
+    },
+    "bossMul": {
+      "_doc": "보스는 지역 보스 몬스터(enemies.json chapters[].boss)이고 스탯은 이 값만 쓴다. hp = hpBase x hpMul(f), 방어 = def + 층 방어 추가.",
+      "hpBase": 400,
+      "wallDmgBase": 40,
+      "travelTime": 30,
+      "def": 1,
+      "goldBase": 60
+    },
+    "bossEscortRatio": 0.5,
+    "eliteFloorBudgetMul": 1.4
+  },
+  "economy": {
+    "_doc": "처음 클리어 = 처치 골드 + 클리어 보상. 재도전 실패 시에도 처치 골드는 받는다(막힌 층에서 레벨업 가능).",
+    "clearBonusMul": 1.0,
+    "replayClearMul": 0.3
+  },
+  "playerModel": {
+    "_doc": "시뮬레이션(tools/sim_floors.py) 전용 가정. 게임 코드에서는 쓰지 않는다.",
+    "secondsPerMove": 2.5,
+    "colorsPerMove": [
+      [
+        1,
+        0.7
+      ],
+      [
+        2,
+        0.25
+      ],
+      [
+        3,
+        0.05
+      ]
+    ],
+    "gemsPerColor": [
+      [
+        3,
+        0.65
+      ],
+      [
+        4,
+        0.2
+      ],
+      [
+        5,
+        0.1
+      ],
+      [
+        7,
+        0.05
+      ]
+    ],
+    "cascade": [
+      [
+        1,
+        0.7
+      ],
+      [
+        2,
+        0.22
+      ],
+      [
+        3,
+        0.08
+      ]
+    ]
+  }
+}

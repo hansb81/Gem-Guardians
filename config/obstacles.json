@@ -1,0 +1,176 @@
+{
+  "_doc": "퍼즐 방해요소 정의. 새 방해요소 = types에 항목 하나 + (특별한 동작이 있으면) src/core/obstacles/에 핸들러 하나. 층별 등장 수는 floors.json의 obstacles 필드.",
+  "boardCap": 9,
+  "_boardCapDoc": "36칸 중 방해요소가 차지할 수 있는 최대 칸 수(시한폭탄은 잼 위에 붙으므로 제외).",
+  "types": {
+    "crate": {
+      "name": "나무상자",
+      "layer": "occupant",
+      "hp": 1,
+      "swappable": false,
+      "falls": true,
+      "matchable": false,
+      "damagedBy": [
+        "adjacentMatch",
+        "specialEffect"
+      ],
+      "onDestroy": {
+        "effect": "none"
+      },
+      "sprite": "obstacles/crate.png",
+      "unlockFloor": 11
+    },
+    "stone": {
+      "name": "돌덩이",
+      "layer": "occupant",
+      "hp": 2,
+      "swappable": false,
+      "falls": true,
+      "matchable": false,
+      "damagedBy": [
+        "adjacentMatch",
+        "specialEffect"
+      ],
+      "hpSprites": [
+        "obstacles/stone_cracked.png",
+        "obstacles/stone.png"
+      ],
+      "onDestroy": {
+        "effect": "none"
+      },
+      "unlockFloor": 31
+    },
+    "timeBomb": {
+      "name": "시한폭탄",
+      "layer": "attachment",
+      "_layerDoc": "잼 위에 붙는다. 잼은 평소처럼 스왑·매치·낙하. 그 잼이 어떤 이유로든 지워지면 해제.",
+      "hp": 1,
+      "swappable": true,
+      "falls": true,
+      "matchable": true,
+      "damagedBy": [
+        "gemCleared"
+      ],
+      "timer": {
+        "unit": "move",
+        "_doc": "플레이어의 유효한 스왑 1회 = 1. 연쇄는 세지 않는다. floors.json의 timer 값으로 시작"
+      },
+      "onExpire": {
+        "effect": "wallDamage",
+        "_doc": "피해 = 성벽 최대 HP x floors.json의 wallDamagePct. 폭발 후 붙어 있던 잼도 제거(탑 사격 없음)"
+      },
+      "onDestroy": {
+        "effect": "none"
+      },
+      "sprite": "obstacles/time_bomb.png",
+      "unlockFloor": 21,
+      "_note": "특수 잼 '폭탄 잼'(bomb)과 이름이 겹치지 않게 코드 id는 timeBomb로 쓴다."
+    }
+  },
+  "rules": {
+    "adjacentMatch": "매치로 지워진 칸의 상하좌우에 있는 방해요소가 1 피해. 한 번의 해결 단계(resolve step)에서 같은 방해요소는 최대 1 피해.",
+    "specialEffect": "라인/폭탄/상자/컬러 효과 범위에 방해요소 칸이 포함되면 1 피해. 컬러 잼은 지운 잼과 인접한 방해요소만(=adjacentMatch로 처리).",
+    "gravity": "falls=true인 방해요소는 잼처럼 떨어진다. 위에서 새로 생기지는 않는다(spawn 규칙으로만 등장).",
+    "noMoves": "가능한 스왑이 없으면 기존처럼 잼만 재배치(방해요소 칸은 그대로). 재배치 3회 실패 시 hp가 가장 낮은 occupant 방해요소 1개 제거.",
+    "towerShot": "방해요소를 부숴도 탑 사격은 없다. 시한폭탄이 붙은 잼은 일반 잼처럼 색별 개수에 포함.",
+    "spawn": "initial = 층 시작 보드에 배치(무작위, 매치 없는 보드 생성 후 잼을 대체). everyMoves = N번 스왑마다 1개, 맨 윗줄 무작위 칸의 잼을 대체(occupant) 또는 무작위 잼에 부착(attachment). maxAlive를 넘으면 생성 생략. boardCap 우선."
+  },
+  "futureIdeas": [
+    {
+      "id": "chain",
+      "name": "쇠사슬",
+      "layer": "lock",
+      "desc": "잼을 묶음. 스왑 불가, 매치는 가능(매치되면 사슬만 풀림)"
+    },
+    {
+      "id": "ice",
+      "name": "얼음",
+      "layer": "cover",
+      "desc": "잼 아래 바닥 층. 위에서 잼이 터지면 깨짐. 다 깨야 보너스"
+    },
+    {
+      "id": "poison",
+      "name": "독웅덩이",
+      "layer": "occupant",
+      "desc": "턴마다 옆 잼 하나를 독으로 바꿈(퍼짐)"
+    },
+    {
+      "id": "cursedGem",
+      "name": "저주 잼",
+      "layer": "attachment",
+      "desc": "이 잼을 지우면 해당 색 탑이 이번만 쏘지 않음"
+    }
+  ],
+  "schedule": {
+    "_doc": "ramp = clamp(start + perFloor*(f-from), min, max), 정수는 반올림. from 이전 층에는 없음. 0이면 해당 생성 방식 없음. 보스층은 bossOverride 적용.",
+    "crate": {
+      "initial": {
+        "from": 11,
+        "start": 2,
+        "perFloor": 0.05,
+        "min": 0,
+        "max": 6
+      },
+      "everyMoves": {
+        "from": 26,
+        "start": 10,
+        "perFloor": -0.08,
+        "min": 5,
+        "max": 10
+      },
+      "maxAliveExtra": 2
+    },
+    "stone": {
+      "initial": {
+        "from": 31,
+        "start": 1,
+        "perFloor": 0.06,
+        "min": 0,
+        "max": 5
+      },
+      "everyMoves": {
+        "from": 51,
+        "start": 14,
+        "perFloor": -0.12,
+        "min": 8,
+        "max": 14
+      },
+      "maxAliveExtra": 2
+    },
+    "timeBomb": {
+      "everyMoves": {
+        "from": 21,
+        "start": 14,
+        "perFloor": -0.11,
+        "min": 6,
+        "max": 14
+      },
+      "timer": {
+        "from": 21,
+        "start": 9,
+        "perFloor": -0.05,
+        "min": 5,
+        "max": 9
+      },
+      "maxAlive": {
+        "from": 21,
+        "start": 1,
+        "perFloor": 0.03,
+        "min": 1,
+        "max": 3
+      },
+      "wallDamagePct": {
+        "from": 21,
+        "start": 0.06,
+        "perFloor": 0.0008,
+        "min": 0.06,
+        "max": 0.12,
+        "decimals": 3
+      }
+    },
+    "bossOverride": {
+      "timeBomb.timer": -1,
+      "_doc": "보스층은 시한폭탄 타이머 1 감소(최소 4)"
+    }
+  }
+}

@@ -1,0 +1,692 @@
+{
+  "version": 1,
+  "frameW": 150,
+  "frameH": 80,
+  "frames": 8,
+  "frameMs": 200,
+  "loop": true,
+  "drawScale": 3,
+  "imageSmoothing": false,
+  "themeOrder": [
+    "temple",
+    "crypt",
+    "tomb",
+    "lava",
+    "abyss"
+  ],
+  "floorsPerTheme": 10,
+  "bossFloorIndex": 9,
+  "laps": 2,
+  "lookup": "i=floor((f-1)/10); theme=themeOrder[i%5]; idx=(f-1)%10; lap=min(laps-1, floor((f-1)/50)); sheet=sheets/{theme}_f{idx}_lap{lap}.png",
+  "layout": {
+    "backWallH": 8,
+    "shrine": {
+      "x": 0,
+      "y": 8,
+      "w": 46,
+      "h": 72
+    },
+    "wardLineX": 43,
+    "path": {
+      "x": 46,
+      "y": 8,
+      "w": 104,
+      "h": 72
+    },
+    "towerSlots": [
+      {
+        "color": "red",
+        "statueX": 4,
+        "statueY": 8,
+        "plinthX": 1,
+        "plinthY": 22
+      },
+      {
+        "color": "blue",
+        "statueX": 25,
+        "statueY": 20,
+        "plinthX": 22,
+        "plinthY": 34
+      },
+      {
+        "color": "yellow",
+        "statueX": 4,
+        "statueY": 32,
+        "plinthX": 1,
+        "plinthY": 46
+      },
+      {
+        "color": "green",
+        "statueX": 25,
+        "statueY": 44,
+        "plinthX": 22,
+        "plinthY": 58
+      },
+      {
+        "color": "purple",
+        "statueX": 4,
+        "statueY": 56,
+        "plinthX": 1,
+        "plinthY": 70
+      }
+    ]
+  },
+  "plinth": {
+    "frameW": 23,
+    "frameH": 12,
+    "frames": 8,
+    "frameMs": 200,
+    "anchor": "plinthX = statueX - 3, plinthY = statueY + 14 (native px). Draw plinth first, then statue."
+  },
+  "themes": {
+    "temple": {
+      "name": "이끼 낀 폐신전",
+      "floors": "1-10F",
+      "accent": "moss",
+      "ward": "#f2d264"
+    },
+    "crypt": {
+      "name": "물에 잠긴 지하묘지",
+      "floors": "11-20F",
+      "accent": "water",
+      "ward": "#3ff0ff"
+    },
+    "tomb": {
+      "name": "모래에 묻힌 왕묘",
+      "floors": "21-30F",
+      "accent": "sand",
+      "ward": "#ffe14a"
+    },
+    "lava": {
+      "name": "용암 균열",
+      "floors": "31-40F",
+      "accent": "lava",
+      "ward": "#ff2b4e"
+    },
+    "abyss": {
+      "name": "자수정 심연",
+      "floors": "41-50F",
+      "accent": "crystal",
+      "ward": "#d94dff"
+    }
+  },
+  "sheets": {
+    "temple_f0_lap0": {
+      "file": "sheets/temple_f0_lap0.png",
+      "boss": false,
+      "exampleFloor": 1
+    },
+    "temple_f1_lap0": {
+      "file": "sheets/temple_f1_lap0.png",
+      "boss": false,
+      "exampleFloor": 2
+    },
+    "temple_f2_lap0": {
+      "file": "sheets/temple_f2_lap0.png",
+      "boss": false,
+      "exampleFloor": 3
+    },
+    "temple_f3_lap0": {
+      "file": "sheets/temple_f3_lap0.png",
+      "boss": false,
+      "exampleFloor": 4
+    },
+    "temple_f4_lap0": {
+      "file": "sheets/temple_f4_lap0.png",
+      "boss": false,
+      "exampleFloor": 5
+    },
+    "temple_f5_lap0": {
+      "file": "sheets/temple_f5_lap0.png",
+      "boss": false,
+      "exampleFloor": 6
+    },
+    "temple_f6_lap0": {
+      "file": "sheets/temple_f6_lap0.png",
+      "boss": false,
+      "exampleFloor": 7
+    },
+    "temple_f7_lap0": {
+      "file": "sheets/temple_f7_lap0.png",
+      "boss": false,
+      "exampleFloor": 8
+    },
+    "temple_f8_lap0": {
+      "file": "sheets/temple_f8_lap0.png",
+      "boss": false,
+      "exampleFloor": 9
+    },
+    "temple_f9_lap0": {
+      "file": "sheets/temple_f9_lap0.png",
+      "boss": true,
+      "exampleFloor": 10
+    },
+    "temple_f0_lap1": {
+      "file": "sheets/temple_f0_lap1.png",
+      "boss": false,
+      "exampleFloor": 51
+    },
+    "temple_f1_lap1": {
+      "file": "sheets/temple_f1_lap1.png",
+      "boss": false,
+      "exampleFloor": 52
+    },
+    "temple_f2_lap1": {
+      "file": "sheets/temple_f2_lap1.png",
+      "boss": false,
+      "exampleFloor": 53
+    },
+    "temple_f3_lap1": {
+      "file": "sheets/temple_f3_lap1.png",
+      "boss": false,
+      "exampleFloor": 54
+    },
+    "temple_f4_lap1": {
+      "file": "sheets/temple_f4_lap1.png",
+      "boss": false,
+      "exampleFloor": 55
+    },
+    "temple_f5_lap1": {
+      "file": "sheets/temple_f5_lap1.png",
+      "boss": false,
+      "exampleFloor": 56
+    },
+    "temple_f6_lap1": {
+      "file": "sheets/temple_f6_lap1.png",
+      "boss": false,
+      "exampleFloor": 57
+    },
+    "temple_f7_lap1": {
+      "file": "sheets/temple_f7_lap1.png",
+      "boss": false,
+      "exampleFloor": 58
+    },
+    "temple_f8_lap1": {
+      "file": "sheets/temple_f8_lap1.png",
+      "boss": false,
+      "exampleFloor": 59
+    },
+    "temple_f9_lap1": {
+      "file": "sheets/temple_f9_lap1.png",
+      "boss": true,
+      "exampleFloor": 60
+    },
+    "crypt_f0_lap0": {
+      "file": "sheets/crypt_f0_lap0.png",
+      "boss": false,
+      "exampleFloor": 11
+    },
+    "crypt_f1_lap0": {
+      "file": "sheets/crypt_f1_lap0.png",
+      "boss": false,
+      "exampleFloor": 12
+    },
+    "crypt_f2_lap0": {
+      "file": "sheets/crypt_f2_lap0.png",
+      "boss": false,
+      "exampleFloor": 13
+    },
+    "crypt_f3_lap0": {
+      "file": "sheets/crypt_f3_lap0.png",
+      "boss": false,
+      "exampleFloor": 14
+    },
+    "crypt_f4_lap0": {
+      "file": "sheets/crypt_f4_lap0.png",
+      "boss": false,
+      "exampleFloor": 15
+    },
+    "crypt_f5_lap0": {
+      "file": "sheets/crypt_f5_lap0.png",
+      "boss": false,
+      "exampleFloor": 16
+    },
+    "crypt_f6_lap0": {
+      "file": "sheets/crypt_f6_lap0.png",
+      "boss": false,
+      "exampleFloor": 17
+    },
+    "crypt_f7_lap0": {
+      "file": "sheets/crypt_f7_lap0.png",
+      "boss": false,
+      "exampleFloor": 18
+    },
+    "crypt_f8_lap0": {
+      "file": "sheets/crypt_f8_lap0.png",
+      "boss": false,
+      "exampleFloor": 19
+    },
+    "crypt_f9_lap0": {
+      "file": "sheets/crypt_f9_lap0.png",
+      "boss": true,
+      "exampleFloor": 20
+    },
+    "crypt_f0_lap1": {
+      "file": "sheets/crypt_f0_lap1.png",
+      "boss": false,
+      "exampleFloor": 61
+    },
+    "crypt_f1_lap1": {
+      "file": "sheets/crypt_f1_lap1.png",
+      "boss": false,
+      "exampleFloor": 62
+    },
+    "crypt_f2_lap1": {
+      "file": "sheets/crypt_f2_lap1.png",
+      "boss": false,
+      "exampleFloor": 63
+    },
+    "crypt_f3_lap1": {
+      "file": "sheets/crypt_f3_lap1.png",
+      "boss": false,
+      "exampleFloor": 64
+    },
+    "crypt_f4_lap1": {
+      "file": "sheets/crypt_f4_lap1.png",
+      "boss": false,
+      "exampleFloor": 65
+    },
+    "crypt_f5_lap1": {
+      "file": "sheets/crypt_f5_lap1.png",
+      "boss": false,
+      "exampleFloor": 66
+    },
+    "crypt_f6_lap1": {
+      "file": "sheets/crypt_f6_lap1.png",
+      "boss": false,
+      "exampleFloor": 67
+    },
+    "crypt_f7_lap1": {
+      "file": "sheets/crypt_f7_lap1.png",
+      "boss": false,
+      "exampleFloor": 68
+    },
+    "crypt_f8_lap1": {
+      "file": "sheets/crypt_f8_lap1.png",
+      "boss": false,
+      "exampleFloor": 69
+    },
+    "crypt_f9_lap1": {
+      "file": "sheets/crypt_f9_lap1.png",
+      "boss": true,
+      "exampleFloor": 70
+    },
+    "tomb_f0_lap0": {
+      "file": "sheets/tomb_f0_lap0.png",
+      "boss": false,
+      "exampleFloor": 21
+    },
+    "tomb_f1_lap0": {
+      "file": "sheets/tomb_f1_lap0.png",
+      "boss": false,
+      "exampleFloor": 22
+    },
+    "tomb_f2_lap0": {
+      "file": "sheets/tomb_f2_lap0.png",
+      "boss": false,
+      "exampleFloor": 23
+    },
+    "tomb_f3_lap0": {
+      "file": "sheets/tomb_f3_lap0.png",
+      "boss": false,
+      "exampleFloor": 24
+    },
+    "tomb_f4_lap0": {
+      "file": "sheets/tomb_f4_lap0.png",
+      "boss": false,
+      "exampleFloor": 25
+    },
+    "tomb_f5_lap0": {
+      "file": "sheets/tomb_f5_lap0.png",
+      "boss": false,
+      "exampleFloor": 26
+    },
+    "tomb_f6_lap0": {
+      "file": "sheets/tomb_f6_lap0.png",
+      "boss": false,
+      "exampleFloor": 27
+    },
+    "tomb_f7_lap0": {
+      "file": "sheets/tomb_f7_lap0.png",
+      "boss": false,
+      "exampleFloor": 28
+    },
+    "tomb_f8_lap0": {
+      "file": "sheets/tomb_f8_lap0.png",
+      "boss": false,
+      "exampleFloor": 29
+    },
+    "tomb_f9_lap0": {
+      "file": "sheets/tomb_f9_lap0.png",
+      "boss": true,
+      "exampleFloor": 30
+    },
+    "tomb_f0_lap1": {
+      "file": "sheets/tomb_f0_lap1.png",
+      "boss": false,
+      "exampleFloor": 71
+    },
+    "tomb_f1_lap1": {
+      "file": "sheets/tomb_f1_lap1.png",
+      "boss": false,
+      "exampleFloor": 72
+    },
+    "tomb_f2_lap1": {
+      "file": "sheets/tomb_f2_lap1.png",
+      "boss": false,
+      "exampleFloor": 73
+    },
+    "tomb_f3_lap1": {
+      "file": "sheets/tomb_f3_lap1.png",
+      "boss": false,
+      "exampleFloor": 74
+    },
+    "tomb_f4_lap1": {
+      "file": "sheets/tomb_f4_lap1.png",
+      "boss": false,
+      "exampleFloor": 75
+    },
+    "tomb_f5_lap1": {
+      "file": "sheets/tomb_f5_lap1.png",
+      "boss": false,
+      "exampleFloor": 76
+    },
+    "tomb_f6_lap1": {
+      "file": "sheets/tomb_f6_lap1.png",
+      "boss": false,
+      "exampleFloor": 77
+    },
+    "tomb_f7_lap1": {
+      "file": "sheets/tomb_f7_lap1.png",
+      "boss": false,
+      "exampleFloor": 78
+    },
+    "tomb_f8_lap1": {
+      "file": "sheets/tomb_f8_lap1.png",
+      "boss": false,
+      "exampleFloor": 79
+    },
+    "tomb_f9_lap1": {
+      "file": "sheets/tomb_f9_lap1.png",
+      "boss": true,
+      "exampleFloor": 80
+    },
+    "lava_f0_lap0": {
+      "file": "sheets/lava_f0_lap0.png",
+      "boss": false,
+      "exampleFloor": 31
+    },
+    "lava_f1_lap0": {
+      "file": "sheets/lava_f1_lap0.png",
+      "boss": false,
+      "exampleFloor": 32
+    },
+    "lava_f2_lap0": {
+      "file": "sheets/lava_f2_lap0.png",
+      "boss": false,
+      "exampleFloor": 33
+    },
+    "lava_f3_lap0": {
+      "file": "sheets/lava_f3_lap0.png",
+      "boss": false,
+      "exampleFloor": 34
+    },
+    "lava_f4_lap0": {
+      "file": "sheets/lava_f4_lap0.png",
+      "boss": false,
+      "exampleFloor": 35
+    },
+    "lava_f5_lap0": {
+      "file": "sheets/lava_f5_lap0.png",
+      "boss": false,
+      "exampleFloor": 36
+    },
+    "lava_f6_lap0": {
+      "file": "sheets/lava_f6_lap0.png",
+      "boss": false,
+      "exampleFloor": 37
+    },
+    "lava_f7_lap0": {
+      "file": "sheets/lava_f7_lap0.png",
+      "boss": false,
+      "exampleFloor": 38
+    },
+    "lava_f8_lap0": {
+      "file": "sheets/lava_f8_lap0.png",
+      "boss": false,
+      "exampleFloor": 39
+    },
+    "lava_f9_lap0": {
+      "file": "sheets/lava_f9_lap0.png",
+      "boss": true,
+      "exampleFloor": 40
+    },
+    "lava_f0_lap1": {
+      "file": "sheets/lava_f0_lap1.png",
+      "boss": false,
+      "exampleFloor": 81
+    },
+    "lava_f1_lap1": {
+      "file": "sheets/lava_f1_lap1.png",
+      "boss": false,
+      "exampleFloor": 82
+    },
+    "lava_f2_lap1": {
+      "file": "sheets/lava_f2_lap1.png",
+      "boss": false,
+      "exampleFloor": 83
+    },
+    "lava_f3_lap1": {
+      "file": "sheets/lava_f3_lap1.png",
+      "boss": false,
+      "exampleFloor": 84
+    },
+    "lava_f4_lap1": {
+      "file": "sheets/lava_f4_lap1.png",
+      "boss": false,
+      "exampleFloor": 85
+    },
+    "lava_f5_lap1": {
+      "file": "sheets/lava_f5_lap1.png",
+      "boss": false,
+      "exampleFloor": 86
+    },
+    "lava_f6_lap1": {
+      "file": "sheets/lava_f6_lap1.png",
+      "boss": false,
+      "exampleFloor": 87
+    },
+    "lava_f7_lap1": {
+      "file": "sheets/lava_f7_lap1.png",
+      "boss": false,
+      "exampleFloor": 88
+    },
+    "lava_f8_lap1": {
+      "file": "sheets/lava_f8_lap1.png",
+      "boss": false,
+      "exampleFloor": 89
+    },
+    "lava_f9_lap1": {
+      "file": "sheets/lava_f9_lap1.png",
+      "boss": true,
+      "exampleFloor": 90
+    },
+    "abyss_f0_lap0": {
+      "file": "sheets/abyss_f0_lap0.png",
+      "boss": false,
+      "exampleFloor": 41
+    },
+    "abyss_f1_lap0": {
+      "file": "sheets/abyss_f1_lap0.png",
+      "boss": false,
+      "exampleFloor": 42
+    },
+    "abyss_f2_lap0": {
+      "file": "sheets/abyss_f2_lap0.png",
+      "boss": false,
+      "exampleFloor": 43
+    },
+    "abyss_f3_lap0": {
+      "file": "sheets/abyss_f3_lap0.png",
+      "boss": false,
+      "exampleFloor": 44
+    },
+    "abyss_f4_lap0": {
+      "file": "sheets/abyss_f4_lap0.png",
+      "boss": false,
+      "exampleFloor": 45
+    },
+    "abyss_f5_lap0": {
+      "file": "sheets/abyss_f5_lap0.png",
+      "boss": false,
+      "exampleFloor": 46
+    },
+    "abyss_f6_lap0": {
+      "file": "sheets/abyss_f6_lap0.png",
+      "boss": false,
+      "exampleFloor": 47
+    },
+    "abyss_f7_lap0": {
+      "file": "sheets/abyss_f7_lap0.png",
+      "boss": false,
+      "exampleFloor": 48
+    },
+    "abyss_f8_lap0": {
+      "file": "sheets/abyss_f8_lap0.png",
+      "boss": false,
+      "exampleFloor": 49
+    },
+    "abyss_f9_lap0": {
+      "file": "sheets/abyss_f9_lap0.png",
+      "boss": true,
+      "exampleFloor": 50
+    },
+    "abyss_f0_lap1": {
+      "file": "sheets/abyss_f0_lap1.png",
+      "boss": false,
+      "exampleFloor": 91
+    },
+    "abyss_f1_lap1": {
+      "file": "sheets/abyss_f1_lap1.png",
+      "boss": false,
+      "exampleFloor": 92
+    },
+    "abyss_f2_lap1": {
+      "file": "sheets/abyss_f2_lap1.png",
+      "boss": false,
+      "exampleFloor": 93
+    },
+    "abyss_f3_lap1": {
+      "file": "sheets/abyss_f3_lap1.png",
+      "boss": false,
+      "exampleFloor": 94
+    },
+    "abyss_f4_lap1": {
+      "file": "sheets/abyss_f4_lap1.png",
+      "boss": false,
+      "exampleFloor": 95
+    },
+    "abyss_f5_lap1": {
+      "file": "sheets/abyss_f5_lap1.png",
+      "boss": false,
+      "exampleFloor": 96
+    },
+    "abyss_f6_lap1": {
+      "file": "sheets/abyss_f6_lap1.png",
+      "boss": false,
+      "exampleFloor": 97
+    },
+    "abyss_f7_lap1": {
+      "file": "sheets/abyss_f7_lap1.png",
+      "boss": false,
+      "exampleFloor": 98
+    },
+    "abyss_f8_lap1": {
+      "file": "sheets/abyss_f8_lap1.png",
+      "boss": false,
+      "exampleFloor": 99
+    },
+    "abyss_f9_lap1": {
+      "file": "sheets/abyss_f9_lap1.png",
+      "boss": true,
+      "exampleFloor": 100
+    }
+  },
+  "plinths": {
+    "temple_red": {
+      "file": "plinths/temple_red.png"
+    },
+    "temple_blue": {
+      "file": "plinths/temple_blue.png"
+    },
+    "temple_yellow": {
+      "file": "plinths/temple_yellow.png"
+    },
+    "temple_green": {
+      "file": "plinths/temple_green.png"
+    },
+    "temple_purple": {
+      "file": "plinths/temple_purple.png"
+    },
+    "crypt_red": {
+      "file": "plinths/crypt_red.png"
+    },
+    "crypt_blue": {
+      "file": "plinths/crypt_blue.png"
+    },
+    "crypt_yellow": {
+      "file": "plinths/crypt_yellow.png"
+    },
+    "crypt_green": {
+      "file": "plinths/crypt_green.png"
+    },
+    "crypt_purple": {
+      "file": "plinths/crypt_purple.png"
+    },
+    "tomb_red": {
+      "file": "plinths/tomb_red.png"
+    },
+    "tomb_blue": {
+      "file": "plinths/tomb_blue.png"
+    },
+    "tomb_yellow": {
+      "file": "plinths/tomb_yellow.png"
+    },
+    "tomb_green": {
+      "file": "plinths/tomb_green.png"
+    },
+    "tomb_purple": {
+      "file": "plinths/tomb_purple.png"
+    },
+    "lava_red": {
+      "file": "plinths/lava_red.png"
+    },
+    "lava_blue": {
+      "file": "plinths/lava_blue.png"
+    },
+    "lava_yellow": {
+      "file": "plinths/lava_yellow.png"
+    },
+    "lava_green": {
+      "file": "plinths/lava_green.png"
+    },
+    "lava_purple": {
+      "file": "plinths/lava_purple.png"
+    },
+    "abyss_red": {
+      "file": "plinths/abyss_red.png"
+    },
+    "abyss_blue": {
+      "file": "plinths/abyss_blue.png"
+    },
+    "abyss_yellow": {
+      "file": "plinths/abyss_yellow.png"
+    },
+    "abyss_green": {
+      "file": "plinths/abyss_green.png"
+    },
+    "abyss_purple": {
+      "file": "plinths/abyss_purple.png"
+    }
+  }
+}
