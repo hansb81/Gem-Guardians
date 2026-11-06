@@ -1,0 +1,407 @@
+{
+  "version": 3,
+  "_doc": "젬 기술 전투 이펙트 v3 (docs/skills.md v3). 모든 이펙트는 적 배율(enemy displayScale=2), imageSmoothingEnabled=false, 알파 0/255. 석상 위·석상→적 연출 없음. mask=true 시트는 로드 시 tintSheet()로 5색 캐시.",
+  "drawScale": 2,
+  "tint": {
+    "maskColors": [
+      "#221c2b",
+      "#3b3347",
+      "#655a74",
+      "#e8dcc0"
+    ],
+    "ramps": {
+      "red": [
+        "#3a0814",
+        "#741426",
+        "#b82a3c",
+        "#ec6a6a"
+      ],
+      "blue": [
+        "#0c1838",
+        "#1c3a76",
+        "#386cbc",
+        "#8cc4ee"
+      ],
+      "yellow": [
+        "#3a2808",
+        "#7a5212",
+        "#c28a20",
+        "#f2d264"
+      ],
+      "green": [
+        "#0c2814",
+        "#1c5228",
+        "#3a8a3c",
+        "#9cd872"
+      ],
+      "purple": [
+        "#220e38",
+        "#48206e",
+        "#7a3cae",
+        "#c48ce6"
+      ]
+    }
+  },
+  "anims": {
+    "spike_red": {
+      "sheet": "sheets/spike_red.png",
+      "frames": 6,
+      "frameW": 32,
+      "frameH": 32,
+      "frameMs": [
+        50,
+        50,
+        70,
+        90,
+        80,
+        100
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "촉 위치 (22,22)이 적 몸통 중심에 오게 그림 (= 프레임 중심을 적 중심에서 (-12,-12)). 프레임 2(완전히 꿰뚫음)에 피해+넉백. 왼쪽 위에서 오른쪽 아래로."
+    },
+    "spike_blue": {
+      "sheet": "sheets/spike_blue.png",
+      "frames": 6,
+      "frameW": 32,
+      "frameH": 32,
+      "frameMs": [
+        50,
+        50,
+        70,
+        90,
+        80,
+        100
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "촉 위치 (22,22)이 적 몸통 중심에 오게 그림 (= 프레임 중심을 적 중심에서 (-12,-12)). 프레임 2(완전히 꿰뚫음)에 피해+넉백. 왼쪽 위에서 오른쪽 아래로."
+    },
+    "spike_yellow": {
+      "sheet": "sheets/spike_yellow.png",
+      "frames": 6,
+      "frameW": 32,
+      "frameH": 32,
+      "frameMs": [
+        50,
+        50,
+        70,
+        90,
+        80,
+        100
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "촉 위치 (22,22)이 적 몸통 중심에 오게 그림 (= 프레임 중심을 적 중심에서 (-12,-12)). 프레임 2(완전히 꿰뚫음)에 피해+넉백. 왼쪽 위에서 오른쪽 아래로."
+    },
+    "spike_green": {
+      "sheet": "sheets/spike_green.png",
+      "frames": 6,
+      "frameW": 32,
+      "frameH": 32,
+      "frameMs": [
+        50,
+        50,
+        70,
+        90,
+        80,
+        100
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "촉 위치 (22,22)이 적 몸통 중심에 오게 그림 (= 프레임 중심을 적 중심에서 (-12,-12)). 프레임 2(완전히 꿰뚫음)에 피해+넉백. 왼쪽 위에서 오른쪽 아래로."
+    },
+    "spike_purple": {
+      "sheet": "sheets/spike_purple.png",
+      "frames": 6,
+      "frameW": 32,
+      "frameH": 32,
+      "frameMs": [
+        50,
+        50,
+        70,
+        90,
+        80,
+        100
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "촉 위치 (22,22)이 적 몸통 중심에 오게 그림 (= 프레임 중심을 적 중심에서 (-12,-12)). 프레임 2(완전히 꿰뚫음)에 피해+넉백. 왼쪽 위에서 오른쪽 아래로."
+    },
+    "meteor_red": {
+      "sheet": "sheets/meteor_red.png",
+      "frames": 10,
+      "frameW": 96,
+      "frameH": 80,
+      "frameMs": [
+        70,
+        60,
+        50,
+        40,
+        50,
+        80,
+        90,
+        110,
+        140,
+        160
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "96x80. 수직 낙하 4f(가속) → 착탄 프레임 4에 광역 피해(반경 40 네이티브 = 화면 80px). 착탄에 화면 흔들림(코드) 권장."
+    },
+    "meteor_blue": {
+      "sheet": "sheets/meteor_blue.png",
+      "frames": 10,
+      "frameW": 96,
+      "frameH": 80,
+      "frameMs": [
+        70,
+        60,
+        50,
+        40,
+        50,
+        80,
+        90,
+        110,
+        140,
+        160
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "96x80. 수직 낙하 4f(가속) → 착탄 프레임 4에 광역 피해(반경 40 네이티브 = 화면 80px). 착탄에 화면 흔들림(코드) 권장."
+    },
+    "meteor_yellow": {
+      "sheet": "sheets/meteor_yellow.png",
+      "frames": 9,
+      "frameW": 96,
+      "frameH": 80,
+      "frameMs": [
+        50,
+        50,
+        60,
+        60,
+        60,
+        80,
+        90,
+        110,
+        130
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "96x80. 낙하체 없음. 프레임 1에 큰 번개 3줄기 + 바닥 번쩍(광역 피해), 이후 전기 충격파 링."
+    },
+    "meteor_purple": {
+      "sheet": "sheets/meteor_purple.png",
+      "frames": 10,
+      "frameW": 96,
+      "frameH": 80,
+      "frameMs": [
+        60,
+        70,
+        80,
+        100,
+        140,
+        140,
+        120,
+        100,
+        90,
+        80
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "96x80. 낙하 없음. 독구름이 크게 번짐(프레임 3에 광역 피해 + 독), 머물다 디더로 사라짐."
+    },
+    "meteor_green": {
+      "sheet": "sheets/meteor_green.png",
+      "frames": 10,
+      "frameW": 96,
+      "frameH": 80,
+      "frameMs": [
+        50,
+        60,
+        70,
+        110,
+        120,
+        120,
+        90,
+        80,
+        70,
+        80
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "96x80. 낙하 없음. 가시덩굴 7줄기가 솟아(프레임 3에 광역 피해) 휘감고 사라짐."
+    },
+    "light_pillar": {
+      "sheet": "sheets/light_pillar.png",
+      "frames": 8,
+      "frameW": 24,
+      "frameH": 64,
+      "frameMs": [
+        50,
+        50,
+        60,
+        100,
+        100,
+        80,
+        80,
+        100
+      ],
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "무지개x무지개. 적마다 발 위치에 (앞에서부터 80ms 간격). 프레임 2(바닥 도달)에 피해 + 5색 효과."
+    },
+    "hit": {
+      "sheet": "sheets/hit.png",
+      "frames": 3,
+      "frameW": 16,
+      "frameH": 16,
+      "frameMs": [
+        50,
+        60,
+        80
+      ],
+      "anchor": "center",
+      "mask": true,
+      "loop": false,
+      "note": "명중 번쩍(마스크). 영혼 불꽃 도착·빛기둥 타격·궁극기. tintSheet()로 5색."
+    },
+    "fx_splash": {
+      "sheet": "sheets/fx_splash.png",
+      "frames": 4,
+      "frameW": 24,
+      "frameH": 24,
+      "frameMs": [
+        50,
+        70,
+        90,
+        110
+      ],
+      "anchor": "center",
+      "mask": false,
+      "loop": false,
+      "note": "레드 색 효과: 직격 적 중심. 반경 12 네이티브(화면 24px) 안 다른 적 40% 피해."
+    },
+    "status_icons": {
+      "sheet": "sheets/status_icons.png",
+      "frames": 5,
+      "frameW": 8,
+      "frameH": 8,
+      "frameMs": 0,
+      "anchor": "bottom-center",
+      "mask": false,
+      "loop": false,
+      "note": "[0 감속, 1 독, 2 경직, 3 표식x1, 4 표식x2]. 적 HP 바 위 가로 나열(2배). 애니 없음."
+    },
+    "gem_mini": {
+      "sheet": "sheets/gem_mini.png",
+      "frames": 1,
+      "frameW": 7,
+      "frameH": 7,
+      "frameMs": 0,
+      "anchor": "top-left",
+      "mask": true,
+      "loop": false,
+      "note": "보스 면역·약점 잼 아이콘(마스크, 틴트). 위에 boss_icons 겹침."
+    },
+    "boss_icons": {
+      "sheet": "sheets/boss_icons.png",
+      "frames": 2,
+      "frameW": 9,
+      "frameH": 9,
+      "frameMs": 0,
+      "anchor": "top-left",
+      "mask": false,
+      "loop": false,
+      "note": "[0 면역(빨간 금지), 1 약점(노란 ↑)]. gem_mini를 (1,1)에, 아이콘을 (0,0)에 겹쳐 그림."
+    }
+  },
+  "reuse": {
+    "box_soul_{color}": "assets/effects/sheets/box_soul_{color}.png 16x16 4f loop → 박스 영혼 불꽃(유도탄), 2배로",
+    "pixelBolt": "src/render/effects/pixelBolt.js (필요 시 옐로우 궁극기)",
+    "particlePool": "src/render/effects/particlePool.js → 궤적·독 방울·감속 결정·경직 불꽃"
+  },
+  "skills": {
+    "line": {
+      "anim": "spike_{color}",
+      "hitFrame": 2,
+      "knockback": 0.05,
+      "knockbackMs": 120,
+      "note": "가로·세로 라인 잼 공통 = 가시. 가장 앞 적 1마리. 촉(22,22)이 적 몸통 중심에 오게 프레임 중심을 (-12,-12)*scale 오프셋. 프레임 2에 피해 ×2.5 + 넉백(progress −0.05, knockbackImmune 제외). 라인 2개 동시면 두 번째는 그 다음 앞 적."
+    },
+    "bomb": {
+      "anim": "meteor_{color}",
+      "hitFrame": {
+        "red": 4,
+        "blue": 4,
+        "yellow": 1,
+        "purple": 3,
+        "green": 3
+      },
+      "radius": 0.27,
+      "shakeMs": 160,
+      "note": "적이 가장 많이 모인 지점(반경 안 적 수 최대)의 발 위치에 bottom-center. hitFrame에 반경 안 전부 피해 ×2.0 + 색 효과. 레드·블루·옐로우는 화면 흔들림. radius = 전투 길 폭 대비(≈ 40 네이티브 px)."
+    },
+    "box": {
+      "soul": "box_soul_{color}",
+      "hit": "hit",
+      "count": 2,
+      "speedPxPerSec": 140,
+      "curve": 0.3,
+      "note": "HP 가장 높은 2마리. 영혼 불꽃은 전투 영역 가장자리(위/아래/오른쪽) 랜덤 지점에서 출발해 유도 비행(매 프레임 속도 벡터를 목표 방향으로 curve 보간). 궤적 2px 파티클 320ms. 도착(거리<8px) 시 hit + 피해 ×1.5."
+    },
+    "color": {
+      "hit": "hit",
+      "flashMs": 180,
+      "note": "무지개 1개: 전투 영역 fillRect(ramp[3]) alpha 0.5→0 180ms + 모든 적 hit(고른 색) + 피해 ×1.0 + 그 색 효과. 마법진 없음."
+    },
+    "color_color": {
+      "anim": "light_pillar",
+      "hitFrame": 2,
+      "staggerMs": 80,
+      "flashMs": 180,
+      "note": "무지개x무지개 = 대폭발. 적마다 발 위치에 light_pillar(bottom-center), 앞에서부터 staggerMs 간격. 프레임 2에 피해 ×2.0 + 다섯 색 효과 전부(보스 면역 색 제외). 첫 기둥 바닥 도달 때 뼈색 화면 번쩍."
+    }
+  },
+  "colorEffects": {
+    "red": {
+      "anim": "fx_splash"
+    },
+    "blue": {
+      "icon": 0,
+      "particles": "발밑 1px ramp[3] 결정 2개/초 위로 400ms"
+    },
+    "purple": {
+      "icon": 1,
+      "particles": "몸통 2px ramp[2] 방울 3개/초 500ms, 틱마다 작은 피해 숫자"
+    },
+    "yellow": {
+      "icon": 2,
+      "particles": "머리 위 1px ramp[3] 불꽃 4개 반지름 6px 공전, 걷기 애니 정지"
+    },
+    "green": {
+      "icon": [
+        3,
+        4
+      ],
+      "particles": "표식 붙는 순간 hit(초록) 1회"
+    },
+    "_doc": "적 스프라이트는 틴트하지 않는다. 아이콘은 HP 바 위 2px, 가로 나열, 2배."
+  },
+  "bossIcons": {
+    "gem": "gem_mini",
+    "overlay": "boss_icons",
+    "placement": "보스 이름 옆 + 등장 배너. 면역: gem_mini(그 색)+boss_icons 0, 약점: +1. 효과가 막히면 피해 숫자 폰트로 \"면역\"."
+  }
+}
