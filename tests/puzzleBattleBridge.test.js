@@ -24,8 +24,10 @@ function makeFakeBattleState() {
   return {
     status: 'active',
     calls: [],
-    applyGemClear(color, count, cascadeIndex) {
-      this.calls.push({ color, count, cascadeIndex });
+    skills: [], // 특수 잼 기술 발동(count 0 + specialType) - 기본 사격 calls와 따로 기록.
+    applyGemClear(color, count, cascadeIndex, isSpecial, specialType, chosenColor) {
+      if (specialType) this.skills.push({ color, count, specialType, chosenColor: chosenColor ?? null });
+      else this.calls.push({ color, count, cascadeIndex });
     },
   };
 }
@@ -118,6 +120,8 @@ test('컬러 잼(COLORLESS) 자신은 집계되지 않지만, 같이 지워지�
 
   assert.equal(fake.calls.length, 1, '중복 호출 없이 한 번만 집계돼야 한다');
   assert.deepEqual(fake.calls[0], { color: GEM_TYPES[3].id, count: 4, cascadeIndex: 1 });
+  // 무지개 발동 = 궁극기 1번, 고른 색 = 스왑한 잼의 색.
+  assert.deepEqual(fake.skills, [{ color: GEM_TYPES[3].id, count: 0, specialType: 'color', chosenColor: GEM_TYPES[3].id }]);
   assert.ok(!board.grid.includes(EMPTY));
 });
 

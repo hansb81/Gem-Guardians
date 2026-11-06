@@ -1,0 +1,24 @@
+{
+  "_doc": "젬 기술 v3 (docs/skills.md). radius/knockback = 전투 길 길이(progress) 대비 비율. 시간 단위 초. unlocked = 상점 해금 전까지 전부 true(끄면 그 효과/기술만 빠짐).",
+  "colorEffects": {
+    "red":    { "type": "splash", "ratio": 0.4, "radius": 0.12 },
+    "blue":   { "type": "slow", "mul": 0.7, "duration": 2.0 },
+    "purple": { "type": "poison", "ratio": 0.5, "duration": 3.0, "tickSec": 0.5, "maxStacks": 3, "ignoreDef": true },
+    "yellow": { "type": "stun", "duration": 0.4, "cooldown": 2.0, "stopsWallAttack": true },
+    "green":  { "type": "mark", "perStack": 0.10, "maxStacks": 2, "stackCooldown": 2.0, "duration": 4.0 }
+  },
+  "specialSkills": {
+    "line":   { "type": "spike", "mul": 2.5, "knockback": 0.05, "target": "front" },
+    "bomb":   { "type": "meteor", "mul": 2.0, "radius": 0.27, "target": "densest" },
+    "box":    { "type": "homing", "count": 2, "mul": 1.5, "target": "highestHp" },
+    "color":  { "type": "ultimate", "mul": 1.0, "target": "all" },
+    "color_color": { "type": "ultimate", "mul": 2.0, "target": "all", "colors": "all" }
+  },
+  "ultimateEffects": { "_doc": "궁극기·대폭발의 강화판 색 효과. 레드 범위 없음(전원 직격), 블루 아래 값, 퍼플 독 최대 중첩 즉시, 그린 표식 최대 중첩 즉시, 옐로우 경직 보스 제외", "slowMul": 0.5, "slowDuration": 3.0 },
+  "specialGemToSkill": { "line_h": "line", "line_v": "line", "bomb": "bomb", "box": "box", "color": "color", "color_color": "color_color" },
+  "bossRules": { "slowEffectMul": 0.5, "stunDurationMul": 0.5, "weaknessMul": 1.3 },
+  "unlocked": {
+    "colorEffects": { "red": true, "blue": true, "purple": true, "yellow": true, "green": true },
+    "specialSkills": { "line": true, "bomb": true, "box": true, "color": true, "color_color": true }
+  }
+}

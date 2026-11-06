@@ -210,7 +210,12 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [],
+   "weak": [
+    "red"
+   ],
+   "knockbackImmune": false
   },
   "goblin": {
    "name": "고블린",
@@ -317,7 +322,14 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [
+    "yellow"
+   ],
+   "weak": [
+    "purple"
+   ],
+   "knockbackImmune": true
   },
   "gnoll_scout": {
    "name": "놀 정찰병",
@@ -377,7 +389,14 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [
+    "green"
+   ],
+   "weak": [
+    "yellow"
+   ],
+   "knockbackImmune": false
   },
   "masked_orc": {
    "name": "가면 오크",
@@ -452,7 +471,14 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [
+    "blue"
+   ],
+   "weak": [
+    "green"
+   ],
+   "knockbackImmune": true
   },
   "skelet": {
    "name": "해골",
@@ -557,7 +583,14 @@
      2,
      3
     ]
-   }
+   },
+   "immune": [
+    "purple"
+   ],
+   "weak": [
+    "yellow"
+   ],
+   "knockbackImmune": true
   },
   "fairy": {
    "name": "타락 요정",
@@ -617,7 +650,14 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [
+    "yellow"
+   ],
+   "weak": [
+    "red"
+   ],
+   "knockbackImmune": true
   },
   "elf_m": {
    "name": "엘프 척후병",
@@ -722,7 +762,14 @@
      3,
      4
     ]
-   }
+   },
+   "immune": [
+    "blue"
+   ],
+   "weak": [
+    "purple"
+   ],
+   "knockbackImmune": false
   },
   "knight_m": {
    "name": "타락 기사",
@@ -859,7 +906,14 @@
      5,
      6
     ]
-   }
+   },
+   "immune": [
+    "purple"
+   ],
+   "weak": [
+    "yellow"
+   ],
+   "knockbackImmune": true
   },
   "fat_cleric": {
    "name": "살찐 사제",
@@ -919,7 +973,14 @@
      2,
      3
     ]
-   }
+   },
+   "immune": [
+    "green"
+   ],
+   "weak": [
+    "red"
+   ],
+   "knockbackImmune": false
   },
   "chort": {
    "name": "초트",
@@ -964,7 +1025,15 @@
      2,
      3
     ]
-   }
+   },
+   "immune": [
+    "red",
+    "yellow"
+   ],
+   "weak": [
+    "blue"
+   ],
+   "knockbackImmune": true
   }
  },
  "chapters": [

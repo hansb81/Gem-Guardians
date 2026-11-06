@@ -71,4 +71,7 @@ test('resolveFloorSpawns: 소환 문자열을 이름/애니메이션이 붙은 �
   assert.equal(boss.rank, 'boss');
   assert.equal(boss.name, E.monsters.large_mushroom.name);
   assert.deepEqual(boss.anim, E.monsters.large_mushroom.anim);
+  // docs/skills.md 3장 거대 버섯: 면역 없음, 약점 레드. 일반 적은 기본값(빈 배열).
+  assert.deepEqual([boss.immune, boss.weak, boss.knockbackImmune], [[], ['red'], false]);
+  assert.deepEqual(resolved[0].immune, []);
 });

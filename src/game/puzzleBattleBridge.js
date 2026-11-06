@@ -47,6 +47,43 @@ export class PuzzleBattleBridge {
     this._prevClearingKeys = new Set();
   }
 
+  // 특수 잼 발동 = 전투 기술(docs/skills.md 2장). count 0으로 불러 기술만 발동한다 - 그 잼이
+  // 지운 칸들의 기본 사격은 아래 clearing 처리에서 그대로 나간다.
+  _cast(kind, direction, colorIndex, cascadeIndex, chosenIndex = null) {
+    const type = kind === 'line' ? (direction === 'vertical' ? 'line_v' : 'line_h') : kind;
+    const color = GEM_TYPES[colorIndex]?.id ?? null;
+    const chosen = chosenIndex == null ? null : GEM_TYPES[chosenIndex]?.id ?? null;
+    if (type === 'color') {
+      if (chosen) this.battleState.applyGemClear(chosen, 0, cascadeIndex, true, 'color', chosen);
+    } else if (color) {
+      this.battleState.applyGemClear(color, 0, cascadeIndex, true, type);
+    }
+  }
+
+  // 무지개는 고른 색(effect.color). 조합 변환으로 생긴 잼(fromTransform)과 박스+컬러가 대신
+  // 터뜨리는 칸(gemColor 없음)은 기술 없음 - 조합 기술은 맞바꾼 두 잼에서만 comboActivate로 나간다.
+  _castSpecialActivate(effect) {
+    if (effect.fromTransform) return;
+    if (effect.kind === 'color') this._cast('color', null, null, effect.cascadeIndex, effect.color);
+    else if (effect.gemColor != null) this._cast(effect.kind, effect.direction, effect.gemColor, effect.cascadeIndex);
+  }
+
+  // 조합: 무지개+무지개 = 대폭발 1번, 폭탄+폭탄 = 용암탄 1번. 그 밖은 두 잼이 각자 기술
+  // (라인+라인 = 가시 2, 박스+박스 = 영혼 불꽃 2x2, 라인+컬러 = 가시 1 + 궁극기 1). 무지개는
+  // 상대 잼의 색을 고른 색으로 쓴다.
+  _castCombo(effect) {
+    if (effect.comboKind === 'color_color') {
+      this.battleState.applyGemClear(null, 0, effect.cascadeIndex, true, 'color_color');
+      return;
+    }
+    const { specials, gemColors } = effect;
+    if (!specials) return;
+    const n = effect.comboKind === 'bomb_bomb' ? 1 : 2;
+    for (let i = 0; i < n; i++) {
+      this._cast(specials[i].kind, specials[i].direction, gemColors[i], effect.cascadeIndex, gemColors[1 - i]);
+    }
+  }
+
   update(gameState) {
     const { board, resolutions, effects } = gameState;
     const { cellStates, cols } = board;
@@ -55,8 +92,13 @@ export class PuzzleBattleBridge {
     // elapsedMs===0인(이번 틱에 막 생긴) 항목만 처리하면 중복 없이 정확히 한 번 반영된다
     // (comboChange/hint 등 다른 1회성 이펙트와 같은 소비 패턴).
     for (const effect of effects) {
-      if (effect.type === 'obstacleExpire' && effect.elapsedMs === 0) {
+      if (effect.elapsedMs !== 0) continue;
+      if (effect.type === 'obstacleExpire') {
         this.battleState.applyObstacleWallDamage(effect.wallDamagePct);
+      } else if (effect.type === 'specialActivate') {
+        this._castSpecialActivate(effect);
+      } else if (effect.type === 'comboActivate') {
+        this._castCombo(effect);
       }
     }
 

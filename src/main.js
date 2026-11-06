@@ -103,6 +103,7 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       attackIntervalSec: balanceData.enemies.attackInterval,
       effectDurationsMs: battleData.effectDurationsMs,
       summon: battleData.summon,
+      skills: battleData.skills,
     },
   });
   // 퍼즐에서 잼이 터질 때마다 그 위치 -> 같은 색 탑으로 날아가는 빛줄기를 renderer에 스폰.

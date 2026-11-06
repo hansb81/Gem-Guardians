@@ -6,6 +6,8 @@
     "enemyDie": 300,
     "enemyReachLine": 250,
     "wallDamaged": 250,
-    "summonLand": 150
+    "summonLand": 150,
+    "skillCast": 600,
+    "effectImmune": 400
   }
 }

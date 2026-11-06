@@ -247,6 +247,7 @@ export function resolveFloorSpawns(B, E, floor) {
   return floor.spawns.map((s) => {
     const stat = unitStats(B, E, floor, s);
     const m = E.monsters[stat.type];
-    return { ...stat, name: m.name, anim: m.anim };
+    // 색 면역·약점·넉백 면역(docs/skills.md 3장) - 지금은 보스만 데이터가 있고 나머지는 기본값.
+    return { ...stat, name: m.name, anim: m.anim, immune: m.immune ?? [], weak: m.weak ?? [], knockbackImmune: !!m.knockbackImmune };
   });
 }

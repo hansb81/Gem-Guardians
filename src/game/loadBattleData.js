@@ -25,11 +25,20 @@ async function fetchSummonConfig() {
   }
 }
 
+// config/skills.json(젬 기술 v3) - 없거나 실패하면 null이고 BattleState는 기술 없이 기존 사격만 한다.
+async function fetchSkillsConfig() {
+  try {
+    return await fetchJson('config/skills.json');
+  } catch {
+    return null;
+  }
+}
+
 export async function loadBattleData() {
   try {
     const battleJson = await fetchJson('src/config/battle.json');
-    const summon = await fetchSummonConfig();
-    return { effectDurationsMs: battleJson.effectDurationsMs, summon };
+    const [summon, skills] = await Promise.all([fetchSummonConfig(), fetchSkillsConfig()]);
+    return { effectDurationsMs: battleJson.effectDurationsMs, summon, skills };
   } catch {
     return null;
   }

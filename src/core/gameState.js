@@ -839,6 +839,9 @@ export class GameState {
       type: 'comboActivate',
       comboKind,
       position: ref,
+      // 스왑된 두 특수 잼({kind, direction})과 그 색 - 전투에서 각자 기술을 따로 발동한다.
+      specials: [specialA, specialB],
+      gemColors: [colorA, colorB],
       affected: [...plan.values()].map(({ row, col }) => ({ row, col })),
       cascadeIndex,
       durationMs: ANIMATION_DURATIONS_MS.comboActivate,
@@ -964,6 +967,7 @@ export class GameState {
       direction: null,
       position: boxCell,
       color: null,
+      gemColor: board.get(boxCell.row, boxCell.col), // 특수 잼 자신의 색 - 전투 기술 색(docs/skills.md).
       affected: [...plan.values()].map(({ row, col }) => ({ row, col })),
       cascadeIndex,
       durationMs: ANIMATION_DURATIONS_MS.specialActivate,
@@ -1165,7 +1169,7 @@ export class GameState {
 
       // 자기 효과를 "지금"(이 칸이 실제로 발동하는 시각의 보드 상태)으로 계산해 새 칸들을
       // 예약한 뒤, 이 칸 자신은 거리 0이므로 곧장 클리어로 커밋한다.
-      this._runSelfEffect(resolution, cell, cs.special, cs.cascadeIndex);
+      this._runSelfEffect(resolution, cell, cs.special, cs.cascadeIndex, cs.cause === 'transform');
       this._commitCellClear(resolution, cell, cs, cs.cascadeIndex);
     }
   }
@@ -1173,7 +1177,7 @@ export class GameState {
   // 칸 하나의 자기 효과(라인/폭탄/박스/컬러)를 "지금" 보드 상태로 계산해, 범위 안의 다른 칸들을
   // (자기 자신 제외) 각 종류의 거리/등장 순서 규칙으로 armed 예약한다. 범위 안에 또 다른
   // 발동 안 한 특수 잼이 있으면 _armCell이 자동으로 체인(§A3)으로 처리한다.
-  _runSelfEffect(resolution, cell, special, cascadeIndex) {
+  _runSelfEffect(resolution, cell, special, cascadeIndex, fromTransform = false) {
     const { board } = this;
     const { cells, color } = computeEffect(board, cell, special);
     this._damageObstacles(resolution, cells, cascadeIndex, 'specialEffect');
@@ -1188,6 +1192,8 @@ export class GameState {
       direction: special.direction ?? null,
       position: cell,
       color,
+      gemColor: board.get(cell.row, cell.col), // 특수 잼 자신의 색 - 전투 기술 색(docs/skills.md).
+      fromTransform, // 조합 변환으로 생긴 잼 - 전투 기술은 안 나간다(퍼즐 효과·기본 사격만).
       affected: displayCells,
       cascadeIndex,
       durationMs: ANIMATION_DURATIONS_MS.specialActivate,
