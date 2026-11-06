@@ -235,7 +235,7 @@ def unit_stats(B, E, floor, spawn):
     if rank == 'boss':
         return {
             'type': typ, 'rank': 'boss',
-            'hp': rnd(mul['hpBase'] * sc['hpMul']),
+            'hp': rnd(mul['hpBase'] * sc['hpMul'] * mul.get('hpMulByFloor', {}).get(str(floor['floor']), 1)),
             'def': sc['defAdd'] + mul['def'],
             'speed': (1.0 / mul['travelTime']) * sc['speedMul'],
             'wallDmg': rnd(mul['wallDmgBase'] * sc['wallDmgMul']),

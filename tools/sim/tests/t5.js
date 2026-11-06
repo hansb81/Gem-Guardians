@@ -105,6 +105,7 @@ export async function run(env) {
 
   // --- 방해요소 영향 / 색 편중 / 연쇄·특수 잼 빈도 / 보스 처치 비율 / 역할별 위험도 ---
   const roleTotals = {};
+  const roleTotalsByPlayer = {}; // player -> role -> 성벽 피해
   const colorTotals = Object.fromEntries(GEM_TYPES.map((g) => [g.id, 0]));
   let totalWallDmg = 0;
   let totalBombWallDmg = 0;
@@ -118,7 +119,11 @@ export async function run(env) {
 
     for (const r of onRuns) {
       if (r.swapCount > 0) onCellsPerSwap.push(r.stats.totalCellsCleared / r.swapCount);
-      for (const [role, dmg] of Object.entries(r.wallDamageByRole)) roleTotals[role] = (roleTotals[role] ?? 0) + dmg;
+      const byP = (roleTotalsByPlayer[player] ??= {});
+      for (const [role, dmg] of Object.entries(r.wallDamageByRole)) {
+        roleTotals[role] = (roleTotals[role] ?? 0) + dmg;
+        byP[role] = (byP[role] ?? 0) + dmg;
+      }
       for (const [color, n] of Object.entries(r.stats.colorCounts)) colorTotals[color] += n;
       totalWallDmg += Object.values(r.wallDamageByRole).reduce((s, v) => s + v, 0) + r.bombWallDamageTotal;
       totalBombWallDmg += r.bombWallDamageTotal;
@@ -149,17 +154,24 @@ export async function run(env) {
   const bossBeforeWallRatio = bossResults.length ? bossResults.filter(Boolean).length / bossResults.length : null;
   const colorTotalSum = Object.values(colorTotals).reduce((s, v) => s + v, 0) || 1;
   const colorRatioStr = GEM_TYPES.map((g) => `${g.id} ${((colorTotals[g.id] / colorTotalSum) * 100).toFixed(1)}%`).join(', ');
-  const roleTotalSum = Object.values(roleTotals).reduce((s, v) => s + v, 0) || 1;
-  const roleRatioStr = Object.entries(roleTotals)
-    .sort((a, b) => b[1] - a[1])
-    .map(([role, dmg]) => `${role} ${((dmg / roleTotalSum) * 100).toFixed(1)}%`)
-    .join(', ');
+  const roleRatio = (totals) => {
+    const sum = Object.values(totals).reduce((s, v) => s + v, 0) || 1;
+    return Object.entries(totals)
+      .sort((a, b) => b[1] - a[1])
+      .map(([role, dmg]) => `${role} ${((dmg / sum) * 100).toFixed(1)}%`)
+      .join(', ');
+  };
+  const roleRatioStr = roleRatio(roleTotals);
+  const roleRatioByPlayerStr = Object.entries(roleTotalsByPlayer)
+    .map(([p, t]) => `  - ${p}: ${roleRatio(t) || '-'}\n`)
+    .join('');
   const bombWallDmgPctOfTotal = totalWallDmg ? (totalBombWallDmg / totalWallDmg) * 100 : 0;
 
   summarySections.push(
     `## T5\n` +
       `- 방해요소 영향: 스왑당 지운 잼 켬=${avgOn?.toFixed(2) ?? '-'} 끔=${avgOff?.toFixed(2) ?? '-'} (효율 ${efficiencyDropPct != null ? efficiencyDropPct.toFixed(1) : '-'}% 감소), 시한폭탄 성벽 피해 비중 ${bombWallDmgPctOfTotal.toFixed(1)}%\n` +
-      `- 역할별 성벽 피해 비율: ${roleRatioStr || '-'}\n` +
+      `- 역할별 성벽 피해 비율(전체, Lv${LEVEL} 고정): ${roleRatioStr || '-'}\n` +
+      roleRatioByPlayerStr +
       `- 보스를 성벽 전에 잡는 비율: ${bossBeforeWallRatio != null ? (bossBeforeWallRatio * 100).toFixed(1) + '%' : '-'} (표본 ${bossResults.length})\n` +
       `- 색 비율: ${colorRatioStr}\n` +
       `- 스왑당 잼 ${avgOn?.toFixed(2) ?? '-'}, 평균 연쇄 ${avg(onRunsCascade(csvRows))?.toFixed(2) ?? '-'}`
@@ -172,10 +184,12 @@ export async function run(env) {
   // --- 민감도 ±10% ---
   // 성능: 'normal'/'fast'는 매 수마다 후보를 전부 복제+끝까지 돌려 채점한다(bot.js) - 민감도는
   // ±10%가 T1/T4를 얼마나 움직이는지 "방향과 크기"만 보면 되므로, 채점 없이 바로 고르는
-  // 'casual'(random)로 돌리고 maxFloorSeconds도 줄인다(한쪽이 거의 이기지도 지지도 않는 접전일
+  // 'worst'(random, 구 casual)로 돌리고 maxFloorSeconds도 줄인다(한쪽이 거의 이기지도 지지도 않는 접전일
   // 때 매 수 채점까지 겹치면 100층 진행 시뮬레이션 하나가 수 분까지 늘어질 수 있었다 - 느리면
   // "탐색만" 최적화하라는 지침에 따라 테스트 쪽 설정만 줄였다, 게임 규칙은 그대로).
-  const SENS_PLAYER = 'casual';
+  // 2026-11-05: casual(현 worst)은 보스 벽(10층 정지) 때문에 결과가 0이거나 노이즈라 normal로 바꿈.
+  // 일반층이 60~90초라 90초 상한이면 시간 초과로 지므로 상한도 150초로 올렸다.
+  const SENS_PLAYER = 'normal';
   const sensSeeds = Math.min(env.seeds, 2);
   // floorsData: null 이 핵심이다 - config/floors.json 캐시를 쓰면 getFloor()가 미리 만들어진
   // 층을 그대로 돌려줘서 hpGrowth/threatBudget/spawnInterval을 바꿔도 결과가 전부 0이 된다.
@@ -184,7 +198,7 @@ export async function run(env) {
   const sensEnv = {
     ...env,
     seeds: sensSeeds,
-    configs: { ...env.configs, floorsData: null, sim: { ...env.configs.sim, maxFloorSeconds: 90 } },
+    configs: { ...env.configs, floorsData: null, sim: { ...env.configs.sim, maxFloorSeconds: 150 } },
   };
 
   // self-check: 위 경로가 정말 "바뀐 값으로 층을 다시 만드는지" 확인한다(여기가 깨지면 민감도
@@ -197,7 +211,7 @@ export async function run(env) {
       throw new Error('T5 self-check 실패: balance 덮어쓰기가 genFloor에 반영되지 않는다');
     }
   }
-  // casual은 'random'이라 한 시드만 보면 들쭉날쭉하다 - sensSeeds만큼 평균낸다.
+  // 봇 선택에 무작위가 섞여 한 시드만 보면 들쭉날쭉하다 - sensSeeds만큼 평균낸다.
   const avgProgTime = (e) => avg(Array.from({ length: sensSeeds }, (_, i) => runOneProgression(e, SENS_PLAYER, 'even', i + 1).cumulativeTimeMin));
 
   const baselineFloor = climbMaxFloor(sensEnv, SENS_PLAYER, env.floorsRange.to);

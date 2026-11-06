@@ -29,7 +29,7 @@ export async function run(env) {
     // 계산하면 후반 층에서 "한 번에 수십 레벨"이 되어 기준(2~5)과 비교할 수 없다.
     const prog = runOneProgression(env, player, 'even', 1);
     const levelsByFloor = new Map(prog.retriesByFloor.map((r) => [r.floor, r.levelsAtEntry]));
-    // shortcut: 그 진행이 도달하지 못한 층은 마지막으로 알려진 레벨을 쓴다(casual처럼 중간에
+    // shortcut: 그 진행이 도달하지 못한 층은 마지막으로 알려진 레벨을 쓴다(worst처럼 중간에
     // 멈추는 경우 후반 구간 값이 과대평가된다), T4가 100층까지 안정적으로 가면 그때 제거.
     let lastKnownLevels = [1, 1, 1, 1, 1];
     for (let floor = env.floorsRange.from; floor <= env.floorsRange.to; floor++) {
@@ -110,7 +110,8 @@ export async function run(env) {
       levels?.toFixed(2) ?? '-',
     ]);
 
-    if (levels != null) {
+    const judged = sim.targets.levelsPerFirstClear.players?.includes(player) ?? !sim.players[player]?.referenceOnly;
+    if (levels != null && judged) {
       if (levels > hi) outOfRange.push(`너무 쉬움: T3 ${key} 첫 클리어 레벨 ${levels.toFixed(2)} > 기준 ${hi}`);
       else if (levels < lo) outOfRange.push(`너무 어려움: T3 ${key} 첫 클리어 레벨 ${levels.toFixed(2)} < 기준 ${lo}`);
     }

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // 밸런스 시뮬레이터 CLI. 사용: node tools/sim/run.js --test=T1|T2|T3|T4|T5|all
-// --player=fast|normal|casual|all --seeds=N --floors=1-100 --mod=<sim.json modifiers 키>
+// --player=fast|normal|slow|worst|all --seeds=N --floors=1-100 --mod=<sim.json modifiers 키>
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { loadConfigs, parseArgs } from './config.js';
 import { writeCsv, todayTag } from './report.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
+const DEFAULT_REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
 
 const TEST_MODULES = {
   t1: () => import('./tests/t1.js'),
@@ -22,6 +22,8 @@ async function main() {
   const args = parseArgs(process.argv.slice(2), configs.sim);
   const env = { configs, players: args.players, seeds: args.seeds, floorsRange: args.floors, mods: args.mods };
   const dateTag = todayTag();
+  // --out=<dir>: 단계별 비교 실행 결과를 reports/sim/summary.md와 섞지 않으려고 따로 저장.
+  const REPORT_DIR = args.out ?? DEFAULT_REPORT_DIR;
 
   console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to}`);
 

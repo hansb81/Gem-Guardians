@@ -2,9 +2,10 @@
   "_doc": "밸런스 시뮬레이션 설정 (tools/sim 전용, 게임은 안 씀). docs/simulation.md 참고.",
   "seeds": 5,
   "dt": 0.05,
+  "bossFailFarmRuns": 2,
   "maxFloorSeconds": 600,
   "players": {
-    "_doc": "봇 플레이어 성향. secondsPerMove = 스왑 1번에 걸리는 시간(연쇄 연출 포함). pick = 수 고르는 방법: best(지우는 잼 최대 + 특수 잼 우선), top3(상위 3수 중 무작위), random(가능한 수 중 무작위). bombAware = 시한폭탄 붙은 잼을 우선 지우려 함",
+    "_doc": "봇 플레이어 성향. secondsPerMove = 스왑 1번에 걸리는 시간(연쇄 연출 포함). pick = 수 고르는 방법: best(지우는 잼 최대 + 특수 잼 우선), top3(상위 3수 중 무작위), random(가능한 수 중 무작위). bombAware = 시한폭탄 붙은 잼을 우선 지우려 함. referenceOnly = 판정 기준에서 빼고 리포트에 참고용으로만 표시",
     "fast": {
       "secondsPerMove": 1.8,
       "pick": "best",
@@ -15,10 +16,18 @@
       "pick": "top3",
       "bombAware": true
     },
-    "casual": {
+    "slow": {
+      "secondsPerMove": 3.5,
+      "pick": "top3",
+      "bombAware": true,
+      "_doc": "실제 느린 플레이어 기준(v8)"
+    },
+    "worst": {
       "secondsPerMove": 3.5,
       "pick": "random",
-      "bombAware": false
+      "bombAware": false,
+      "referenceOnly": true,
+      "_doc": "무작위 수(최악 기준, 구 casual). 실제 느린 플레이어보다 훨씬 약해 밸런스 기준으로 쓰지 않는다."
     }
   },
   "levelStrategies": {
@@ -43,7 +52,7 @@
       {
         "type": "burst",
         "every": 5,
-        "mul": 3.0,
+        "mul": 3,
         "trigger": "allShots",
         "_doc": "5발마다 3배"
       }
@@ -51,7 +60,7 @@
     "specialx2": [
       {
         "type": "dmgMul",
-        "value": 2.0,
+        "value": 2,
         "trigger": "special"
       }
     ],
@@ -105,7 +114,7 @@
     ]
   },
   "targets": {
-    "_doc": "판정 기준 v6(2026-11-05). 보스층(10의 배수)이 관문. 레벨 없이 normal은 첫/둘째 보스(9~19층)에서 막히는 게 목표.",
+    "_doc": "판정 기준 v8(2026-11-06). 보스층(10의 배수)이 관문. normal: 보스 재도전 0.8~2, 보스 needPower(T2, 기대 레벨, 10~100 전 보스층) 0.75~0.95, 100층 130~200분, 층 시간 55~80초, 첫 클리어 레벨 2~5. slow: 100층까지 멈추지 않음, 보스 재도전 1~4, 100층 200~350분. T3 첫 클리어 레벨은 normal/slow만 판정. worst(무작위)는 참고용(판정 제외).",
     "noLevelReach": {
       "fast": [
         15,
@@ -114,19 +123,19 @@
       "normal": [
         9,
         19
-      ],
-      "casual": [
-        5,
-        12
       ]
     },
     "floorSeconds": [
-      45,
-      150
+      55,
+      80
     ],
     "wallLeftOnClear": {
       "tooEasyAbove": 0.95,
       "tooHardBelow": 0.15
+    },
+    "bossWallMinutesByPlayer": {
+      "worst": 40,
+      "_doc": "worst는 참고용이라 판정에는 안 쓰지만 리포트의 벽 표시에 쓴다"
     },
     "retriesPerFloor": {
       "normal": [
@@ -134,15 +143,29 @@
         1
       ],
       "boss": [
-        1,
-        3
+        0.8,
+        2
       ],
-      "wallFlag": 4
+      "wallFlag": 4,
+      "bossWallFlagByPlayer": {
+        "slow": 6,
+        "_doc": "slow 보스 목표가 재도전 1~4라 4회는 정상 범위. 목표 상한을 넘어 6회 이상일 때만 벽으로 표시"
+      },
+      "bossByPlayer": {
+        "slow": [
+          1,
+          4
+        ]
+      }
     },
     "minutesTo100": {
       "normal": [
-        120,
-        300
+        130,
+        200
+      ],
+      "slow": [
+        200,
+        350
       ]
     },
     "levelsPerFirstClear": {
@@ -150,6 +173,16 @@
       "range": [
         2,
         5
+      ],
+      "players": [
+        "normal",
+        "slow"
+      ]
+    },
+    "bossNeedPower": {
+      "normal": [
+        0.75,
+        0.95
       ]
     }
   }

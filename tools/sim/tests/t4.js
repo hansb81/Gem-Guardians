@@ -1,12 +1,13 @@
 // T4. 레벨업에 필요한 재화(진행 시뮬레이션, docs/simulation.md 2장). 1층부터 실제 진행처럼:
 // 도전 -> 실패하면 가진 골드로 레벨업(even/byUse/none) -> 재도전 -> 클리어하면 다음 층.
+// 보스층에서 지면(none 제외) 이전 층을 sim.bossFailFarmRuns회(기본 1) 반복 사냥(다시 깬 클리어 보상 x replayClearMul)한 뒤 재도전.
 // 100층 또는 "같은 층 10연패"(안전판 - wallFlag=4보다 훨씬 큰 완전 정지 기준)까지.
 import { runFloorAttempt } from '../floorSim.js';
 import { clearBonus, towerLevelCost, maxTowerLevelUps } from '../../../src/core/economy/economy.js';
 import { GEM_TYPES } from '../../../src/config/gems.js';
 import { mdTable } from '../report.js';
 
-const HARD_STOP_RETRIES = 10;
+const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
 
 export function spendGold(strategy, balance, towerLevels, gold, colorUsage) {
   if (strategy === 'none' || gold <= 0) return { towerLevels, gold };
@@ -50,7 +51,12 @@ export function runOneProgression(env, player, strategy, seed) {
   const colorUsage = Object.fromEntries(GEM_TYPES.map((g) => [g.id, 0]));
   let floor = 1;
   let attempt = 0;
+  let farmRuns = 0;
   let cumulativeTimeSec = 0;
+  let floorTimeSec = 0; // 지금 층에 쓴 시간(도전 + 반복 사냥)
+  const bossWallMin = sim.targets.bossWallMinutesByPlayer?.[player];
+  const rpf = sim.targets.retriesPerFloor;
+  const wallFlagAt = (tag) => (tag === 'boss' ? rpf.bossWallFlagByPlayer?.[player] : null) ?? rpf.wallFlag;
   const retriesByFloor = []; // { floor, tag, retries }
   const wallFloors = [];
   let stoppedEarly = false;
@@ -59,31 +65,36 @@ export function runOneProgression(env, player, strategy, seed) {
     const avgLevel = towerLevels.reduce((s, l) => s + l, 0) / towerLevels.length;
     const levelsAtEntry = towerLevels.slice();
     attempt++;
-    const result = runFloorAttempt({
-      balance,
-      enemies,
-      obstacles,
-      obstaclesEnabled: true,
-      floorsData,
-      floorNumber: floor,
-      towerLevels,
-      playerCfg,
-      modifierHooks: null,
-      seed: seed * 100000 + attempt,
-      dt: sim.dt,
-      maxFloorSeconds: sim.maxFloorSeconds,
-      summon,
-      battleEffects,
-    });
+    const attemptFloor = (floorNumber, attemptSeed) =>
+      runFloorAttempt({
+        balance,
+        enemies,
+        obstacles,
+        obstaclesEnabled: true,
+        floorsData,
+        floorNumber,
+        towerLevels,
+        playerCfg,
+        modifierHooks: null,
+        seed: attemptSeed,
+        dt: sim.dt,
+        maxFloorSeconds: sim.maxFloorSeconds,
+        summon,
+        battleEffects,
+      });
+    const result = attemptFloor(floor, seed * 100000 + attempt);
     cumulativeTimeSec += result.timeSec;
+    floorTimeSec += result.timeSec;
     for (const [color, count] of Object.entries(result.stats.colorCounts)) colorUsage[color] += count;
 
     if (result.status === 'cleared') {
       gold += result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
-      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
-      if (attempt - 1 >= 4) wallFloors.push(floor);
+      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
+      const isWall = result.tag === 'boss' && bossWallMin != null ? floorTimeSec / 60 > bossWallMin : attempt - 1 >= wallFlagAt(result.tag);
+      if (isWall) wallFloors.push(floor);
       floor += 1;
       attempt = 0;
+      floorTimeSec = 0;
     } else {
       gold += result.killGoldTotal;
       if (attempt >= HARD_STOP_RETRIES) {
@@ -92,13 +103,24 @@ export function runOneProgression(env, player, strategy, seed) {
         stoppedEarly = true;
         break;
       }
-      const spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
+      let spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
       towerLevels = spent.towerLevels;
       gold = spent.gold;
+      const farmCount = result.tag === 'boss' && strategy !== 'none' && floor > 1 ? sim.bossFailFarmRuns ?? 1 : 0;
+      for (let k = 0; k < farmCount; k++) {
+        farmRuns++;
+        const farm = attemptFloor(floor - 1, seed * 100000 + 50000 + attempt * 10 + k);
+        cumulativeTimeSec += farm.timeSec;
+        floorTimeSec += farm.timeSec;
+        gold += farm.killGoldTotal + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
+        spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
+        towerLevels = spent.towerLevels;
+        gold = spent.gold;
+      }
     }
   }
 
-  return { reachedFloor: floor - 1, cumulativeTimeMin: cumulativeTimeSec / 60, retriesByFloor, wallFloors, stoppedEarly, stoppedFloor: stoppedEarly ? floor : null };
+  return { reachedFloor: floor - 1, farmRuns, cumulativeTimeMin: cumulativeTimeSec / 60, retriesByFloor, wallFloors, stoppedEarly, stoppedFloor: stoppedEarly ? floor : null };
 }
 
 function avg(arr) {
@@ -139,26 +161,32 @@ export async function run(env) {
         cumulativeMinutesTo100: avg(times)?.toFixed(1) ?? '',
         stoppedFloorAvg: avgStopped?.toFixed(1) ?? '',
         stoppedFloors: stoppedFloors.join(';'),
+        avgFarmRuns: avg(runs.map((r) => r.farmRuns))?.toFixed(1) ?? '',
         wallFloors: wallFloors.join(';'),
       });
       summaryRows.push([
-        `${player}:${strategy}`,
+        `${player}:${strategy}${sim.players[player]?.referenceOnly ? ' (참고)' : ''}`,
         avg(normalRetries)?.toFixed(2) ?? '-',
+        avg(bossRetries)?.toFixed(2) ?? '-',
         avgLevelAtEntry?.toFixed(1) ?? '-',
         avg(times)?.toFixed(1) ?? '-',
+        avg(runs.map((r) => r.farmRuns))?.toFixed(1) ?? '-',
         avgStopped != null ? `${avgStopped.toFixed(1)} (${stoppedFloors.join('/')})` : '-',
         wallFloors.join(', ') || '-',
       ]);
       for (const rec of allRetries.filter((r) => r.tag === 'boss')) {
         const key = `${player}|${strategy}|${rec.floor}`;
-        const agg = bossAgg.get(key) ?? { retries: [], wallLeft: [] };
+        const agg = bossAgg.get(key) ?? { retries: [], wallLeft: [], minutes: [] };
         agg.retries.push(rec.retries);
         agg.wallLeft.push(rec.wallLeftPct);
+        if (rec.floorMinutes != null) agg.minutes.push(rec.floorMinutes);
         bossAgg.set(key, agg);
       }
 
+      // referenceOnly(worst) 플레이어는 리포트에만 남기고 판정하지 않는다.
+      if (sim.players[player]?.referenceOnly) continue;
       const [nLo, nHi] = sim.targets.retriesPerFloor.normal;
-      const [bLo, bHi] = sim.targets.retriesPerFloor.boss;
+      const [bLo, bHi] = sim.targets.retriesPerFloor.bossByPlayer?.[player] ?? sim.targets.retriesPerFloor.boss;
       const nAvg = avg(normalRetries);
       const bAvg = avg(bossRetries);
       if (nAvg != null && (nAvg < nLo || nAvg > nHi)) {
@@ -167,21 +195,25 @@ export async function run(env) {
       if (bAvg != null && (bAvg < bLo || bAvg > bHi)) {
         outOfRange.push(`벽: T4 ${player}:${strategy} 보스층 평균 재도전 ${bAvg.toFixed(2)} (기준 ${bLo}~${bHi})`);
       }
-      if (player === 'normal' && strategy !== 'none') {
-        const [mLo, mHi] = sim.targets.minutesTo100.normal;
+      const minutesRange = sim.targets.minutesTo100[player];
+      if (minutesRange && strategy !== 'none') {
+        const [mLo, mHi] = minutesRange;
         const time = avg(times);
         if (time != null && (time < mLo || time > mHi) && avg(reachedFloors) >= env.floorsRange.to) {
-          outOfRange.push(`기준 벗어남: T4 normal:${strategy} 100층 누적 시간 ${time.toFixed(1)}분 (기준 ${mLo}~${mHi})`);
+          outOfRange.push(`기준 벗어남: T4 ${player}:${strategy} 100층 누적 시간 ${time.toFixed(1)}분 (기준 ${mLo}~${mHi})`);
+        }
+        if (stoppedFloors.length > 0) {
+          outOfRange.push(`벽: T4 ${player}:${strategy} ${stoppedFloors.join('/')}층에서 멈춤(${HARD_STOP_RETRIES}연패)`);
         }
       }
-      if (wallFloors.length > 0) outOfRange.push(`벽: T4 ${player}:${strategy} 층 ${wallFloors.join(', ')}에서 재도전 4회 이상`);
+      if (wallFloors.length > 0) outOfRange.push(`벽: T4 ${player}:${strategy} 층 ${wallFloors.join(', ')}에서 재도전 ${sim.targets.retriesPerFloor.wallFlag}회 이상(보스층 기준이 따로 있으면 ${sim.targets.retriesPerFloor.bossWallFlagByPlayer?.[player] ?? '-'}회, 보스 시간 기준이 있으면 보스층은 ${sim.targets.bossWallMinutesByPlayer?.[player] ?? '-'}분 초과)`);
     }
   }
 
   const bossRows = [...bossAgg]
     .map(([key, agg]) => {
       const [player, strategy, floor] = key.split('|');
-      return { player, strategy, floor: Number(floor), retries: avg(agg.retries), wallLeft: avg(agg.wallLeft) };
+      return { player, strategy, floor: Number(floor), retries: avg(agg.retries), wallLeft: avg(agg.wallLeft), minutes: avg(agg.minutes) };
     })
     .sort((a, b) => a.player.localeCompare(b.player) || a.strategy.localeCompare(b.strategy) || a.floor - b.floor);
   for (const r of bossRows) {
@@ -196,10 +228,10 @@ export async function run(env) {
   }
 
   const summaryMd =
-    `## T4 진행\n${mdTable(['구간', '평균 도전 횟수', '진입 시 평균 Lv', '누적 시간(분)', '멈춘 층', '벽 층'], summaryRows)}` +
+    `## T4 진행\n${mdTable(['구간', '일반층 재도전', '보스층 재도전', '진입 시 평균 Lv', '누적 시간(분)', '반복 사냥(회)', '멈춘 층', '벽 층'], summaryRows)}` +
     `\n\n### T4 보스층만\n${mdTable(
-      ['플레이어:전략', '층', '평균 재도전', '남은 성벽'],
-      bossRows.map((r) => [`${r.player}:${r.strategy}`, r.floor, r.retries.toFixed(2), `${(r.wallLeft * 100).toFixed(0)}%`])
+      ['플레이어:전략', '층', '평균 재도전', '남은 성벽', '층에 쓴 시간(분)'],
+      bossRows.map((r) => [`${r.player}:${r.strategy}`, r.floor, r.retries.toFixed(2), `${(r.wallLeft * 100).toFixed(0)}%`, r.minutes?.toFixed(1) ?? '-'])
     )}`;
   return { csvRows, summaryMd, outOfRange };
 }

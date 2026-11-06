@@ -1,22 +1,35 @@
 // T2. 잼 특수 효과 미리 시험(docs/simulation.md 2장). "최대 도달 층"은 보스 관문 때문에 거의
-// 움직이지 않아 쓸모없으므로, 고정 보스층 10/30/50/70/90에서 그 층의 기대 탑 레벨로 탑을
+// 움직이지 않아 쓸모없으므로, 보스층 전체(10~100)에서 그 층의 기대 탑 레벨로 탑을
 // 고정하고 "그 층을 이길 수 있는 최소 공격력 배율"(needPower)을 이분 탐색한다.
 // 등가 전력 배율 = needPower(효과 없음) / needPower(효과 켬). 1.4면 "공격력 x1.4와 같음".
 // 훅이 실제로 몇 번 발동했는지(onShot/onHit/추가 피해)도 같이 기록한다 - 0이면 배선 버그.
 import { runFloorAttempt } from '../floorSim.js';
 import { buildModifierHooks, resolveModifierList } from '../modifiers.js';
 import { mdTable } from '../report.js';
+import { spendGold } from './t4.js';
+import { getFloor, unitStats } from '../../../src/core/balance/floorGen.js';
+import { clearBonus } from '../../../src/core/economy/economy.js';
 
-// floors.csv의 expTowerLevel(= 각 층을 한 번씩 깨고 가장 싼 탑부터 올렸을 때의 평균 탑 레벨,
-// docs/balance.md §8)을 반올림한 값. shortcut: 이 5개 층만 쓰므로 CSV를 읽지 않고 적어둔다,
-// 층을 바꾸거나 경제를 고치면 floors.csv에서 다시 가져온다.
-const PROBE_FLOORS = [
-  { floor: 10, expTowerLevel: 7 },
-  { floor: 30, expTowerLevel: 20 },
-  { floor: 50, expTowerLevel: 33 },
-  { floor: 70, expTowerLevel: 45 },
-  { floor: 90, expTowerLevel: 57 },
-];
+const PROBE_FLOOR_NUMBERS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+// expTowerLevel(docs/balance.md §8, tools/sim_floors.py와 같은 정의) = 1층부터 각 층을 한 번씩
+// 깨고 그 층 첫 클리어 골드를 가장 싼 탑부터 썼을 때, 그 층에 들어갈 때의 평균 탑 레벨(반올림).
+// 경제 수치를 바꾸면 자동으로 따라오도록 floors.json에서 매번 계산한다.
+export function expectedTowerLevels(configs, floorNumbers) {
+  const { balance, enemies, obstacles, floorsData } = configs;
+  let levels = [1, 1, 1, 1, 1];
+  let gold = 0;
+  const out = new Map();
+  const last = Math.max(...floorNumbers);
+  for (let f = 1; f <= last; f++) {
+    ({ towerLevels: levels, gold } = spendGold('even', balance, levels, gold, {}));
+    out.set(f, Math.round(levels.reduce((s, l) => s + l, 0) / levels.length));
+    const floor = getFloor(balance, enemies, obstacles, floorsData, f);
+    const kill = floor.spawns.reduce((s, sp) => s + unitStats(balance, enemies, floor, sp).gold, 0);
+    gold += kill + clearBonus(balance, kill, true);
+  }
+  return floorNumbers.map((floor) => ({ floor, expTowerLevel: out.get(floor) }));
+}
 
 const POWER_LO = 0.05;
 const POWER_HI = 3; // docs/balance.md 9장 needPower 최대 1.14 - 3이면 충분한 상한.
@@ -76,7 +89,7 @@ export async function run(env) {
   const modNames = (env.mods ?? Object.keys(sim.modifiers)).filter(
     (name) => name !== 'none' && name !== '_doc' && sim.modifiers[name]
   );
-  const probes = PROBE_FLOORS.filter((p) => p.floor >= env.floorsRange.from && p.floor <= env.floorsRange.to);
+  const probes = expectedTowerLevels(env.configs, PROBE_FLOOR_NUMBERS).filter((p) => p.floor >= env.floorsRange.from && p.floor <= env.floorsRange.to);
   const csvRows = [];
   const outOfRange = [];
   const equivByMod = new Map(); // modifier -> floor -> 배율 문자열
@@ -87,6 +100,10 @@ export async function run(env) {
     for (const { floor, expTowerLevel } of probes) {
       const base = needPower(env, player, floor, expTowerLevel, [], null);
       baseByFloor.set(`${player}|${floor}`, base);
+      const needRange = sim.targets.bossNeedPower?.[player];
+      if (needRange && (base == null || base < needRange[0] || base > needRange[1])) {
+        outOfRange.push(`${base != null && base < needRange[0] ? '너무 쉬움' : '너무 어려움'}: T2 ${player} ${floor}층 보스 needPower ${base ?? '>3'} (기준 ${needRange[0]}~${needRange[1]})`);
+      }
       csvRows.push({ player, floor, expTowerLevel, modifier: 'none', needPower: base ?? '>3', equivalentPowerMul: 1, hookOnShot: '', hookOnHit: '', hookExtraDamage: '' });
 
       for (const name of modNames) {

@@ -220,7 +220,7 @@ export function unitStats(B, E, floor, spawn) {
     return {
       type,
       rank: 'boss',
-      hp: rnd(mul.hpBase * sc.hpMul),
+      hp: rnd(mul.hpBase * sc.hpMul * (mul.hpMulByFloor?.[floor.floor] ?? 1)),
       def: sc.defAdd + mul.def,
       speed: (1 / mul.travelTime) * sc.speedMul,
       wallDmg: rnd(mul.wallDmgBase * sc.wallDmgMul),

@@ -45,7 +45,7 @@ function parseFloorRange(str, fallback) {
 }
 
 const ALL_TESTS = ['t1', 't2', 't3', 't4', 't5'];
-const ALL_PLAYERS = ['fast', 'normal', 'casual'];
+const ALL_PLAYERS = ['fast', 'normal', 'slow', 'worst'];
 
 // --key=value 형태만 지원한다(이 도구 전용 CLI라 그 이상은 필요 없음).
 export function parseArgs(argv, sim) {
@@ -65,7 +65,7 @@ export function parseArgs(argv, sim) {
   const floors = parseFloorRange(args.floors, { from: 1, to: 100 });
   const mods = args.mod ? parseList(args.mod) : null; // null이면 테스트별 기본값을 쓴다.
 
-  return { tests, players, seeds, floors, mods };
+  return { tests, players, seeds, floors, mods, out: args.out };
 }
 
 export { ALL_TESTS, ALL_PLAYERS };
