@@ -20,5 +20,19 @@ export function setupSfxTestPanel() {
     }
   }
 
+  // BGM - 곡별 재생/정지 토글 + 루프 이음새 확인(끝 6초 전으로 이동).
+  audio.bgmTracks().then((tracks) => {
+    for (const key of Object.keys(tracks)) {
+      const btn = document.createElement('button');
+      btn.textContent = `▶■ ${key}`;
+      btn.onclick = () => (audio._bgmKey === key ? audio.stopBgm() : audio.playBgm(key));
+      panel.append(btn);
+    }
+    const seek = document.createElement('button');
+    seek.textContent = 'BGM 끝 6초 전';
+    seek.onclick = () => audio.seekBgmFromEnd(6);
+    panel.append(seek);
+  });
+
   document.body.appendChild(panel);
 }

@@ -63,7 +63,7 @@ test('층 클리어 -> 다음 층: 웨이브를 모두 전멸시키면 status가
 
   // 현재 층의 모든 웨이브를 즉시 전멸시킨다(스폰 즉시 체력을 깎아 죽인다) - 실제 플레이와
   // 같은 "마지막 웨이브까지 전멸 -> cleared" 경로를 그대로 탄다.
-  for (let guard = 0; guard < 1000 && controller.battleState.status === 'active'; guard++) {
+  for (let guard = 0; guard < 1500 && controller.battleState.status === 'active'; guard++) {
     controller.battleState.update(0.05);
     for (const enemy of controller.battleState.enemies) {
       if (enemy.state === 'alive') controller.battleState.resolveTowerAttack({ targetEnemyId: enemy.id, damage: enemy.currentHealth + 1, towerId: controller.battleState.towers[0].id });

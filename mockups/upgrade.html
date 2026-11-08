@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 타워 강화 시안 (보관함 크기)</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../assets/fonts/Galmuri11.woff2') format('woff2'); font-display: swap; }
+  :root {
+    /* HUD_CONFIG 기준 */
+    --outline: #0d0a10; --bg1: #221c2b; --bg2: #3b3347; --bg3: #655a74; --bone: #e8dcc0;
+    --dim: #a59cb2; --title: #f2d264; --gold: #c28a20; --green-l: #9cd872; --blue-l: #8cc4ee; --red-l: #ec6a6a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000; color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 11px; -webkit-font-smoothing: none; }
+  body { padding: 20px; display: flex; gap: 24px; justify-content: center; flex-wrap: wrap; }
+  img { image-rendering: pixelated; }
+  .ol { text-shadow: 1px 0 var(--outline), -1px 0 var(--outline), 0 1px var(--outline), 0 -1px var(--outline); }
+
+  /* ---- 검토 메모(게임 UI 아님) ---- */
+  .notes { max-width: 340px; background: var(--bg1); border: 2px solid var(--outline); padding: 14px 16px; line-height: 1.7; align-self: flex-start; }
+  .notes h1 { color: var(--title); font-size: 11px; margin-bottom: 8px; }
+  .notes h2 { color: var(--title); font-size: 11px; margin: 12px 0 4px; }
+  .notes li { margin-left: 14px; }
+  .notes .tag { color: var(--blue-l); }
+
+  /* ---- 폰 프레임 390x844, 게임 화면(전투 + 보드)을 어둡게 깐 위 ---- */
+  .phone { width: 390px; height: 844px; position: relative; overflow: hidden; background: #15121c; border: 2px solid #333; }
+  .phone::before { content: ''; position: absolute; inset: 0; background: rgba(13, 10, 16, 0.78); }
+
+  /* 카드 = 보관함과 같은 자리(540x960 기준 좌우 12, 위 96, 아래 48 -> 390x844에서 9 / 69 / 35)
+     틀 = ui/menu/popup_menu.png 9-slice 16 x2 (보관함과 같은 틀) */
+  .popup { position: absolute; left: 9px; right: 9px; top: 69px; bottom: 35px; border: 32px solid transparent;
+    border-image: url('../assets/ui/menu/popup_menu.png') 16 fill / 32px stretch; padding: 0 2px; display: flex; flex-direction: column; gap: 4px; }
+  .emblem { position: absolute; left: 50%; top: -56px; transform: translateX(-50%); width: 48px; }
+  .title { text-align: center; font-size: 22px; color: var(--title); margin-top: -8px; margin-bottom: 4px; }
+  .close { position: absolute; right: -14px; top: -18px; width: 32px; }
+
+  /* 탭 = upgrade/tab_on·off 9-slice [6,6,6,3] x2 */
+  .tabs { display: flex; gap: 4px; }
+  .tab { flex: 1; height: 28px; display: grid; place-items: center; font-weight: bold; color: var(--dim);
+    border: 12px solid transparent; border-width: 12px 12px 6px; border-image: url('../assets/ui/upgrade/tab_off.png') 6 6 3 6 fill / 12px 12px 6px stretch; }
+  .tab.on { border-image-source: url('../assets/ui/upgrade/tab_on.png'); color: var(--bone); }
+
+  /* 구역 = ui/menu/inset 9-slice 4 x2 */
+  .sec { border: 8px solid transparent; border-image: url('../assets/ui/menu/inset.png') 4 fill / 8px stretch; padding: 0 2px 2px; }
+  .sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+  .sec-h b { color: var(--title); font-size: 12px; }
+  .sec-h span { color: var(--dim); }
+  .list { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .rows { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+
+  /* 탑 줄 = upgrade/card(_selected) 9-slice 4 x2 */
+  .row { flex: 1; min-height: 64px; display: flex; align-items: center; gap: 6px; padding: 0 2px; cursor: pointer;
+    border: 8px solid transparent; border-image: url('../assets/ui/upgrade/card.png') 4 fill / 8px stretch; }
+  .row.sel { border-image-source: url('../assets/ui/upgrade/card_selected.png'); }
+  .tower { width: 32px; height: 40px; flex: none; }
+  .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+  .l1 { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .lv { font-size: 11px; font-weight: bold; color: var(--title); padding: 0 4px; height: 18px; display: grid; place-items: center;
+    border: 6px solid transparent; border-width: 4px 6px; border-image: url('../assets/ui/panels/box_floor.png') 5 fill / 4px 6px stretch; }
+  .nm { font-size: 12px; font-weight: bold; color: var(--bone); overflow: hidden; text-overflow: ellipsis; }
+  .atk { color: var(--dim); }
+  .atk b { color: var(--green-l); }
+  /* 버튼: 그림 32px, 터치는 줄 높이 전체(64px 이상) */
+  .btns { display: flex; gap: 4px; flex: none; }
+  .btn { height: 32px; display: flex; align-items: center; justify-content: center; gap: 3px; font-weight: bold; font-size: 12px; cursor: pointer;
+    border: 8px solid transparent; border-width: 8px 8px 10px; border-image: url('../assets/ui/buttons/btn_gold.png') 4 4 5 4 fill / 8px 8px 10px 8px stretch; color: var(--outline); min-width: 60px; }
+  .btn.off { border-image-source: url('../assets/ui/upgrade/btn_disabled.png'); color: var(--bg3); }
+  .btn.max { border-image-source: url('../assets/ui/buttons/btn_primary.png'); color: var(--bone); min-width: 46px; }
+  .btn.max.off { border-image-source: url('../assets/ui/upgrade/btn_disabled.png'); color: var(--bg3); }
+  .btn img { width: 16px; }
+
+  /* 아래 고정 패널(보관함 설명 패널 자리와 같은 높이 감) */
+  .foot { display: flex; align-items: center; gap: 10px; min-height: 64px; }
+  .foot .coin { width: 32px; }
+  .foot .gold { font-size: 22px; color: var(--title); }
+  .foot .txt { flex: 1; display: flex; flex-direction: column; gap: 4px; color: var(--dim); line-height: 1.5; }
+  .foot .txt b { color: var(--bone); font-weight: normal; }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <div class="popup">
+    <img class="emblem" src="../assets/ui/upgrade/emblem_upgrade.png" alt="">
+    <img class="close" src="../assets/ui/upgrade/btn_close.png" alt="닫기">
+    <div class="title ol">타워 강화</div>
+
+    <div class="tabs"><div class="tab on">레벨업</div><div class="tab">인벤토리</div></div>
+
+    <div class="sec list">
+      <div class="sec-h"><b>탑 5개</b><span>꾹 누르면 연속 강화</span></div>
+      <div class="rows" id="rows"></div>
+    </div>
+
+    <div class="sec foot">
+      <img class="coin" src="../assets/ui/icons/gold.png" alt="">
+      <div class="gold ol" id="gold"></div>
+      <div class="txt"><span>보유 골드</span><b id="sel"></b></div>
+    </div>
+  </div>
+</div>
+
+<div class="notes">
+  <h1>타워 강화 시안 — 보관함과 같은 크기</h1>
+  보관함(시안 B, 실제 화면)과 같은 자리·틀·구역 상자·글자색을 쓴다. 새 그림 없음, 전부 정수 배율(2배).
+  <h2>지금과 달라지는 점</h2>
+  <ul>
+    <li><b>크기</b>: 최대 340x480 → 보관함과 같은 화면 거의 전체(폰 390x844에서 372x740). 인벤토리 탭을 누르면 같은 크기의 보관함이 정확히 겹쳐 뜬다.</li>
+    <li><b>틀</b>: popups/popup_win → ui/menu/popup_menu(보관함과 같은 틀). 엠블럼은 강화 엠블럼 유지.</li>
+    <li><b>제목색</b>: 녹색(#9cd872) → 금색 #f2d264(다른 팝업 제목과 통일). <span class="tag">(결정 필요)</span></li>
+    <li><b>구역 상자</b>: 탑 목록과 아래 골드 칸을 inset 상자로 나눔. 제목 금색 + 오른쪽 보조 정보(꾹 누르면 연속 강화).</li>
+    <li><b>탑 줄</b>: 줄 높이 약 62 → 약 100px. 글자는 Galmuri11 11/12px로 고정(줄 높이에 따라 커지지 않게), 탑 그림 16x20 x2, Lv 판 box_floor.</li>
+    <li><b>강화 버튼</b>: 그림 32px 높이, 골드 아이콘 + 비용. 골드가 모자라면 btn_disabled. 터치는 버튼 둘레를 넓혀 44px 이상.</li>
+    <li><b>공격력</b>: "공격 10 → <b style="color:#9cd872">11</b>" - 다음 값만 녹색.</li>
+    <li><b>아래 패널</b>: 보유 골드를 크게(22px), 고른 탑 이름을 같이.</li>
+  </ul>
+  <h2>정할 것 <span class="tag">(결정 필요)</span></h2>
+  <ul>
+    <li>제목 녹색 유지 / 금색 통일.</li>
+    <li>아래 패널 내용(지금은 보유 골드 + 고른 탑).</li>
+    <li>줄을 누르면 그 탑 선택(card_selected) - 지금처럼 클리어 후 첫 탑이 선택된 채로 열림.</li>
+  </ul>
+  <h2>눌러 보기</h2>
+  강화·MAX를 누르면 레벨·골드가 바뀐다(가짜 데이터, 비용 = 레벨 x 20).
+</div>
+
+<script>
+// 시안용 가짜 데이터 - 이름은 config/balance.json tower.towers, 그림은 assets/towers.
+const T = [
+  ['red', '화염 수정탑'], ['blue', '서리 첨탑'], ['yellow', '뇌전탑'], ['green', '가시덩굴탑'], ['purple', '저주 오벨리스크'],
+].map(([c, n]) => ({ c, n, lv: 1 }));
+let gold = 120;
+let sel = 0;
+const cost = (t) => t.lv * 20;
+const atk = (lv) => 10 + (lv - 1) * 3;
+
+function render() {
+  document.getElementById('rows').innerHTML = T.map((t, i) => {
+    const ok = gold >= cost(t);
+    return `<div class="row ${sel === i ? 'sel' : ''}" data-i="${i}">
+      <img class="tower" src="../assets/towers/${t.c}.png" alt="">
+      <div class="info">
+        <div class="l1"><span class="nm ol">${t.n}</span></div>
+        <div class="l1"><span class="lv">Lv.${t.lv}</span><span class="atk">공격 ${atk(t.lv)}→<b>${atk(t.lv + 1)}</b></span></div>
+      </div>
+      <div class="btns">
+        <div class="btn ${ok ? '' : 'off'}" data-up="${i}"><img src="../assets/ui/upgrade/coin_small.png" alt="">${cost(t)}</div>
+        <div class="btn max ${ok ? '' : 'off'}" data-max="${i}">MAX</div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('gold').textContent = gold;
+  document.getElementById('sel').textContent = `선택: ${T[sel].n} Lv.${T[sel].lv}`;
+}
+
+document.body.addEventListener('click', (e) => {
+  const up = e.target.closest('[data-up]');
+  const mx = e.target.closest('[data-max]');
+  const row = e.target.closest('[data-i]');
+  if (up) {
+    const t = T[up.dataset.up];
+    if (gold >= cost(t)) { gold -= cost(t); t.lv += 1; }
+  } else if (mx) {
+    const t = T[mx.dataset.max];
+    while (gold >= cost(t)) { gold -= cost(t); t.lv += 1; }
+  }
+  if (row) sel = Number(row.dataset.i);
+  if (up || mx || row) render();
+});
+render();
+</script>
+</body>
+</html>

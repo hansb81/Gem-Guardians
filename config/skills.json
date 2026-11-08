@@ -1,7 +1,8 @@
 {
-  "_doc": "젬 기술 v3 (docs/skills.md). radius/knockback = 전투 길 길이(progress) 대비 비율. 시간 단위 초. unlocked = 상점 해금 전까지 전부 true(끄면 그 효과/기술만 빠짐).",
+  "_doc": "젬 기술 v3 (docs/skills.md). radius/knockback = 전투 길 길이(progress) 대비 비율. 시간 단위 초. unlocked = 상점 해금 전까지 전부 true(끄면 그 효과/기술만 빠짐). colorEffects.appliesTo = 'skills'(특수 잼 기술 피해에만, 기본값) | 'all'(기본 사격에도).",
   "colorEffects": {
-    "red":    { "type": "splash", "ratio": 0.4, "radius": 0.12 },
+    "appliesTo": "skills",
+    "red":   { "type": "splash", "ratio": 0.4, "radius": 0.12 },
     "blue":   { "type": "slow", "mul": 0.7, "duration": 2.0 },
     "purple": { "type": "poison", "ratio": 0.5, "duration": 3.0, "tickSec": 0.5, "maxStacks": 3, "ignoreDef": true },
     "yellow": { "type": "stun", "duration": 0.4, "cooldown": 2.0, "stopsWallAttack": true },

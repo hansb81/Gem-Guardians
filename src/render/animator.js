@@ -142,7 +142,7 @@ export class Animator {
   // gameState를 같이 넘기면 specialCreate 중인 칸을 idle 렌더링 대신 bounce 오버레이로
   // 대체한다(그 칸은 core가 이미 즉시 커밋해 cellStates가 idle이므로, 여기서 가려주지
   // 않으면 bounce 없이 그냥 조용히 나타나 보인다). specialTransform은 더 이상 여기서
-  // 가리지 않는다 - CanvasRenderer가 transform_{색} 스프라이트로 그린다(manifest.combo).
+  // 가리지 않는다 - CanvasRenderer가 연쇄 fx의 originGem으로 그린다(manifest.combo).
   getDisplayList(board, gameState, effectsConfig) {
     const { rows, cols, grid, specials, cellStates, attachments } = board;
     const hasAttachments = Array.isArray(attachments);

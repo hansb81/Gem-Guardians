@@ -43,6 +43,7 @@ export async function run(env) {
               towerLevels,
               playerCfg,
               modifierHooks: null,
+              ...env.skillArgsAt(floor),
               seed: s + 1,
               dt: sim.dt,
               maxFloorSeconds: sim.maxFloorSeconds,

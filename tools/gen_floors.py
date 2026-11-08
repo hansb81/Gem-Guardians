@@ -179,7 +179,27 @@ def gen_floor(B, E, O, f):
         if last and is_boss:
             units.append(chap['boss'] + '@boss')
         interval = max(fs['spawnInterval']['min'], fs['spawnInterval']['base'] + fs['spawnInterval']['perFloor'] * (f - 1))
-        waves.append({'interval': rdec(interval, 3), 'spawns': units})
+        interval = rdec(interval, 3)
+        # pack: pull later copies of the same monster forward (composition unchanged)
+        pk = fs.get('pack')
+        spawn_at = []
+        t = 0
+        i = 0
+        while i < len(units):
+            n = 1
+            if pk and f >= pk['fromFloor'] and '@' not in units[i] and types[units[i]]['role'] in pk['roles'] and rng() < pk['chance']:
+                want = pk['size'][0] + int(math.floor(rng() * (pk['size'][1] - pk['size'][0] + 1)))
+                j = i + 1
+                while j < len(units) and n < want:
+                    if units[j] == units[i]:
+                        units.insert(i + n, units.pop(j))
+                        n += 1
+                    j += 1
+            for k in range(n):
+                spawn_at.append(rdec(t, 3))
+                t += pk['gap'] if k < n - 1 else (interval * n * pk['afterMul'] if n > 1 else interval)
+            i += n
+        waves.append({'interval': interval, 'spawns': units, 'spawnAt': spawn_at})
 
     # obstacles
     S = O['schedule']
@@ -218,6 +238,7 @@ def gen_floor(B, E, O, f):
         'spawnInterval': waves[0]['interval'],
         'totalEnemies': len(waves[0]['spawns']),
         'spawns': waves[0]['spawns'],
+        'spawnAt': waves[0]['spawnAt'],
         'obstacles': obs,
     }
 
@@ -235,7 +256,7 @@ def unit_stats(B, E, floor, spawn):
     if rank == 'boss':
         return {
             'type': typ, 'rank': 'boss',
-            'hp': rnd(mul['hpBase'] * sc['hpMul'] * mul.get('hpMulByFloor', {}).get(str(floor['floor']), 1)),
+            'hp': rnd(mul['hpBase'] * sc['hpMul'] * mul.get('hpMulByFloor', {}).get(str(floor['floor']), 1) * B['scaling'].get('enemyHpMul', 1)),
             'def': sc['defAdd'] + mul['def'],
             'speed': (1.0 / mul['travelTime']) * sc['speedMul'],
             'wallDmg': rnd(mul['wallDmgBase'] * sc['wallDmgMul']),
@@ -243,7 +264,7 @@ def unit_stats(B, E, floor, spawn):
         }
     return {
         'type': typ, 'rank': rank or 'normal',
-        'hp': rnd(t['hp'] * sc['hpMul'] * mul['hp']),
+        'hp': rnd(t['hp'] * sc['hpMul'] * mul['hp'] * B['scaling'].get('enemyHpMul', 1)),
         'def': t['def'] + sc['defAdd'] + mul['def'],
         'speed': (1.0 / t['travelTime']) * sc['speedMul'] * mul['speed'],
         'wallDmg': rnd(t['wallDmg'] * sc['wallDmgMul'] * mul['wallDmg']),

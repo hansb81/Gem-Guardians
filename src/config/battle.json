@@ -8,6 +8,15 @@
     "wallDamaged": 250,
     "summonLand": 150,
     "skillCast": 600,
-    "effectImmune": 400
+    "effectImmune": 400,
+    "wallHealed": 400,
+    "enemiesFrozen": 300,
+    "enemiesUnfrozen": 300,
+    "wallShieldOn": 300,
+    "wallShieldOff": 300,
+    "atkBuffOn": 300,
+    "atkBuffOff": 300,
+    "wallRevived": 400,
+    "wallBlocked": 100
   }
 }

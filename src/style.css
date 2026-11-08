@@ -35,16 +35,3 @@ html, body {
   display: block;
   touch-action: none;
 }
-
-#loading-indicator {
-  position: fixed;
-  left: 50%;
-  bottom: 24px;
-  transform: translateX(-50%);
-  color: #e8e8e8;
-  font: 14px 'Galmuri11', 'Fusion Pixel', 'Noto Sans', sans-serif;
-  background: rgba(0, 0, 0, 0.5);
-  padding: 6px 12px;
-  border-radius: 6px;
-  pointer-events: none;
-}

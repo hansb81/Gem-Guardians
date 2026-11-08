@@ -3,30 +3,108 @@
 // §8 "저장: 최고 층, 현재 층, 골드, 탑 5개 레벨".
 import { storage } from '../platform/storage.js';
 import { towerLevelCost, maxTowerLevelUps } from '../core/economy/economy.js';
+import { normalizeShopSave } from '../core/shop/shop.js';
+import { migrateSave, defaultSkillLevels, SAVE_VERSION } from '../core/inventory/inventory.js';
+import { Inventory } from './inventory.js';
+import { normalizeRanking } from '../ranking/rankingSave.js';
+import { createRng } from '../core/rng.js';
 
-const STORAGE_KEY = 'gemGuardians.save.v1';
+// 키 v2: 상점(shop) 추가 때 올린 저장 키. 예전 키(v1)만 있으면 그걸 읽어 v2 키로 저장한다.
+// 저장 형식 버전(saveVersion)은 키와 별개 - 2 = 아이템·장착·예약·젬 스킬이 inv 묶음(docs/inventory.md 2장).
+const STORAGE_KEY = 'gemGuardians.save.v2';
+const LEGACY_KEYS = ['gemGuardians.save.v1'];
 const TOWER_COUNT = 5;
 
 function defaults() {
-  return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1) };
+  // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {daysLeft, claimedToday}}, freeClaimedDate, day, offers }
+  // (src/core/shop/shop.js defaultShopSave) - config/shop.json을 읽은 뒤 initShop이 채운다.
+  return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1), shop: null };
+}
+
+// 랭킹용 기기 id. 서버 단계에서는 서버가 준 id로 바뀐다(docs/ranking.md 13-2 players).
+function newPlayerId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  // shortcut: 비보안 컨텍스트(http LAN)에선 randomUUID가 없어 시각 씨앗 id - 서버 단계에서 서버 id로 교체
+  return `p-${Date.now().toString(36)}-${Math.floor(createRng(Date.now())() * 1e9).toString(36)}`;
 }
 
 class PlayerState {
   constructor() {
-    const saved = storage.load(STORAGE_KEY);
-    Object.assign(this, defaults(), saved ?? {});
+    let saved = storage.load(STORAGE_KEY);
+    for (const key of LEGACY_KEYS) saved ??= storage.load(key);
+    const { inv, saveVersion, ...rest } = migrateSave(saved, Math.floor(Date.now() / 1000)) ?? {};
+    Object.assign(this, defaults(), rest);
     if (!Array.isArray(this.towerLevels) || this.towerLevels.length !== TOWER_COUNT) {
       this.towerLevels = Array(TOWER_COUNT).fill(1);
     }
+    // 아이템·장착·예약·영구 보유는 전부 여기(src/game/inventory.js). 지갑은 this.gold/diamonds.
+    this.inventory = new Inventory(inv, { wallet: this, save: () => this.save() });
+    // 랭킹(docs/ranking.md 7-1) - 읽고 쓰는 곳은 src/ranking/rankingService.js(LocalRankingService) 하나.
+    this.ranking = normalizeRanking(this.ranking, { bestFloor: this.bestFloor, nowMs: Date.now() });
+    this.ranking.profile.playerId ||= newPlayerId();
   }
 
   save() {
     storage.save(STORAGE_KEY, {
+      saveVersion: SAVE_VERSION,
       gold: this.gold,
       diamonds: this.diamonds,
       floor: this.floor,
       bestFloor: this.bestFloor,
       towerLevels: this.towerLevels,
+      shop: this.shop,
+      inv: this.inventory.data,
+      ranking: this.ranking,
+    });
+  }
+
+  // 상점 저장 상태(config/shop.json) - 없는 키만 채운다. 젬 스킬 기본 레벨(색 1, 특수 기술 해금 전 0)도
+  // 없는 키만 inventory.perm.skills에 채운다. initItems와 같은 시점에 한 번.
+  initShop(shopConfig) {
+    this.shop = normalizeShopSave(this.shop, shopConfig);
+    const skills = this.inventory.data.perm.skills;
+    for (const [key, lv] of Object.entries(defaultSkillLevels(shopConfig.skills))) skills[key] ??= lv;
+    this.save();
+  }
+
+  // 임시 지급(docs/items.md - 상점 전 단계 값, docs/inventory.md 4·8장): unlockFloor 없는 아이템 중 txId
+  // 'start:{id}'를 아직 안 받은 것만 starterCount(없으면 starter.count)개 - 첫 실행이면 전부, config에 새 아이템이
+  // 생기면 그것만. 장착이 비어 있었으면(첫 실행) 기본 장착. unlockFloor가 있는 아이템(해제 부적)은 최고 층이 닿고
+  // 아직 한 번도 가진 적 없으면 txId 'unlock:{id}'로 지급 - 층이 오를 때마다 다시 부른다.
+  initItems(itemsConfig) {
+    const inv = this.inventory;
+    inv.setConfig(itemsConfig);
+    const { starter } = itemsConfig;
+    const countOf = (id) => itemsConfig.items[id].starterCount ?? starter.count;
+    const startIds = Object.keys(itemsConfig.items).filter((id) => (itemsConfig.items[id].unlockFloor ?? 1) <= 1);
+    inv.expandStartTx(startIds); // 'start' 한 줄 기록(인벤토리 A 저장) -> start:{id}
+    const newIds = startIds.filter((id) => !inv.data.grantedTx.includes(`start:${id}`));
+    if (newIds.length > 0) {
+      const fresh = inv.data.loadout.hotbar.every((id) => id == null);
+      inv.grant({ items: Object.fromEntries(newIds.map((id) => [id, countOf(id)])) }, { src: 'start', txId: newIds.map((id) => `start:${id}`) });
+      // 지급 때 빈 칸 자동 장착이 config 순서로 채웠으니 기본 장착으로 맞춘다(equip은 같은 아이템이면 자리 바꾸기).
+      if (fresh) starter.equipped.forEach((id, i) => inv.equip(i, id));
+    }
+    for (const [id, it] of Object.entries(itemsConfig.items)) {
+      if ((it.unlockFloor ?? 1) > 1 && this.isItemUnlocked(id) && !(id in inv.data.items)) {
+        inv.grant({ items: { [id]: countOf(id) } }, { src: 'floorUnlock', txId: `unlock:${id}` });
+      }
+    }
+  }
+
+  isItemUnlocked(id) {
+    return this.bestFloor >= (this.inventory.config?.items[id]?.unlockFloor ?? 1);
+  }
+
+  // 개발용 - 지금 상태를 v1 저장 형식(items/equipped/preFloor/shop.skillLv)으로 되돌려 저장. 다시 불러오면
+  // (새로고침) 생성자가 마이그레이션을 다시 돈다. grantedTx·log는 v1에 없으므로 사라진다.
+  devRevertSaveToV1() {
+    const { items, loadout, perm } = this.inventory.data;
+    const equipped = loadout.hotbar.slice(0, this.inventory.slotCount());
+    storage.save(STORAGE_KEY, {
+      gold: this.gold, diamonds: this.diamonds, floor: this.floor, bestFloor: this.bestFloor, towerLevels: this.towerLevels,
+      items: { ...items }, equipped, preFloor: { ...loadout.preFloor },
+      shop: this.shop && { ...this.shop, skillLv: { ...perm.skills } },
     });
   }
 

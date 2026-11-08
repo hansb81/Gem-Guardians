@@ -2,9 +2,12 @@ import { GameState } from './core/gameState.js';
 import { Animator } from './render/animator.js';
 import { CanvasRenderer } from './render/canvasRenderer.js';
 import { PointerInput } from './input/pointerInput.js';
-import { loadAssets } from './render/assetLoader.js';
+import { loadAssets, loadItemAssets } from './render/assetLoader.js';
+import { isNeighbor, itemTargetCells } from './render/itemBarRenderer.js';
 import { TitleScreen } from './render/titleScreen.js';
 import { MainMenuScreen } from './render/mainMenuScreen.js';
+import { ShopScreen } from './render/shopScreen.js';
+import { RewardPopup, rewardFromDelta } from './render/rewardPopup.js';
 import { loadBattleData } from './game/loadBattleData.js';
 import { loadBalanceData } from './game/loadBalanceData.js';
 import { PuzzleBattleBridge } from './game/puzzleBattleBridge.js';
@@ -12,19 +15,27 @@ import { BattleController } from './game/battleController.js';
 import { playerState } from './game/playerState.js';
 import { setupDevPanel } from './game/devPanel.js';
 import { setupSfxTestPanel } from './game/sfxTestPanel.js';
-import { audio } from './audio/AudioManager.js';
+import { audio, bgmForScene } from './audio/AudioManager.js';
 import { ANIMATION_DURATIONS_MS } from './config/animation.js';
 import { LAYOUT_CONFIG } from './config/layout.js';
 import { t } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
-import { towerAttack } from './core/economy/economy.js';
+import { towerAttack, normalFloorReward } from './core/economy/economy.js';
+import { RankingUi } from './game/rankingUi.js';
+import { pressButton } from './render/uiKit.js';
+import { openPrepState, rememberTab, statueRowInfo, hitPrepPopup } from './render/ui/prepPopup.js';
 
 const canvas = document.getElementById('game-canvas');
-const loadingEl = document.getElementById('loading-indicator');
 
 // 자동재생 정책(첫 입력에서 resume) + 탭 숨김 시 suspend. 에셋 로드보다 먼저 걸어 둬야
 // 첫 터치가 로딩 중에 들어와도 잠금이 풀린다.
 audio.install();
+// 타이틀 곡 - 첫 터치 전(suspended)이면 예약만 되고 resume() 직후 시작한다. 다음 곡(메뉴)은 미리 받는다.
+// 웹에서는 첫 터치가 곧 문 열림이라 타이틀 곡이 거의 안 들린다(로딩 중에 터치한 경우만) - 의도된 것.
+// Capacitor 포팅 때 WebView 자동재생 허용(Android mediaPlaybackRequiresUserGesture=false,
+// iOS mediaTypesRequiringUserActionForPlayback 없음)으로 앱에서는 바로 나오게 한다.
+audio.playBgm(bgmForScene('title'), { fadeInMs: 1500 });
+audio.preloadBgm(bgmForScene('menu'));
 
 // 층이 바뀌면(resetPuzzleBoard) 새 GameState로 재대입된다 - 그래서 let이다. 전투/층 데이터가
 // 로드되기 전까지는 방해요소 없는 임시 보드로 퍼즐만 동작한다.
@@ -45,49 +56,140 @@ let paused = false;
 let scene = 'title';
 const titleScreen = new TitleScreen();
 const mainMenuScreen = new MainMenuScreen();
+// 랭킹 팝업(docs/ranking.md) - 메뉴 봉인 원석에서 연다. 서비스는 config/ranking.json을 읽은 뒤(init) 생긴다.
+// 대표 석상 기본값 = 가장 레벨 높은 석상(같으면 앞쪽).
+const ranking = new RankingUi({
+  player: playerState,
+  canvas,
+  defaultStatue: () => {
+    const towers = controller?.battleState?.towers ?? [];
+    let best = 0;
+    towers.forEach((_, i) => {
+      if (playerState.towerLevel(i) > playerState.towerLevel(best)) best = i;
+    });
+    return towers[best]?.color ?? 'red';
+  },
+});
+mainMenuScreen.rankingBadge = () => ranking.hasRewardBadge();
+const shopScreen = new ShopScreen();
 function exitTitle() {
-  if (scene === 'title') titleScreen.startExit();
+  if (scene !== 'title' || !titleScreen.tapReady) return;
+  titleScreen.startExit(); // 터치 -> resume -> ui_door_open 다음에 곡 전환.
+  audio.playBgm(bgmForScene('menu'), { crossfadeMs: 1600 }); // 문 열림(1.6초)이 끝날 때 메뉴 곡만 남는다.
+  audio.preloadBgm(bgmForScene('game', controller?.currentFloor));
 }
-// 메뉴 <-> 인게임 화면 전환 페이드 - { phase: 'out'|'in', elapsedMs, onBlack }. 검게 덮고
-// (out) 완전히 검은 프레임에 onBlack()으로 scene을 바꾼 뒤 다시 밝혀 온다(in).
-// timeScale과 무관한 실제 경과 시간으로 진행한다.
+// 인게임 곡(일반/보스) - 같은 종류 층끼리는 playBgm이 no-op이라 끊기지 않는다.
+let bossSeen = false; // 이 층에서 살아 있는 보스를 봤는지 - 보스 처치 순간 덕킹용.
+function playGameBgm(crossfadeMs) {
+  const floor = controller?.currentFloor;
+  audio.playBgm(bgmForScene('game', floor), { crossfadeMs });
+  // 보스 바로 전 층(9층대)에서 보스 곡을 미리 받는다.
+  if (floor && (floor.floor + 1) % controller.balance.floorShape.bossEvery === 0) audio.preloadBgm('bgm_boss');
+}
+// 메뉴 <-> 인게임 화면 전환 페이드 - { phase: 'out'|'in', elapsedMs, halfMs, onBlack }. 검게
+// 덮고(out) 완전히 검은 프레임에 onBlack()으로 scene을 바꾼 뒤 다시 밝혀 온다(in).
+// timeScale과 무관한 실제 경과 시간으로 진행한다. 길이는 전환음에 맞춘다(assets/sfx/README.md
+// "UI 메모": ui_game_enter 약 1.5초, ui_game_exit 약 1.3초) - 소리는 AudioManager가 내므로
+// scene이 바뀌어도 끊기지 않는다.
 let fade = null;
-const FADE_MS = 220;
-function startFade(onBlack) {
-  if (!fade) fade = { phase: 'out', elapsedMs: 0, onBlack };
+const ENTER_FADE_MS = 1200;
+const EXIT_FADE_MS = 1000;
+function startFade(totalMs, sfxKey, onBlack) {
+  if (fade) return;
+  fade = { phase: 'out', elapsedMs: 0, halfMs: totalMs / 2, onBlack };
+  audio.play(sfxKey);
 }
 // 나가기: 층을 되감아 둬서 다시 플레이할 때 진행 중이던 전투가 아니라 그 층 처음부터 시작한다.
 function startExitToMenu() {
-  startFade(() => {
+  if (fade) return;
+  audio.playBgm(bgmForScene('menu'), { crossfadeMs: 1000 });
+  startFade(EXIT_FADE_MS, 'ui_game_exit', () => {
     controller?.retryFloor();
     paused = false;
-    selectedTowerIndex = null;
+    prep = null;
+    prepLastTab = null; // 판이 끝나면 다음 판은 석상 탭부터.
     upgradeHold = null;
     scene = 'menu';
   });
 }
+// 상점(메뉴 오른쪽 위 아이콘) - 전체 화면 scene. 뒤로 가기(브라우저/안드로이드)로도 닫히도록 history에
+// 한 칸 쌓고, 닫기 버튼·Esc는 history.back()으로 같은 경로(popstate)를 탄다.
+const SHOP_FADE_MS = 400;
+let shopReturnScene = 'menu'; // 상점을 연 곳 - 정비 팝업(prep)은 그대로 남아 있어 닫으면 그 팝업으로 돌아온다.
+function enterShop(rail = 'items') {
+  if (!controller?.shopConfig) return; // config/shop.json 로드 전/실패 - 상점 없음.
+  shopReturnScene = scene === 'game' ? 'game' : 'menu';
+  startFade(SHOP_FADE_MS, null, () => {
+    shopScreen.open(rail);
+    scene = 'shop';
+  });
+  history.pushState({ gg: 'shop' }, '');
+}
+function leaveShop() {
+  startFade(SHOP_FADE_MS, null, () => {
+    // 젬 스킬 레벨·4번째 슬롯을 산 경우 다음 전투에 반영되도록 층을 다시 만든다(아직 시작 전이라 진행 손실 없음).
+    // 게임(정비 팝업)으로 돌아갈 때는 층을 다시 만들지 않는다 - 아래 버튼(다음 층/재도전)이 새 층을 만든다.
+    if (shopReturnScene === 'menu' && shopScreen.changed) controller?.retryFloor();
+    scene = shopReturnScene;
+  });
+}
+function requestShopBack() {
+  if (history.state?.gg === 'shop') history.back();
+  else leaveShop();
+}
+window.addEventListener('popstate', () => {
+  if (scene !== 'shop' || fade) return;
+  if (shopScreen.closeOverlay()) history.pushState({ gg: 'shop' }, ''); // 팝업만 닫고 상점에 남는다.
+  else leaveShop();
+});
 // 각 scene을 그린 다음 마지막에 불러 오버레이를 덮는다.
 function drawFade(rawDtMs) {
   if (!fade) return;
   fade.elapsedMs += rawDtMs;
-  const progress = Math.min(1, fade.elapsedMs / FADE_MS);
+  const progress = Math.min(1, fade.elapsedMs / fade.halfMs);
   renderer.drawFadeOverlay(fade.phase === 'out' ? progress : 1 - progress);
   if (progress < 1) return;
   if (fade.phase === 'out') {
     fade.onBlack();
-    fade = { phase: 'in', elapsedMs: 0 };
+    fade = { phase: 'in', elapsedMs: 0, halfMs: fade.halfMs };
   } else {
     fade = null;
   }
 }
-let selectedTowerIndex = null; // null이 아니면 타워 강화 팝업이 열려 있다 - 탭한 탑 줄은 card_selected로 표시.
-let upgradeTab = 'levelUp'; // 팝업 탭('levelUp'|'inventory') - 팝업을 새로 열 때마다 레벨업 탭으로 리셋.
+// 정비 팝업(docs/upgrade-popup.md, src/render/ui/prepPopup.js) - null이 아니면 열려 있고 전투가 멈춘다.
+// { context: 'floorClear'|'defeat'|'village'|'towerTap', tab, selectedTower, flash, view }.
+let prep = null;
+let prepLastTab = null; // 층 클리어/패배끼리 같은 판에서 마지막에 본 탭.
 let upgradeHold = null;
+// 인벤토리 탭: 고른 보유 아이템 id, 장착 칸 누름 { slot, downMs, done } - 0.5초 넘게 누르면 해제(loop), 그 전에 떼면 탭.
+let invSel = null;
+let invPress = null;
+// 보유 목록 끌기 - { x, y, startScroll, moved } | null. 끌지 않고 떼면 그 자리 아이템을 고른다(스크롤과 탭 구분).
+let invDrag = null;
+const INV_DRAG_PX = 8;
+const INV_HOLD_MS = 500;
+const rewardPopup = new RewardPopup(); // 공통 획득 팝업(보스 첫 처치·상점 패키지/패스/무료)
+let shownClearReward = null;
+// 아이템 조준(docs/items.md 0장) - { slot, id, hover, first, down } | null. 조준 중엔 전투만
+// targetingBattleTimeScale배속, 스왑 입력은 막는다. itemUi는 렌더에 넘기는 표시용 묶음(매 프레임 같은 객체 재사용).
+let aim = null;
+const itemUi = { items: null, config: null, equipped: null, counts: null, aim: null, preFloor: null, canRevive: false, goldMul: 1, inventory: null, bestFloor: 1, invSel: null, hasShop: false };
+// 하단 바·패배 팝업·인벤토리 탭이 보는 장착/개수/예약 - inventory가 바뀔 때만 다시 읽는다(onChange).
+function refreshInventoryUi() {
+  const inv = playerState.inventory;
+  itemUi.inventory = inv;
+  itemUi.equipped = inv.hotbar();
+  itemUi.counts = inv.data.items; // 읽기 전용.
+  itemUi.preFloor = inv.data.loadout.preFloor; // 읽기 전용.
+}
+refreshInventoryUi();
+playerState.inventory.onChange(refreshInventoryUi);
 let sliderDrag = null; // 일시정지 팝업의 볼륨 슬라이더를 끌고 있는 중 - { channel, rect } | null. // 강화 버튼 꾹 누름 연속 강화 상태 - { index, nextMs, intervalMs } | null.
 let timeScale = 1; // ?dev=1 2배속 토글용.
 // 에셋 로드 전엔 그리지 않는다 - CanvasRenderer.assets===null일 때의 색/도형 fallback이
 // 로딩 인디케이터(작은 텍스트 알약) 뒤로 그대로 보여서 "더미 이미지"처럼 보이는 걸 막는다.
 let assetsReady = false;
+let keepBoardOnFloorChange = false; // "다음 층" 진행일 때만 true - 퍼즐 보드를 새로 만들지 않는다.
 
 Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceData]) => {
   if (!battleData || !balanceData) return;
@@ -96,6 +198,8 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
     enemies: balanceData.enemies,
     obstacles: balanceData.obstacles,
     floorsData: balanceData.floorsData,
+    itemsConfig: balanceData.items,
+    shopConfig: balanceData.shop,
     towersBaseData: balanceData.balance.tower.towers,
     battleConfig: {
       cascadeBonusPerStep: balanceData.balance.tower.puzzleShot.cascadeBonus,
@@ -104,8 +208,16 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       effectDurationsMs: battleData.effectDurationsMs,
       summon: battleData.summon,
       skills: battleData.skills,
+      // 기술 피해는 렌더(SkillFx)가 명중 순간 resolveSkillHit으로 적용한다(못 그리면 shotTimeoutMs 뒤 즉시 적용).
+      deferSkillHits: true,
     },
   });
+  if (balanceData.ranking) {
+    // 참여 보상 골드 = 층 기준가 x 3(config/ranking.json tiers part.goldFloorMul) - 기준가는 상점과 같은 normalFloorReward.
+    ranking.init(balanceData.ranking, { floorGold: () => normalFloorReward(balanceData, playerState.bestFloor) });
+    // 일반 모드 랭킹 = 클리어한 가장 높은 층(더 높을 때만 갱신, 도달 시각 기록).
+    controller.onFloorClear = (floor) => ranking.service.submit('normal', { floor, at: ranking.service.now() });
+  }
   // 퍼즐에서 잼이 터질 때마다 그 위치 -> 같은 색 탑으로 날아가는 빛줄기를 renderer에 스폰.
   battleBridge = new PuzzleBattleBridge(controller.battleState, {
     onGemClear: (info) => renderer.spawnPuzzleToTowerBeam(info),
@@ -120,6 +232,7 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       floorObstacles,
     });
     gameState.setReduceEffects(!!renderer.assets?.effectsConfig?.settings?.reduceMotion);
+    if (controller.items) controller.items.gameState = gameState;
     battleBridge.reset();
     animator.reset();
     // 다음 스테이지로 이동할 때도 보드가 뚝 바뀌지 않고 셔플 연출로 자리를 잡는다
@@ -130,11 +243,34 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
     gameState.shuffleBoard({ skipClear: true });
   }
 
+  if (balanceData.shop) {
+    shopScreen.setEnv({
+      cfg: balanceData.shop,
+      itemsConfig: balanceData.items,
+      data: balanceData,
+      player: playerState,
+      save: () => playerState.save(),
+      showReward: (r) => rewardPopup.show(r),
+      itemIcons: () => renderer.itemAssets?.icons,
+    });
+  }
+
   // 생성자가 이미 첫 _resetBattleState를 한 번 돌렸지만(그때는 onBattleStateChanged가
   // 아직 없어 콜백으로 못 받는다) controller.currentFloor로 그 결과를 읽을 수 있다.
   resetPuzzleBoard(controller.currentFloor.obstacles);
+  if (controller.itemsConfig) loadItemAssets(Object.keys(controller.itemsConfig.items)).then((a) => renderer.setItemAssets(a));
   controller.onBattleStateChanged = (bs, floor) => {
+    aim = null;
+    bossSeen = false;
+    // 층 이동(다음 층/재도전/dev) - 일반 -> 보스 600ms, 보스 -> 일반 1000ms. 메뉴 복귀 페이드 중(retryFloor)은 제외.
+    if (scene === 'game' && !fade) playGameBgm(floor.tag === 'boss' ? 600 : 1000);
     battleBridge.setTarget(bs);
+    if (keepBoardOnFloorChange) {
+      // "다음 층"은 퍼즐 보드를 그대로 이어간다(방해요소 처리는 continueToFloor 참고).
+      keepBoardOnFloorChange = false;
+      gameState.continueToFloor(floor.obstacles);
+      return;
+    }
     resetPuzzleBoard(floor.obstacles);
   };
 
@@ -147,7 +283,25 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       triggerSpecialFx: devTriggerSpecialFx,
       triggerCombo: devTriggerCombo,
       triggerShuffle: () => gameState.shuffleBoard(),
+      ranking: ranking.service ? ranking.dev() : null,
     });
+    // 개발용 콘솔 훅(?dev=1) - 화면 확인 때 실패/부활 등 상태를 직접 만든다.
+    window.__gg = {
+      get controller() { return controller; },
+      get gameState() { return gameState; },
+      playerState,
+      renderer,
+      ranking,
+      enterGame: () => {
+        playGameBgm(1000); // 실제 진입(플레이 버튼)과 같은 경로.
+        scene = 'game';
+      },
+      openPrep: (context, tab) => {
+        openPrep(context);
+        if (tab) prep.tab = tab;
+      },
+      shopScreen,
+    };
   }
 }).catch((err) => {
   // 여기서 던져진 예외는 controller를 null로 남겨 전투 화면만 조용히 사라지게 한다(퍼즐은
@@ -213,7 +367,7 @@ function isBoardUpdateBlocked() {
   return (
     scene !== 'game' ||
     paused ||
-    selectedTowerIndex != null ||
+    prep != null ||
     (controller != null && controller.battleState.status !== 'active')
   );
 }
@@ -227,46 +381,255 @@ function pointInRect(x, y, rect) {
   return !!rect && x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
 }
 
-// 타워 강화 팝업이 열려 있을 때의 터치 판정 - 닫기/탭 전환/줄마다의 강화·MAX 버튼.
-// 강화 버튼은 탭 = 1레벨, 누르고 있으면 upgradeHold를 세팅해 loop()가 연속 강화를 진행한다.
-function handleUpgradePopupPointerDown(popup, x, y) {
-  if (pointInRect(x, y, popup.closeButton)) {
-    selectedTowerIndex = null;
-    upgradeHold = null;
-    return;
-  }
-  if (pointInRect(x, y, popup.tabs?.levelUp)) {
-    upgradeTab = 'levelUp';
-    return;
-  }
-  if (pointInRect(x, y, popup.tabs?.inventory)) {
-    upgradeTab = 'inventory';
-    return;
-  }
+// ---- 하단 아이템(docs/items.md) ----
+function cellAtPoint(x, y) {
+  const b = renderer.lastLayout?.board;
+  if (!pointInRect(x, y, b)) return null;
+  return { row: Math.floor((y - b.y) / b.cellSize), col: Math.floor((x - b.x) / b.cellSize) };
+}
 
-  if (popup.tab !== 'levelUp' || !popup.rows || !controller) return;
-  for (let i = 0; i < popup.rows.length; i++) {
-    const row = popup.rows[i];
-    if (!row || !row.affordable) continue;
-    const towerId = controller.battleState.towers[i].id;
-    if (pointInRect(x, y, row.upgradeButton)) {
-      const ok = controller.tryLevelUpTower(i);
-      renderer.triggerTowerTapFx(towerId, ok, playerState.towerLevel(i));
-      upgradeHold = { index: i, nextMs: performance.now() + 300, intervalMs: 150 };
-      return;
-    }
-    if (pointInRect(x, y, row.maxButton)) {
-      const ok = controller.maxLevelUpTower(i);
-      renderer.triggerTowerTapFx(towerId, ok, playerState.towerLevel(i));
-      return;
-    }
+function cancelAim() {
+  if (!aim) return;
+  aim = null;
+  audio.play('ui_cancel');
+}
+
+// 실제로 실행된 순간(즉시 또는 예약 실행) - 망치·낫 연출. 나머지는 core/battle 이벤트로 기존 연출.
+function playItemFx(id, target) {
+  renderer.playItemFx(controller.itemsConfig.items[id], target, gameState.board);
+}
+
+function tapItemSlot(slot) {
+  if (aim?.slot === slot) {
+    cancelAim();
+    return;
   }
+  const id = playerState.inventory.hotbar()[slot];
+  if (id == null) return;
+  const items = controller.items;
+  const now = performance.now();
+  // 대기(예약) 중이면 canUse가 busy - 흔들기만 하고 조준에 들어가지 않는다.
+  if (!items.canUse(id).ok) {
+    renderer.itemBar.shakeSlot(slot, now);
+    audio.play('gem_swap_fail');
+    return;
+  }
+  const cfg = controller.itemsConfig.items[id];
+  if (cfg.kind === 'battle' || cfg.target === 'none') {
+    aim = null;
+    if (items.use(id).ok) {
+      audio.play('ui_click');
+      renderer.itemBar.showTip(slot, now);
+    }
+    else {
+      renderer.itemBar.shakeSlot(slot, now);
+      audio.play('gem_swap_fail');
+    }
+    return;
+  }
+  aim = { slot, id, hover: null, first: null, down: false };
+  audio.play('ui_click');
+}
+
+function aimPointerDown(cell) {
+  aim.down = true;
+  aim.hover = cell;
+  const cfg = controller.itemsConfig.items[aim.id];
+  // 장갑: 첫 칸이 없거나 이웃이 아닌 칸을 누르면 그 칸이 새 첫 칸. 염료: 첫 칸 = 바꿀 잼.
+  if (cfg.target === 'pair' && (!aim.first || !isNeighbor(aim.first, cell))) aim.first = cell;
+  if (cfg.action === 'recolor') aim.first = cell; // 색은 팔레트(renderer.lastLayout.dyePalette)에서 고른다.
+}
+
+// 손을 뗀 칸에 use(). 실패하면 칸이 흔들리고 조준 유지.
+function aimPointerUp() {
+  aim.down = false;
+  const cfg = controller.itemsConfig.items[aim.id];
+  const hover = aim.hover;
+  if (!hover) return;
+  let target;
+  if (cfg.target === 'pair') {
+    if (!aim.first || !isNeighbor(aim.first, hover)) {
+      aim.hover = null; // 첫 칸만 고름 - 이웃 칸을 기다린다.
+      return;
+    }
+    target = { a: aim.first, b: hover };
+  } else if (cfg.action === 'recolor') {
+    aim.hover = null; // 칸은 골랐다 - 팔레트 탭(useDyeColor)을 기다린다.
+    return;
+  } else {
+    target = cfg.target === 'row' ? { row: hover.row } : cfg.target === 'col' ? { col: hover.col } : hover;
+  }
+  const id = aim.id;
+  const result = controller.items.use(id, target);
+  if (result.ok) {
+    aim = null;
+    audio.play(cfg.target === 'pair' ? 'gem_swap' : 'ui_click');
+    if (!result.pending) playItemFx(id, target);
+    return;
+  }
+  const { rows, cols } = gameState.board;
+  renderer.itemBar.shakeCells(itemTargetCells(cfg.target, target, rows, cols), performance.now());
+  audio.play('gem_swap_fail');
+}
+
+// 염료 팔레트 탭 - 고른 칸(aim.first)을 그 색으로. 실패(무지개/이미 그 색)면 칸이 흔들리고 조준 유지.
+function useDyeColor(color) {
+  const id = aim.id;
+  const target = { row: aim.first.row, col: aim.first.col, color };
+  const result = controller.items.use(id, target);
+  if (result.ok) {
+    aim = null;
+    audio.play('ui_click');
+    playItemFx(id, target);
+    return;
+  }
+  renderer.itemBar.shakeCells([aim.first], performance.now());
+  audio.play('gem_swap_fail');
+}
+
+function openPrep(context) {
+  prep = openPrepState(context, prepLastTab);
+  prep.view = { floor: 1, best: 1, gold: 0, totalAttack: 0, towers: [], nowMs: 0 };
+  invSel = null;
+  renderer.inventoryTab.reset();
+}
+
+// 정비 팝업 터치 - 닫기/탭/아래 버튼/석상 강화·MAX/보관함 본문. 팝업이 떠 있으면 다른 입력은 받지 않는다.
+// 강화 버튼은 탭 = 1레벨, 누르고 있으면 upgradeHold를 세팅해 loop()가 연속 강화를 진행한다.
+function handlePrepPointerDown(x, y) {
+  const layout = renderer.prepLayout;
+  if (!layout) return;
+  const hit = hitPrepPopup(layout, x, y);
+  if (!hit) return;
+  switch (hit.type) {
+    case 'close':
+      audio.play('ui_cancel');
+      prep = null;
+      upgradeHold = null;
+      return;
+    case 'tab':
+      audio.play('ui_click');
+      prep.tab = hit.tab;
+      if (prep.context === 'floorClear' || prep.context === 'defeat') prepLastTab = rememberTab(prepLastTab, hit.tab);
+      return;
+    case 'action':
+      audio.play('ui_click');
+      upgradeHold = null;
+      prep = null;
+      if (hit.action === 'next') {
+        keepBoardOnFloorChange = true;
+        controller?.advanceFloor();
+      } else if (hit.action === 'retry') controller?.retryFloor();
+      else startExitToMenu(); // 마을로 - 나가기와 같은 길(층을 되감고 메뉴로).
+      return;
+    case 'upgrade':
+      if (upgradeStatue(hit.index, false)) upgradeHold = { index: hit.index, nextMs: performance.now() + 300, intervalMs: 150 };
+      return;
+    case 'max':
+      upgradeStatue(hit.index, true);
+      return;
+    case 'filter':
+      audio.play('ui_click');
+      renderer.inventoryTab.setFilter(hit.filter);
+      return;
+    case 'slot':
+      invPress = { slot: hit.index, downMs: performance.now(), done: false };
+      return;
+    case 'reserve':
+      audio.play('ui_click');
+      if (!togglePreFloor(hit.id)) audio.play('gem_swap_fail');
+      return;
+    case 'detailAction': {
+      audio.play('ui_click');
+      const a = hit.action;
+      if (a.kind === 'buy' || a.kind === 'shop') enterShop('items');
+      else if (!(a.kind === 'equip' ? playerState.inventory.equip(a.slot, invSel) : playerState.inventory.unequip(a.slot)).ok) audio.play('gem_swap_fail');
+      return;
+    }
+    case 'item':
+      invDrag = { y: hit.by, startScroll: renderer.inventoryTab.scroll, moved: false, id: hit.id };
+      return;
+  }
+}
+
+// 석상 강화(1레벨/MAX). 성공하면 그 줄을 card_selected + "+1"·흰 테, 전투 화면이 뒤에 있으면 탑 연출도 같이.
+function upgradeStatue(index, max) {
+  if (!controller) return false;
+  const ok = max ? controller.maxLevelUpTower(index) : controller.tryLevelUpTower(index);
+  if (scene === 'game') renderer.triggerTowerTapFx(controller.battleState.towers[index].id, ok, playerState.towerLevel(index));
+  else audio.play(ok ? 'ui_click' : 'gem_swap_fail');
+  if (ok && prep) {
+    prep.selectedTower = index;
+    prep.flash = { index, atMs: performance.now(), white: true };
+  }
+  return ok;
+}
+
+// 보유 목록 끌기(basis 좌표) - 끌지 않고 떼면 그 자리 아이템을 고른다(스크롤과 탭 구분).
+function invDragMove(y) {
+  if (!invDrag) return false;
+  const dy = y / (renderer.prepLayout?.scale ?? 1) - invDrag.y;
+  if (Math.abs(dy) > INV_DRAG_PX) invDrag.moved = true;
+  if (invDrag.moved) renderer.inventoryTab.setScroll(invDrag.startScroll - dy);
+  return true;
+}
+
+function invDragEnd() {
+  const d = invDrag;
+  invDrag = null;
+  if (!d || d.moved || d.id == null) return;
+  invSel = invSel === d.id ? null : d.id;
+  audio.play('ui_click');
+}
+
+// 정비 팝업 보관함 탭이 떠 있는지 - 휠 스크롤용.
+function inventoryOpen() {
+  return prep?.tab === 'vault' && (scene === 'menu' || scene === 'game');
+}
+
+const INV_FAIL_TEXT = { noStock: 'inv.noStock', locked: 'inv.locked', notEquipable: 'inv.notEquipable' };
+function inventorySlotTap(slot) {
+  const inv = playerState.inventory;
+  const tab = renderer.inventoryTab;
+  const now = performance.now();
+  if (slot >= inv.slotCount()) {
+    tab.shakeSlot(slot, now);
+    tab.toast(t('inv.locked'), now);
+    audio.play('gem_swap_fail');
+    return;
+  }
+  if (invSel == null) {
+    // 고른 게 없으면 그 칸의 아이템을 골라 설명만 보여 준다.
+    invSel = (inv.pendingHotbar() ?? inv.hotbar())[slot] ?? null;
+    audio.play('ui_click');
+    return;
+  }
+  const res = inv.equip(slot, invSel);
+  if (res.ok || res.reason === 'alreadyEquipped') {
+    audio.play('ui_click');
+    invSel = null;
+    return;
+  }
+  tab.shakeSlot(slot, now);
+  if (INV_FAIL_TEXT[res.reason]) tab.toast(t(INV_FAIL_TEXT[res.reason]), now);
+  audio.play('gem_swap_fail');
+}
+
+function processInventoryHold(nowMs) {
+  if (!invPress || invPress.done || nowMs - invPress.downMs < INV_HOLD_MS) return;
+  invPress.done = true;
+  if (playerState.inventory.unequip(invPress.slot).ok) audio.play('ui_cancel');
 }
 
 // 재화 바 "+"(상점 자리)/일시정지 버튼/팝업 버튼/탑 탭 클릭 판정. 보드 스와이프
 // (PointerInput)와는 별개의 영역이라 겹치지 않는다.
 canvas.addEventListener('pointerdown', (e) => {
   if (fade) return; // 화면 전환 페이드 중에는 입력을 받지 않는다.
+  if (rewardPopup.active) {
+    const r = canvas.getBoundingClientRect();
+    rewardPopup.handlePointerDown(e.clientX - r.left, e.clientY - r.top);
+    return;
+  }
   if (scene === 'title') {
     exitTitle();
     return;
@@ -277,29 +640,52 @@ canvas.addEventListener('pointerdown', (e) => {
   const y = e.clientY - rect.top;
 
   if (scene === 'menu') {
-    if (mainMenuScreen.handlePointerDown(x, y) === 'startNormalGame') {
-      startFade(() => {
+    if (ranking.isOpen) {
+      if (ranking.pointerDown(x, y) === 'openMode') mainMenuScreen.popup = 'mode';
+      return;
+    }
+    if (prep) {
+      handlePrepPointerDown(x, y);
+      return;
+    }
+    const action = mainMenuScreen.handlePointerDown(x, y);
+    if (action === 'startNormalGame') {
+      playGameBgm(1000);
+      startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
         scene = 'game';
       });
-    }
+    } else if (action === 'openShop') enterShop();
+    return;
+  }
+
+  if (scene === 'shop') {
+    if (shopScreen.handlePointerDown(x, y) === 'exit') requestShopBack();
+    return;
+  }
+
+  if (prep && !paused) {
+    handlePrepPointerDown(x, y);
     return;
   }
 
   const popup = renderer.lastLayout?.popup;
   if (popup?.audio && handleAudioSettingsPointerDown(popup.audio, x, y)) return;
-  if (popup?.kind === 'towerUpgrade') {
-    handleUpgradePopupPointerDown(popup, x, y);
-    return;
-  }
   if (popup) {
     for (const [action, btnRect] of Object.entries(popup.buttons)) {
-      if (!pointInRect(x, y, btnRect)) continue;
+      // 나가기는 전환음(ui_game_exit)을 startExitToMenu가 낸다.
+      if (!pressButton(x, y, btnRect, action === 'exit' ? 'none' : 'click')) continue;
       if (action === 'resume') paused = false;
-      else if (action === 'restart') {
+      else if (action === 'revive') {
+        if (!controller?.revive()) audio.play('gem_swap_fail');
+      } else if (action === 'restart' && controller?.battleState.status === 'failed') {
+        // 부활 안 함 = 정비 팝업(패배). 아래 "재도전"/"마을로"가 나가는 길.
+        openPrep('defeat');
+      } else if (action === 'restart') {
         controller?.retryFloor();
         paused = false;
       } else if (action === 'next') {
-        controller?.advanceFloor();
+        // 다음 층 전에 정비 팝업(층 클리어)을 띄우고, 아래 "{n+1}층으로"를 누르면 그때 진행한다.
+        openPrep('floorClear');
         paused = false;
       } else if (action === 'exit') {
         startExitToMenu();
@@ -311,25 +697,40 @@ canvas.addEventListener('pointerdown', (e) => {
 
   if (pointInRect(x, y, renderer.lastLayout?.pauseButton)) {
     if (controller && controller.battleState.status !== 'active') return;
+    audio.play('ui_click');
     paused = !paused;
     return;
   }
 
-  if (pointInRect(x, y, renderer.lastLayout?.currencyPlusButton)) {
+  if (pressButton(x, y, renderer.lastLayout?.currencyPlusButton)) {
     // 상점 자리 - 지금은 자리만(추후 상점 연결).
     return;
   }
 
-  // 전투 영역 안의 탭은 타워 강화 팝업을 띄운다(assets/ui/README.md "타워 강화 팝업") - 연
-  // 탑 줄은 card_selected로 표시되고, 게임은 팝업이 열린 동안 일시정지와 같은 방식으로 멈춘다.
-  // 퍼즐 보드 드래그와 섞이지 않는다(PointerInput은 board 영역만 본다).
-  if (!isBlocked() && controller) {
-    const towerIndex = renderer.hitTestTower(x, y, controller.battleState);
-    if (towerIndex != null) {
-      selectedTowerIndex = towerIndex;
-      upgradeTab = 'levelUp';
+  if (controller?.items && !isBlocked()) {
+    const slots = renderer.lastLayout?.itemSlots ?? [];
+    for (let i = 0; i < slots.length; i++) {
+      if (pointInRect(x, y, slots[i])) {
+        tapItemSlot(i);
+        return;
+      }
+    }
+    if (aim) {
+      // 염료 팔레트가 떠 있으면: 스와치 탭 = 그 색으로, 그 밖 = 취소.
+      const palette = renderer.lastLayout?.dyePalette;
+      if (palette) {
+        const hit = palette.find((sw) => pointInRect(x, y, sw.rect));
+        if (hit) useDyeColor(hit.color);
+        else cancelAim();
+        return;
+      }
+      const cell = cellAtPoint(x, y);
+      if (cell) aimPointerDown(cell);
+      else cancelAim(); // 보드 밖 탭 = 취소(소모 없음).
+      return;
     }
   }
+  // 석상을 탭해도 강화 팝업은 열지 않는다 - 강화 팝업은 클리어 팝업의 "다음 층"에서만 열린다.
 });
 
 // 일시정지 팝업의 효과음/배경음 슬라이더 + 음소거 버튼. 누르는 순간 값을 반영하고
@@ -337,7 +738,7 @@ canvas.addEventListener('pointerdown', (e) => {
 function handleAudioSettingsPointerDown(rects, x, y) {
   if (pointInRect(x, y, rects.mute)) {
     audio.toggleMute();
-    audio.play('gem_select');
+    audio.play('ui_click'); // 토글 뒤에 내야 음소거를 풀 때만 들린다.
     return true;
   }
   for (const channel of ['sfx', 'bgm']) {
@@ -351,8 +752,21 @@ function handleAudioSettingsPointerDown(rects, x, y) {
 }
 
 canvas.addEventListener('pointermove', (e) => {
+  if (invDragMove(e.clientY - canvas.getBoundingClientRect().top)) return;
+  if (ranking.pointerMove(e.clientY - canvas.getBoundingClientRect().top)) return;
+  // 터치는 누른 동안만, 마우스는 떼고 움직여도 미리보기가 따라온다.
+  if (aim) {
+    const rect = canvas.getBoundingClientRect();
+    aim.hover = cellAtPoint(e.clientX - rect.left, e.clientY - rect.top);
+    return;
+  }
   if (scene === 'menu') {
     mainMenuScreen.handlePointerMove(e.clientX - canvas.getBoundingClientRect().left);
+    return;
+  }
+  if (scene === 'shop') {
+    const rect = canvas.getBoundingClientRect();
+    shopScreen.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
     return;
   }
   if (!sliderDrag) return;
@@ -361,18 +775,59 @@ canvas.addEventListener('pointermove', (e) => {
 });
 
 // 강화 버튼을 누른 채 손가락/포인터가 캔버스 밖으로 나가거나 뗄 때 연속 강화를 멈춘다.
-window.addEventListener('pointerup', () => {
+window.addEventListener('pointerup', (e) => {
+  invDragEnd();
+  ranking.pointerUp();
+  if (invPress && !invPress.done) inventorySlotTap(invPress.slot);
+  invPress = null;
+  if (aim?.down) aimPointerUp();
   upgradeHold = null;
   sliderDrag = null;
-  mainMenuScreen.handlePointerUp();
+  const r = canvas.getBoundingClientRect();
+  const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(e.clientX - r.left, e.clientY - r.top) : mainMenuScreen.handlePointerUp();
+  if (menuUp === 'openRanking') ranking.open();
+  if (menuUp === 'openInventory') {
+    openPrep('village');
+    playerState.inventory.markItemsSeen(playerState.bestFloor); // 빨간 점 1(새 아이템) 끔.
+  }
+  if (scene === 'shop') shopScreen.handlePointerUp();
 });
 window.addEventListener('pointercancel', () => {
+  ranking.pointerUp();
+  invPress = null;
+  invDrag = null;
+  if (aim) aim.down = false;
   upgradeHold = null;
   sliderDrag = null;
   mainMenuScreen.handlePointerUp();
+  shopScreen.cancelPointer();
 });
 
+canvas.addEventListener(
+  'wheel',
+  (e) => {
+    if (scene === 'menu' && ranking.isOpen) {
+      e.preventDefault();
+      ranking.wheel(e.deltaY);
+      return;
+    }
+    if (inventoryOpen()) {
+      e.preventDefault();
+      renderer.inventoryTab.setScroll(renderer.inventoryTab.scroll + e.deltaY * 0.5);
+      return;
+    }
+    if (scene !== 'shop') return;
+    e.preventDefault();
+    shopScreen.handleWheel(e.deltaY);
+  },
+  { passive: false }
+);
+
 window.addEventListener('keydown', (e) => {
+  if (scene === 'shop' && e.code === 'Escape' && !fade) {
+    if (!shopScreen.closeOverlay()) requestShopBack();
+    return;
+  }
   if (scene !== 'title') return;
   if (e.code === 'Enter' || e.code === 'Space') {
     e.preventDefault();
@@ -420,11 +875,12 @@ new PointerInput(canvas, {
   // 일시정지/전투 종료 중에는(isBlocked) 입력 자체를 받지 않는다.
   canInteract: (row, col) =>
     !isBlocked() &&
+    !aim && // 조준 중엔 스왑 입력을 막는다(보드 탭은 조준이 받는다).
     gameState.board.cellStates[gameState.board.index(row, col)] === null &&
     !gameState.board.isColumnLocked(col),
   onSelect: () => audio.play('gem_select'),
   onSwap: (r1, c1, r2, c2) => {
-    if (isBlocked()) return;
+    if (isBlocked() || aim) return;
     // trySwap은 매치가 없어 되돌아가는 스왑에도 true를 준다(거절되는 건 인접 아님/잠긴 열 등
     // 아예 받아들여지지 않은 입력뿐) - 스왑음은 유효/무효 모두 내고, 되돌아감은 cellStates의
     // bounce로 가려내 그 절반 지점(= 되돌아가기 시작하는 순간)에 실패음을 낸다.
@@ -442,6 +898,24 @@ let lastTime = performance.now();
 // 화면이 멈춘 것처럼 보일 수 있다 - CanvasRenderer._lastFrameTime의 64ms clamp와 같은
 // 값으로 맞춘다(렌더가 이미 쓰던 값).
 const MAX_DT_SEC = 0.064;
+
+// 다음 층 예약 켜기/끄기(inventory.setReserve) - 성공하면 true.
+function togglePreFloor(id) {
+  const inv = playerState.inventory;
+  return inv.setReserve(id, !inv.data.loadout.preFloor[id]).ok;
+}
+
+function buildItemUi() {
+  itemUi.items = controller?.items ?? null;
+  itemUi.config = controller?.itemsConfig ?? null;
+  itemUi.aim = aim;
+  itemUi.bestFloor = playerState.bestFloor;
+  itemUi.invSel = invSel;
+  itemUi.hasShop = !!controller?.shopConfig;
+  itemUi.canRevive = !!controller?.canRevive();
+  itemUi.goldMul = controller?.goldMul ?? 1;
+  return itemUi;
+}
 
 function buildBattleHud() {
   if (!controller) return null;
@@ -467,16 +941,33 @@ function buildBattleHud() {
 function processUpgradeHold(nowMs) {
   if (!upgradeHold || !controller) return;
   if (nowMs < upgradeHold.nextMs) return;
-  const { index } = upgradeHold;
-  const towerId = controller.battleState.towers[index].id;
-  const ok = controller.tryLevelUpTower(index);
-  renderer.triggerTowerTapFx(towerId, ok, playerState.towerLevel(index));
+  const ok = upgradeStatue(upgradeHold.index, false);
   if (!ok) {
     upgradeHold = null;
     return;
   }
   upgradeHold.intervalMs = Math.max(50, upgradeHold.intervalMs * 0.85);
   upgradeHold.nextMs = nowMs + upgradeHold.intervalMs;
+}
+
+// 정비 팝업 그릴 값(석상 5줄·골드·층) - 팝업이 열려 있을 때만 매 프레임 채운다.
+function drawPrep(now) {
+  if (!prep || !controller) return;
+  const v = prep.view;
+  const { balance, battleState } = controller;
+  v.floor = controller.floor;
+  v.best = playerState.bestFloor;
+  v.gold = playerState.gold;
+  v.nowMs = now;
+  v.totalAttack = 0;
+  battleState.towers.forEach((tower, i) => {
+    const level = playerState.towerLevel(i);
+    const atk = towerAttack(balance, level);
+    v.totalAttack += atk;
+    v.towers[i] = { color: tower.color, name: tower.name, level, atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
+  });
+  renderer.drawPrepPopup(prep, buildItemUi());
+  if (prep.flash) prep.flash.white = false; // 흰 테는 1프레임만.
 }
 
 function loop(now) {
@@ -496,29 +987,74 @@ function loop(now) {
   }
 
   if (scene === 'menu') {
-    renderer.drawMainMenu(mainMenuScreen, playerState, now);
+    audio.setBgmDuck(1);
+    processUpgradeHold(now);
+    processInventoryHold(now); // 보관함 장착 칸 길게 누르기 = 해제.
+    renderer.drawMainMenu(mainMenuScreen, playerState, now, 1);
+    drawPrep(now);
+    // 메뉴에 있는 동안 1초마다 시즌 넘김 확인 -> 지난 시즌 결과 팝업(다른 팝업이 없을 때).
+    ranking.tick(now, !prep && !mainMenuScreen.popup && !fade);
+    renderer.drawRankingPopup(ranking, now);
+    drawFade(rawDtMs);
+    requestAnimationFrame(loop);
+    return;
+  }
+
+  if (scene === 'shop') {
+    renderer.drawShop(shopScreen, now);
+    renderer.drawRewardPopup(rewardPopup);
     drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;
   }
 
   processUpgradeHold(now);
+  processInventoryHold(now);
+  // 층 전투 시작(첫 프레임) - 예약 아이템 소모 + 시작 부스터 배치. gameState.update보다 먼저라 입장 셔플이 특수 잼을 같이 옮긴다.
+  controller?.beginFloor();
 
   if (!isBoardUpdateBlocked()) {
     // 발동/조합 스프라이트가 아직 재생 중이면 중력/리필을 미룬다(GameState.settleHold 주석 참고).
     gameState.settleHold = assetsReady && renderer.isSpecialFxBusy();
     gameState.update(dt);
+    // 매 프레임: 북 버프 진행 + 예약된 낫·망치·섞기 - 실행되면 연출, 시간 초과로 취소되면 슬롯 흔들림 + "보드 정리 중".
+    const items = controller?.items;
+    if (items) {
+      const pendingTarget = items.pending?.target;
+      const result = items.update(dt);
+      if (result?.ok) playItemFx(result.id, pendingTarget);
+      else if (result) {
+        const now = performance.now();
+        renderer.itemBar.shakeSlot(playerState.inventory.hotbar().indexOf(result.id), now);
+        renderer.itemBar.toast(t('item.boardBusy'), now);
+        audio.play('gem_swap_fail');
+      }
+    }
   }
+  // BGM 덕킹: 일시정지 0.5배, 승리/패배 팝업 0.4배, 결과 팝업을 닫고 정비 팝업만 남으면 0.7배,
+  // 보스 처치 순간(호위가 남아도) 600ms에 걸쳐 0.4배. 다음 층이 시작되면(status active) 1배.
+  const bs = controller?.battleState;
+  if (bs) {
+    const bossAlive = bs.enemies.some((e) => e.rank === 'boss' && e.state === 'alive');
+    if (bossAlive) bossSeen = true;
+    const bossDown = bossSeen && !bossAlive;
+    const ended = bs.status !== 'active';
+    const duck = paused ? 0.5 : ended && prep ? 0.7 : bossDown || ended ? 0.4 : 1;
+    audio.setBgmDuck(duck, bossDown && duck === 0.4 ? 600 : 350);
+  }
+  // 층이 끝나면(클리어/실패 팝업) 조준을 푼다 - 팝업이 우선.
+  if (aim && controller && controller.battleState.status !== 'active') aim = null;
   // battleState.update()는 status!=='active'면 내부에서 바로 리턴한다(이벤트 애니메이션만
-  // 계속 진행) - 그래서 isBlocked() 전체가 아니라 paused + 타워 강화 팝업(selectedTowerIndex)만
+  // 계속 진행) - 그래서 isBlocked() 전체가 아니라 paused + 정비 팝업(prep)만
   // 따로 막는다. status가 'cleared'/'failed'로 막 바뀐 바로 그 프레임에도 controller.update()가
   // 계속 불려야 BattleController._applyClearReward()(클리어 보상 지급, 팝업에 쓸 골드 계산)가
   // 실행된다 - isBlocked() 전체로 막으면 상태가 바뀐 다음 프레임부터 전투 업데이트 자체가
   // 멈춰서 보상이 영원히 계산되지 않는다(이 상태 전환 프레임에는 팝업이 열려 있을 수 없으므로
-  // selectedTowerIndex 체크를 더해도 이 보상 계산 타이밍에는 영향이 없다).
-  if (!paused && selectedTowerIndex == null && controller) {
+  // prep 체크를 더해도 이 보상 계산 타이밍에는 영향이 없다).
+  if (!paused && prep == null && controller) {
     battleBridge.update(gameState);
-    controller.update(dt);
+    // 조준 중엔 전투만 느리게(퍼즐은 정상 속도로 연쇄 마무리).
+    controller.update(aim ? dt * controller.itemsConfig.targetingBattleTimeScale : dt);
   }
 
   // 힌트(입력이 일정 시간 없으면 가능한 수 한 칸을 보여줌)는 이제 GameState가 직접 관리한다
@@ -534,9 +1070,17 @@ function loop(now) {
       paused,
       buildBattleHud(),
       controller?.lastClearReward ?? null,
-      selectedTowerIndex,
-      upgradeTab
+      prep != null,
+      buildItemUi()
     );
+    if (!paused) drawPrep(now);
+    // 보스 첫 처치 보상 - 클리어 보상이 새로 계산된 프레임에 한 번 획득 팝업으로.
+    const clear = controller?.lastClearReward;
+    if (clear && clear !== shownClearReward) {
+      shownClearReward = clear;
+      rewardPopup.show(rewardFromDelta(clear.grant));
+    }
+    renderer.drawRewardPopup(rewardPopup);
   }
 
   drawFade(rawDtMs);
@@ -551,14 +1095,11 @@ function loadFonts() {
   return Promise.all(FONT_LOAD_SPECS.map((spec) => document.fonts.load(spec).catch(() => {})));
 }
 
-// 이미지(+effects.json) 로딩 중에는 간단한 진행률만 보여준다. manifest/effects.json이
+// 이미지(+effects.json) 로딩 중에는 타이틀이 진행률 게이지를 보여준다. manifest/effects.json이
 // 없거나 fetch가 실패해도 loadAssets()는 throw하지 않으므로(빈 설정으로 resolve) 게임이
 // 멈추지 않는다 - 이미지가 전혀 없어도 fallback 도형으로 정상 동작해야 한다.
 Promise.all([
-  loadAssets((loadedCount, totalCount) => {
-    if (!loadingEl) return;
-    loadingEl.textContent = totalCount > 0 ? t('loading.progress', { loaded: loadedCount, total: totalCount }) : t('loading.default');
-  }),
+  loadAssets((loadedCount, totalCount) => titleScreen.setLoadProgress(loadedCount, totalCount)), // 타이틀 로딩 게이지
   loadFonts(),
 ])
   .then(([assets]) => {
@@ -571,7 +1112,7 @@ Promise.all([
     assetsReady = true;
   })
   .finally(() => {
-    if (loadingEl) loadingEl.remove();
+    titleScreen.tapReady = true;
   });
 
 requestAnimationFrame(loop);

@@ -12,7 +12,8 @@
       "matchable": false,
       "damagedBy": [
         "adjacentMatch",
-        "specialEffect"
+        "specialEffect",
+        "item"
       ],
       "onDestroy": {
         "effect": "none"
@@ -29,7 +30,8 @@
       "matchable": false,
       "damagedBy": [
         "adjacentMatch",
-        "specialEffect"
+        "specialEffect",
+        "item"
       ],
       "hpSprites": [
         "obstacles/stone_cracked.png",
@@ -69,6 +71,7 @@
   },
   "rules": {
     "adjacentMatch": "매치로 지워진 칸의 상하좌우에 있는 방해요소가 1 피해. 한 번의 해결 단계(resolve step)에서 같은 방해요소는 최대 1 피해.",
+    "item": "망치·낫 아이템(docs/items.md)이 그 칸을 고르면 1 피해. 돌덩이(hp 2)도 한 번에 1만.",
     "specialEffect": "라인/폭탄/상자/컬러 효과 범위에 방해요소 칸이 포함되면 1 피해. 컬러 잼은 지운 잼과 인접한 방해요소만(=adjacentMatch로 처리).",
     "gravity": "falls=true인 방해요소는 잼처럼 떨어진다. 위에서 새로 생기지는 않는다(spawn 규칙으로만 등장).",
     "noMoves": "가능한 스왑이 없으면 기존처럼 잼만 재배치(방해요소 칸은 그대로). 재배치 3회 실패 시 hp가 가장 낮은 occupant 방해요소 1개 제거.",

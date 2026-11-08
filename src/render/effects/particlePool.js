@@ -15,12 +15,14 @@ export class ParticlePool {
         color: '#ffffff',
         size: 4,
         shape: 'rect',
+        battle: false,
       };
     }
   }
 
   // 빈 슬롯이 없으면 그냥 스폰을 생략한다(드랍, 에러 없음).
-  spawn({ x, y, vx, vy, life, color, size, shape = 'rect' }) {
+  // battle = 전투 영역 파티클(기술·성벽). 보드 파티클을 전투 영역에서 빼고 그릴 때 구분용.
+  spawn({ x, y, vx, vy, life, color, size, shape = 'rect', battle = false }) {
     for (const p of this.particles) {
       if (p.active) continue;
       p.active = true;
@@ -33,6 +35,7 @@ export class ParticlePool {
       p.color = color;
       p.size = size;
       p.shape = shape;
+      p.battle = battle;
       return p;
     }
     return null;
@@ -52,9 +55,10 @@ export class ParticlePool {
     }
   }
 
-  draw(ctx) {
+  // battleOnly = battle 파티클만 그린다.
+  draw(ctx, battleOnly = false) {
     for (const p of this.particles) {
-      if (!p.active) continue;
+      if (!p.active || (battleOnly && !p.battle)) continue;
       const alpha = Math.max(0, p.life / p.maxLife);
       ctx.globalAlpha = alpha;
       ctx.fillStyle = p.color;

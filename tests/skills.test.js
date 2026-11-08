@@ -57,9 +57,33 @@ function step(state, seconds, dt = 0.1) {
 }
 
 // ---- 색 효과 ----
+// 기본값(appliesTo 'skills')은 기술 피해에만 효과가 붙는다. 아래 효과 규칙 테스트는 기본 사격 1발로
+// 확인하려고 appliesTo 'all'로 돌린다(같은 _applyColorEffect 경로).
+const ALL = skillsWith((s) => { s.colorEffects.appliesTo = 'all'; });
+const makeAll = (o = {}) => makeState({ skills: ALL, ...o });
+
+test('기본값 appliesTo=skills: 일반 3매치 사격은 효과·범위 2차 피해 없음, 기술 명중엔 효과', () => {
+  assert.equal(SKILLS.colorEffects.appliesTo, 'skills');
+  for (const c of COLORS) {
+    const s = makeState({ enemies: [enemy(), enemy()], progress: [0.5, 0.5] });
+    hit(s, c, 3);
+    assert.deepEqual(s.enemies[0].effects, makeState().enemies[0].effects, `${c} 사격 뒤 effects 그대로`);
+    assert.equal(lost(s, 1), 0, `${c}: 범위 2차 피해 없음`);
+    assert.ok(!s.events.some((e) => e.source === 'splash' || e.type === 'effectImmune'));
+  }
+  const imm = makeState({ enemies: [boss({ immune: ['blue'] })] });
+  hit(imm, 'blue', 3);
+  assert.ok(!imm.events.some((e) => e.type === 'effectImmune'), '사격엔 면역 표시도 없음');
+
+  const k = makeState({ enemies: [enemy(), enemy()], progress: [0.5, 0.45] });
+  cast(k, 'red', 0, 1, true, 'bomb');
+  cast(k, 'blue', 0, 1, true, 'line_h');
+  assert.equal(k.enemies[0].effects.slow.mul, 0.7, '기술 명중엔 효과');
+  assert.ok(k.events.some((e) => e.source === 'splash'), '기술 레드는 범위 2차 피해');
+});
 
 test('블루 감속: 이동 ×0.7, 2초, 중첩 없이 시간만 갱신 / 보스는 절감(×0.85)', () => {
-  const s = makeState({ enemies: [enemy(), boss()] });
+  const s = makeAll({ enemies: [enemy(), boss()] });
   hit(s, 'blue');
   s.enemies[1].effects.slow.time = 0; // 직격은 0번 적만.
   s._applyColorEffect(s.enemies[1], 'blue', 1);
@@ -74,7 +98,7 @@ test('블루 감속: 이동 ×0.7, 2초, 중첩 없이 시간만 갱신 / 보스
 });
 
 test('퍼플 독: 3초에 걸쳐 피해×0.5×중첩을 0.5초 틱으로, 방어 무시, 최대 3중첩', () => {
-  const s = makeState({ enemies: [enemy({ def: 20 })] });
+  const s = makeAll({ enemies: [enemy({ def: 20 })] });
   hit(s, 'purple'); // 직격 100−20 = 80 -> 독 총 40.
   assert.equal(lost(s), 80);
   const before = hp(s);
@@ -92,7 +116,7 @@ test('퍼플 독: 3초에 걸쳐 피해×0.5×중첩을 0.5초 틱으로, 방어
 });
 
 test('옐로우 경직: 이동·성벽 공격 정지, 쿨타임 2초 안엔 다시 안 걸림, 보스는 절반', () => {
-  const s = makeState({ enemies: [enemy()], progress: [1] });
+  const s = makeAll({ enemies: [enemy()], progress: [1] });
   s.enemies[0]._reachedLine = true;
   hit(s, 'yellow');
   step(s, 0.9); // 0.4초 정지 + 0.5초 공격 타이머.
@@ -100,7 +124,7 @@ test('옐로우 경직: 이동·성벽 공격 정지, 쿨타임 2초 안엔 다�
   step(s, 0.6);
   assert.equal(s.wallHealth, 995, '경직이 풀린 뒤 1초 쌓이면 공격');
 
-  const m = makeState({ enemies: [enemy()] });
+  const m = makeAll({ enemies: [enemy()] });
   hit(m, 'yellow');
   step(m, 0.4);
   assert.equal(m.enemies[0].progress, 0);
@@ -111,13 +135,13 @@ test('옐로우 경직: 이동·성벽 공격 정지, 쿨타임 2초 안엔 다�
   hit(m, 'yellow'); // 쿨 2초 지남.
   assert.ok(m.enemies[0].effects.stun.time > 0.39);
 
-  const b = makeState({ enemies: [boss()] });
+  const b = makeAll({ enemies: [boss()] });
   hit(b, 'yellow');
   assert.equal(b.enemies[0].effects.stun.time, 0.2);
 });
 
 test('그린 표식: 첫 중첩 즉시, 다음은 2초 쿨 뒤, 최대 2, 맞을 때마다 4초 갱신, 피해 ×(1+0.1×중첩)', () => {
-  const s = makeState();
+  const s = makeAll();
   hit(s, 'green');
   const mark = s.enemies[0].effects.mark;
   assert.equal(mark.stacks, 1);
@@ -137,7 +161,7 @@ test('그린 표식: 첫 중첩 즉시, 다음은 2초 쿨 뒤, 최대 2, 맞을
 });
 
 test('레드 범위: 반경 안 다른 적에게 피해×0.4를 2차 피해로(다시 색 효과 안 탐), 레드 면역 적은 제외', () => {
-  const s = makeState({
+  const s = makeAll({
     enemies: [enemy(), enemy(), enemy(), boss({ immune: ['red'] })],
     progress: [0.5, 0.4, 0.2, 0.45],
   });
@@ -149,7 +173,7 @@ test('레드 범위: 반경 안 다른 적에게 피해×0.4를 2차 피해로(�
 });
 
 test('면역: 그 색 효과만 막고 피해는 정상 + effectImmune 이벤트', () => {
-  const s = makeState({ enemies: [boss({ immune: ['blue', 'yellow'] })] });
+  const s = makeAll({ enemies: [boss({ immune: ['blue', 'yellow'] })] });
   hit(s, 'blue');
   hit(s, 'yellow');
   assert.equal(lost(s), 200);
@@ -174,7 +198,7 @@ test('skills 설정이 없거나 unlocked=false면 효과 없음(기존 사격 �
   assert.equal(none.applyGemClear('red', 0, 1, true, 'bomb'), undefined);
   assert.ok(!none.events.some((e) => e.type === 'skillCast'));
 
-  const off = makeState({ skills: skillsWith((s) => { s.unlocked.colorEffects.blue = false; s.unlocked.specialSkills.line = false; }) });
+  const off = makeState({ skills: skillsWith((s) => { s.colorEffects.appliesTo = 'all'; s.unlocked.colorEffects.blue = false; s.unlocked.specialSkills.line = false; }) });
   hit(off, 'blue');
   assert.equal(off.enemies[0].effects.slow.time, 0);
   off.applyGemClear('red', 0, 1, true, 'line_h');
@@ -330,6 +354,30 @@ test('deferSkillHits: 렌더가 resolveSkillHit을 부를 때 적용, 예약 반
   assert.equal(lost(s, 1), 0);
   step(s, 1.1);
   assert.equal(lost(s, 1), 100, '타임아웃이면 남은 명중을 즉시 적용');
+});
+
+test('retargetSkillHit: 대상이 먼저 죽으면 예약을 (HP-예약)이 남은 HP 최대 적으로 옮기고, 없으면 null', () => {
+  const s = makeState({ enemies: [enemy({ hp: 900 }), enemy({ hp: 800 }), enemy({ hp: 700 }), enemy({ hp: 600 })], config: { deferSkillHits: true } });
+  const [a, b, c] = s.enemies;
+  const ev = cast(s, 'red', 0, 1, true, 'box'); // a, b에 150씩.
+  assert.deepEqual(ev.targets, [a.id, b.id]);
+  a.currentHealth = 0;
+  a.state = 'dead';
+  c.pendingDamage = 700; // c는 죽을 예정 - 건너뛰고 b(800)도 아직 HP가 남아 1위.
+  assert.equal(s.retargetSkillHit(ev, a.id), b.id);
+  assert.equal(a.pendingDamage, 0);
+  assert.equal(b.pendingDamage, 300);
+  s.resolveSkillHit(ev, b.id);
+  s.resolveSkillHit(ev, b.id);
+  assert.equal(b.maxHealth - b.currentHealth, 300, '옮긴 몫도 실제로 들어감');
+  assert.equal(b.pendingDamage, 0);
+  s.resolveSkillHit(ev, a.id); // 원래 몫은 이미 옮겼으니 아무 일 없음.
+
+  const none = makeState({ enemies: [enemy({ hp: 900 })], config: { deferSkillHits: true } });
+  const ev2 = cast(none, 'red', 0, 1, true, 'box');
+  none.enemies[0].state = 'dead';
+  assert.equal(none.retargetSkillHit(ev2, none.enemies[0].id), null);
+  assert.equal(none.enemies[0].pendingDamage, 150, '남은 1발 몫만 남음');
 });
 
 // ---- 퍼즐 -> 전투 다리 ----

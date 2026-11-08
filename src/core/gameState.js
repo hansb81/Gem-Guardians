@@ -36,6 +36,7 @@ import {
   damageOccupantsInCells,
   tickAttachmentTimers,
   placeInitialObstacles,
+  topUpInitialObstacles,
   maybeSpawnOnMove,
 } from './obstacles/obstacles.js';
 
@@ -120,6 +121,8 @@ export class GameState {
     this.floorObstacles = floorObstacles ?? null;
     this._obstacleSpawnCounters = {};
     this._obstacleReshuffleFailures = 0;
+    // 유효 스왑 수(Resolution을 만든 일반 스왑만, force 스왑·아이템은 안 셈) - 아이템 쿨다운 기준(docs/items.md 3장).
+    this.validSwapCount = 0;
     if (this.obstaclesRegistry) {
       placeInitialObstacles(this.board, this.obstaclesRegistry, this.floorObstacles, this.board.rng);
     }
@@ -199,7 +202,9 @@ export class GameState {
   // - 하나라도 걸리면: 새 Resolution을 만들어 두 칸에 스왑 위치 이동 'falling' 애니메이션을
   //   걸고 true를 반환한다. 실제 매치/컬러스왑/조합 해소는 그 애니메이션이 끝난 뒤
   //   update()에서 시작된다(스왑 애니메이션이 끝나기 전에 클리어가 시작되지 않는다).
-  trySwap(r1, c1, r2, c2) {
+  // force:true(교환 장갑, docs/items.md A5)면 매치가 없어도 되돌리지 않고 바꾼 채로 확정한다.
+  // force 스왑은 시한폭탄 타이머·everyMoves·validSwapCount를 세지 않는다(아이템은 스왑 1회가 아님).
+  trySwap(r1, c1, r2, c2, { force = false } = {}) {
     // 셔플 연출이 재생 중이면 입력을 받지 않는다 - 보드 데이터는 이미 확정돼 있지만
     // 화면에선 아직 소용돌이/정렬 중이라 지금 스왑을 받으면 어색하다.
     if (this._hasActiveShuffle()) return false;
@@ -292,6 +297,13 @@ export class GameState {
       const matches = findMatches(board);
       const swapKeys = new Set([keyOf(a), keyOf(b)]);
       const relevant = matches.some((group) => group.cells.some((cell) => swapKeys.has(keyOf(cell))));
+      if (!relevant && force) {
+        this._beginForcedSwapMove(a, b);
+        // 이 스왑으로 둘 수 있는 수가 없어졌으면 즉시 재배치 - 진행 중 Resolution이 있으면 그게
+        // 끝날 때 update()가 어차피 검사한다.
+        if (this.resolutions.length === 0) this._maybeReshuffle();
+        return true;
+      }
       if (!relevant) {
         board.swap(r1, c1, r2, c2); // 매치가 없으면 되돌린다.
         this._beginInvalidSwapWiggle(a, b, originalValueA, originalSpecialA, originalValueB, originalSpecialB);
@@ -334,7 +346,10 @@ export class GameState {
 
     // 방해요소: "유효한 스왑" 1회 - 시한폭탄 타이머는 여기서만 줄고(연쇄는 포함 안 됨), 등장
     // 스케줄의 everyMoves 카운터도 여기서만 올라간다(docs/balance.md 7-2/7-3).
-    if (this.obstaclesRegistry) this._onObstacleValidSwap();
+    if (!force) {
+      this.validSwapCount += 1;
+      if (this.obstaclesRegistry) this._onObstacleValidSwap();
+    }
 
     // 콤보(연속 스트릭) - Resolution을 만드는 모든 성공 스왑(match/colorSwap/boxSwap/combo)에서
     // 스트릭을 올리고 타이머를 리셋한다. 무효 스왑(여기 도달하지 못함)은 기본적으로 끊지 않는다.
@@ -386,6 +401,216 @@ export class GameState {
       fromCol: a.col,
     };
     this._invalidSwapCells.push(a, b);
+  }
+
+  // 매치 없는 force 스왑 - Resolution 없이 스왑 이동 연출만 건다. 끝나면 _advanceInvalidSwaps가
+  // cellStates를 정리한다(들썩 애니메이션과 같은 정리 경로 재사용).
+  _beginForcedSwapMove(a, b) {
+    const { board } = this;
+    for (const [cell, from] of [[a, b], [b, a]]) {
+      board.cellStates[board.index(cell.row, cell.col)] = {
+        phase: 'falling',
+        elapsedMs: 0,
+        durationMs: ANIMATION_DURATIONS_MS.swap,
+        value: board.get(cell.row, cell.col),
+        special: board.getSpecial(cell.row, cell.col),
+        fromRow: from.row,
+        fromCol: from.col,
+      };
+    }
+    this._invalidSwapCells.push(a, b);
+  }
+
+  // ------------------------------------------------------------
+  // 아이템(docs/items.md) - 스왑 1회로 치지 않는다(시한폭탄 타이머·everyMoves·validSwapCount 없음).
+  // 대상 칸이 바쁘면(셔플 연출 중, 열 잠김 = 그 열에 애니메이션 중인 칸) false, 소모는 호출부 몫.
+  // ------------------------------------------------------------
+
+  // 망치: 칸 1개. 잼이면 제거(특수 잼이면 발동), occupant 방해요소면 1 피해만.
+  useHammer(row, col) {
+    return this._itemDestroy([{ row, col }], [0]);
+  }
+
+  // 가로/세로 낫: axis 'row'면 index 행 전체, 'col'이면 index 열 전체. 지연은 라인 발동과 같은
+  // lineStepMs로 왼쪽/위쪽 끝에서부터 거리순.
+  useScythe(axis, index) {
+    const { board } = this;
+    const n = axis === 'row' ? board.cols : board.rows;
+    const cells = Array.from({ length: n }, (_, i) => (axis === 'row' ? { row: index, col: i } : { row: i, col: index }));
+    const delays = computeDistanceDelays(
+      cells,
+      cells[0],
+      DETONATION_CONFIG.lineStepMs,
+      DETONATION_CONFIG.maxDetonationMs,
+      manhattanDistance
+    );
+    return this._itemDestroy(cells, delays);
+  }
+
+  // 무지개 결정: 일반 잼 1개를 무지개 잼으로 바꾸기만 한다(매치로 생기는 무지개 잼과 같은 값).
+  // 특수 잼·occupant 칸이면 실패. 시한폭탄(attachment)은 그대로 붙어 있다가 이 잼이 터질 때 해제된다.
+  useRainbow(row, col) {
+    const cells = [{ row, col }];
+    if (!this._itemTargetsIdle(cells)) return false;
+    const { board } = this;
+    const idx = board.index(row, col);
+    if (board.grid[idx] < 0 || board.specials[idx] || board.occupants[idx]) return false;
+    this._onItemInput();
+    this._withDeferredEffects(() => {
+      board.set(row, col, COLORLESS);
+      board.setSpecial(row, col, { kind: SPECIAL_KIND.COLOR, direction: null });
+      this._pushEffect({
+        type: 'specialCreate',
+        position: { row, col },
+        kind: SPECIAL_KIND.COLOR,
+        direction: null,
+        color: COLORLESS,
+        cascadeIndex: 1,
+        durationMs: ANIMATION_DURATIONS_MS.specialCreate,
+      });
+    });
+    return true;
+  }
+
+  // 염료(docs/items.md A6): 일반 잼은 그 색으로, 특수 잼(라인/폭탄/박스)은 모양 그대로 색만 바꾼다.
+  // 반환 true | 'busy'(칸이 연출 중) | 'invalidTarget'(무지개 잼·occupant 칸·이미 그 색·색 범위 밖).
+  // 시한폭탄은 붙은 채 유지. 바꾼 칸으로 매치가 생기면 교환 장갑 매치처럼 평소 Resolution(콤보 포함,
+  // 스왑 수·시한폭탄은 안 셈)으로 처리한다.
+  useDye(row, col, color) {
+    const cells = [{ row, col }];
+    if (!this._itemTargetsIdle(cells)) return 'busy';
+    const { board } = this;
+    const idx = board.index(row, col);
+    if (!Number.isInteger(color) || color < 0 || color >= board.typeCount) return 'invalidTarget';
+    if (board.grid[idx] < 0 || board.occupants[idx] || board.grid[idx] === color) return 'invalidTarget';
+    this._onItemInput();
+    board.grid[idx] = color;
+
+    const cell = cells[0];
+    const relevant = findMatches(board).some((group) => group.cells.some((c) => keyOf(c) === keyOf(cell)));
+    if (!relevant) {
+      if (this.resolutions.length === 0) this._maybeReshuffle();
+      return true;
+    }
+    // trySwap의 match 경로와 같은 Resolution - 스왑 애니메이션이 없어 다음 틱에 바로 1단계로 들어간다.
+    const resolution = this._createResolution();
+    resolution.trigger = { kind: 'match', data: { swapCells: cells } };
+    resolution.phase = 'swap';
+    resolution.watchCells = cells;
+    resolution.columns.add(col);
+    this.resolutions.push(resolution);
+    this._latestResolutionId = resolution.id;
+    this.cascadeCount = 0;
+    this.comboStreak += 1;
+    this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
+    this._pendingSwapEffects.push({ type: 'comboChange', comboStreak: this.comboStreak, remainingMs: this.comboStreakTimerMs, durationMs: 1 });
+    return true;
+  }
+
+  // 섞기 부적(A7): 활성 Resolution이나 셔플 연출이 있으면 false(호출부가 예약 대기). occupant 칸 고정.
+  useShuffle() {
+    if (this.resolutions.length > 0 || this._hasActiveShuffle()) return false;
+    this._onItemInput();
+    this.shuffleBoard();
+    return true;
+  }
+
+  // 해제 부적(B4): 보드의 모든 시한폭탄 타이머 +add. 반환 = 시한폭탄 수(0이면 호출부가 noTarget 실패).
+  addTimeBombTimers(add) {
+    const { board } = this;
+    let n = 0;
+    this._withDeferredEffects(() => {
+      board.attachments.forEach((a, idx) => {
+        if (a?.type !== 'timeBomb') return;
+        a.timer += add;
+        n += 1;
+        const cell = { row: Math.floor(idx / board.cols), col: idx % board.cols };
+        this._pushEffect({ type: 'timeBombTimerAdded', cell, add, timer: a.timer, durationMs: 1 });
+      });
+    });
+    return n;
+  }
+
+  // 시작 부스터(C1): 무작위 일반 잼(방해요소·시한폭탄 칸 제외) count개를 kind 특수 잼으로 바꾼다
+  // (라인은 방향도 무작위). board.rng만 쓰므로 같은 seed면 같은 칸. 반환 = 바꾼 칸 목록.
+  placeStarterSpecials(kind, count) {
+    const { board } = this;
+    const pool = [];
+    for (let i = 0; i < board.grid.length; i++) {
+      if (board.grid[i] >= 0 && !board.specials[i] && !board.occupants[i] && !board.attachments[i]) pool.push(i);
+    }
+    const placed = [];
+    while (placed.length < count && pool.length > 0) {
+      const idx = pool.splice(Math.floor(board.rng() * pool.length), 1)[0];
+      const direction = kind === SPECIAL_KIND.LINE ? (board.rng() < 0.5 ? 'horizontal' : 'vertical') : null;
+      board.specials[idx] = { kind, direction };
+      placed.push({ row: Math.floor(idx / board.cols), col: idx % board.cols });
+    }
+    // 연출: 입장 셔플(shuffle 이펙트)이 재생 중이면 그 뒤에 이어 붙여(sequential 큐) 셔플이 끝난 뒤
+    // 하나씩 specialCreate가 나온다. 셔플이 없으면 바로.
+    const creates = placed.map((cell) => ({
+      type: 'specialCreate',
+      position: cell,
+      kind,
+      direction: board.specials[board.index(cell.row, cell.col)].direction,
+      color: board.get(cell.row, cell.col),
+      cascadeIndex: 1,
+      durationMs: ANIMATION_DURATIONS_MS.specialCreate,
+    }));
+    const shuffle = this.effects.find((e) => e.type === 'shuffle');
+    if (shuffle) shuffle._sequentialQueue = [...(shuffle._sequentialQueue ?? []), ...creates];
+    else for (const c of creates) this._pushEffect(c);
+    return placed;
+  }
+
+  _itemTargetsIdle(cells) {
+    if (this._hasActiveShuffle()) return false;
+    const { board } = this;
+    return cells.every((c) => board.inBounds(c.row, c.col) && !board.isColumnLocked(c.col));
+  }
+
+  // trySwap과 같은 "입력 들어옴" 처리 - 힌트 유휴 타이머 취소.
+  _onItemInput() {
+    this._inputIdleMs = 0;
+    this.hintCell = null;
+    this._hintShown = false;
+  }
+
+  // update() 밖에서 만든 durationMs:1 이펙트(cellDetonate/obstacleDamaged 등)가 render에 읽히기
+  // 전에 다음 update() 0단계에서 늙어 사라지지 않도록 _pendingSwapEffects로 돌린다(trySwap과 같은 이유).
+  _withDeferredEffects(fn) {
+    const saved = this.effects;
+    this.effects = [];
+    try {
+      fn();
+    } finally {
+      this._pendingSwapEffects.push(...this.effects);
+      this.effects = saved;
+    }
+  }
+
+  // 망치/낫 공통 - 일반 매치 해소와 같은 Resolution 파이프라인(_beginClear -> _armCell ->
+  // _commitCellClear -> settle)을 그대로 타서 PuzzleBattleBridge가 평소처럼 탑 사격을 낸다.
+  // 잼 칸은 armed/clearing 예약(특수 잼이면 _armCell의 체인 후보로 자기 효과 발동), occupant 칸은
+  // 'item' 1 피해. 부서져 빈 칸은 이 Resolution의 settle이 다른 방해요소 파괴와 같이 채운다.
+  _itemDestroy(cells, delays) {
+    if (!this._itemTargetsIdle(cells)) return false;
+    this._onItemInput();
+    const { board } = this;
+    const resolution = this._createResolution();
+    resolution.cascadeIndex = 1;
+    const plan = new Map();
+    cells.forEach((cell, i) => {
+      const idx = board.index(cell.row, cell.col);
+      if (board.occupants[idx] || board.grid[idx] === EMPTY) return;
+      plan.set(keyOf(cell), { row: cell.row, col: cell.col, armedMs: delays[i], cause: 'item' });
+    });
+    this.resolutions.push(resolution);
+    this._withDeferredEffects(() => {
+      this._damageObstacles(resolution, cells, 1, 'item');
+      this._beginClear(resolution, plan, 1);
+    });
+    return true;
   }
 
   _createResolution() {
@@ -1015,7 +1240,7 @@ export class GameState {
     for (const group of matches) {
       const decision = decideSpecialForGroup(group);
       if (!decision) continue;
-      const spawnCell = pickSpawnCell(group, decision.kind, swapCells);
+      const spawnCell = pickSpawnCell(group, decision.kind, swapCells, (c) => !!board.getSpecial(c.row, c.col));
       plan.delete(keyOf(spawnCell)); // 생성 칸은 이번 단계에서 지우지 않는다.
       const color = decision.kind === SPECIAL_KIND.COLOR ? COLORLESS : group.color;
       spawnPlans.push({
@@ -1331,6 +1556,18 @@ export class GameState {
   shuffleBoard({ skipClear = false } = {}) {
     const fixed = this.obstaclesRegistry ? occupantIndices(this.board) : undefined;
     this._shuffleBoard(fixed, skipClear);
+  }
+
+  // "다음 층" - 보드를 유지한 채 새 층 방해요소 규칙으로 바꾼다(docs/balance.md 7장).
+  // 남은 방해요소는 두고 initial 부족분만 채우며, everyMoves 카운터는 새 층 기준으로 0부터.
+  // 방해요소 배치는 잼 색을 바꾸지 않아 새 매치를 만들 수 없으므로 수 없음만 확인한다
+  // (진행 중인 Resolution이 있으면 그게 끝날 때 _maybeReshuffle이 알아서 돈다).
+  continueToFloor(floorObstacles) {
+    this.floorObstacles = floorObstacles ?? null;
+    this._obstacleSpawnCounters = {};
+    if (!this.obstaclesRegistry) return;
+    topUpInitialObstacles(this.board, this.obstaclesRegistry, this.floorObstacles, this.board.rng);
+    if (this.resolutions.length === 0) this._maybeReshuffle();
   }
 
   // 활성 Resolution이 하나도 없는 상태로 막 전이한 틱에만(edge-triggered) 호출된다.

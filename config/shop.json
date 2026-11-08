@@ -1,0 +1,77 @@
+{
+  "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. krw = 원화(가짜 결제, src/shop/iap.js).",
+  "qtyMax": 99,
+  "qtyQuick": [1, 5, 10],
+  "free": { "item": "dye", "count": 1 },
+  "goldItems": [
+    { "group": "board", "items": ["hammer", "dye", "shuffle", "scythe_h", "scythe_v", "glove", "defuse", "rainbow"] },
+    { "group": "battle", "items": ["repair", "hourglass", "barrier", "drum"] },
+    { "group": "preFloor", "items": ["booster_line", "booster_bomb"] }
+  ],
+  "skills": {
+    "_doc": "values = config/skills.json 해당 field의 Lv 1~5 값(Lv 1 = 지금 skills.json 값). 전투는 skills.json 값 x values[lv-1]/values[0]만 곱한다(시뮬레이터는 skills.json 그대로 = Lv 1). format: pct 40% | slowPct (1-v) 30% | sec 0.4초 | plusPct +10% | mul x2.5. levelCost[i] = Lv i+1 -> i+2 비용 배수. 특수 기술 해금 A안: unlockBossFloor 보스를 처음 잡은 뒤(최고 층 > 그 층) unlockGold 배수 골드로 해금, 0이면 처음부터 Lv 1.",
+    "maxLevel": 5,
+    "levelCost": [2, 3, 5, 8],
+    "color": {
+      "red":    { "field": "ratio",    "values": [0.4, 0.45, 0.5, 0.55, 0.6],   "format": "pct" },
+      "blue":   { "field": "mul",      "values": [0.7, 0.67, 0.64, 0.61, 0.58], "format": "slowPct" },
+      "purple": { "field": "ratio",    "values": [0.5, 0.55, 0.6, 0.65, 0.7],   "format": "pct" },
+      "yellow": { "field": "duration", "values": [0.4, 0.45, 0.5, 0.55, 0.6],   "format": "sec" },
+      "green":  { "field": "perStack", "values": [0.1, 0.11, 0.12, 0.13, 0.15], "format": "plusPct" }
+    },
+    "special": {
+      "spike": { "skill": "line",  "field": "mul", "values": [2.5, 2.7, 2.9, 3.1, 3.3], "format": "mul", "unlockBossFloor": 0,  "unlockGold": 0 },
+      "lava":  { "skill": "bomb",  "field": "mul", "values": [2.0, 2.2, 2.4, 2.6, 2.8], "format": "mul", "unlockBossFloor": 10, "unlockGold": 6 },
+      "soul":  { "skill": "box",   "field": "mul", "values": [1.5, 1.6, 1.7, 1.8, 2.0], "format": "mul", "unlockBossFloor": 20, "unlockGold": 8 },
+      "ult":   { "skill": "color", "field": "mul", "values": [1.0, 1.1, 1.2, 1.3, 1.5], "format": "mul", "unlockBossFloor": 30, "unlockGold": 12, "alsoUnlocks": ["color_color"] }
+    }
+  },
+  "totemSlots": 3,
+  "goldExchange": [
+    { "id": "small", "floors": 5,  "dia": 20,  "stack": 1 },
+    { "id": "mid",   "floors": 15, "dia": 50,  "stack": 3 },
+    { "id": "big",   "floors": 40, "dia": 120, "stack": 5 }
+  ],
+  "diaBundles": [
+    { "dia": 60,   "bonus": 0,    "krw": 1200,   "stack": 1 },
+    { "dia": 300,  "bonus": 30,   "krw": 5900,   "stack": 1 },
+    { "dia": 600,  "bonus": 90,   "krw": 12000,  "stack": 3 },
+    { "dia": 1600, "bonus": 320,  "krw": 29000,  "stack": 3 },
+    { "dia": 3400, "bonus": 850,  "krw": 59000,  "stack": 5 },
+    { "dia": 7000, "bonus": 2100, "krw": 119000, "stack": 5 }
+  ],
+  "diaItems": ["gold_coin", "revive"],
+  "slot4Dia": 100,
+  "itemBundles": [
+    { "item": "hammer", "count": 5, "dia": 20 },
+    { "item": "dye", "count": 5, "dia": 20 },
+    { "item": "shuffle", "count": 5, "dia": 15 },
+    { "item": "scythe_h", "count": 5, "dia": 35 },
+    { "item": "scythe_v", "count": 5, "dia": 35 },
+    { "item": "glove", "count": 5, "dia": 35 },
+    { "item": "rainbow", "count": 5, "dia": 60 },
+    { "item": "defuse", "count": 5, "dia": 30 },
+    { "item": "repair", "count": 5, "dia": 50 },
+    { "item": "hourglass", "count": 5, "dia": 50 },
+    { "item": "barrier", "count": 5, "dia": 50 },
+    { "item": "drum", "count": 5, "dia": 50 },
+    { "item": "booster_line", "count": 3, "dia": 30 },
+    { "item": "booster_bomb", "count": 3, "dia": 30 }
+  ],
+  "packs": {
+    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 now + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
+    "order": ["starter", "boss", "slot4", "weekly", "monthly", "chapter", "adfree"],
+    "starter": { "krw": 1200, "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5,
+      "grant": { "diamonds": 300, "items": { "hammer": 5, "scythe_h": 3, "scythe_v": 3, "repair": 3, "revive": 1 } } },
+    "boss": { "krw": 5900, "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3,
+      "grant": { "items": { "revive": 2, "hourglass": 3, "barrier": 3, "drum": 3 } } },
+    "slot4": { "krw": 4900, "once": true, "maxBestFloor": 20, "icon": "pack_slot4",
+      "grant": { "slot4": true, "items": { "rainbow": 3 } } },
+    "weekly": { "krw": 5900, "icon": "pack_weekly", "pass": { "now": 100, "daily": 60, "days": 7 } },
+    "monthly": { "krw": 11000, "icon": "pack_monthly", "pass": { "now": 300, "daily": 100, "days": 30, "dailyItems": { "dye": 1 } } },
+    "chapter": { "krw": 3900, "perChapter": true, "icon": "pack_chapter",
+      "grant": { "items": { "barrier": 3, "hourglass": 2, "booster_bomb": 2 } } },
+    "adfree": { "krw": 6500, "once": true, "icon": "pack_adfree",
+      "grant": { "diamonds": 200, "adFree": true } }
+  }
+}

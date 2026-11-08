@@ -156,6 +156,21 @@ test('플레이어 스왑으로 생긴 라인/컬러 매치는 플레이어가 �
   assert.deepEqual(created.position, { row: 0, col: 3 }, '플레이어가 움직인 칸에 생성돼야 한다');
 });
 
+test('특수 잼을 옮겨 특수 매치를 만들면 기존 특수 잼은 발동하고 새 잼은 옆 칸에 생긴다', () => {
+  // 위 테스트와 같은 보드지만 (1,3)이 라인 잼. 스왑 후 (0,3)으로 와서 4매치에 낀다.
+  const board = boardFromGrid(2, 4, [0, 0, 0, 9, 1, 2, 3, 0], 11);
+  board.setSpecial(1, 3, { kind: SPECIAL_KIND.LINE, direction: 'horizontal' });
+  const gs = new GameState({ board });
+  assert.equal(gs.trySwap(0, 3, 1, 3), true);
+
+  const effects = collectAllEffects(gs);
+  const created = effects.find((e) => e.type === 'specialCreate');
+  assert.ok(created, '새 특수 잼이 생성돼야 한다');
+  assert.deepEqual(created.position, { row: 0, col: 2 }, '기존 특수 잼 칸에서 가장 가까운 그룹 칸');
+  const fired = effects.find((e) => e.type === 'specialActivate' && e.position.row === 0 && e.position.col === 3);
+  assert.ok(fired, '옮긴 라인 잼이 덮어써지지 않고 발동해야 한다');
+});
+
 test('연쇄로 생긴 매치는 그룹의 가운데 칸에 생성된다', () => {
   // 낙하 이후 생기는 매치에 swapCells가 전달되지 않는 경우를 직접 검증.
   const matches = findMatches({ grid: [0, 0, 0, 0, 1, 2], rows: 1, cols: 6 });

@@ -6,6 +6,8 @@ import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUi
 import { t } from '../config/i18n.js';
 import { getFontString } from '../config/fonts.js';
 import { pickSummonFrame } from '../battle/summon.js';
+import { ditherPattern, drawItemIconFallback } from './itemBarRenderer.js';
+import { SkillFx } from './skillFx.js';
 
 // tower.color 값('red'|'blue'|'yellow'|'green'|'purple')은 GEM_TYPES의 id와 같은 이름을
 // 쓰므로 그대로 색상표로 재사용한다(하드코딩 회피).
@@ -26,6 +28,19 @@ const RANK_OUTLINE = {
 };
 
 const ENEMY_LANE_COUNT = 3;
+// assets/gems/palette.hex의 색 단계 - 분노의 북 중 투사체를 "한 단계 밝은 색"으로 그릴 때 각 픽셀을 다음 단계로 바꾼다
+// (마지막 단계는 그대로). 회색 5단계 + 파랑/보라/빨강/금/초록 4단계씩.
+const PALETTE_RAMPS = [
+  ['0d0a10', '221c2b', '3b3347', '655a74', 'e8dcc0'],
+  ['0c1838', '1c3a76', '386cbc', '8cc4ee'],
+  ['220e38', '48206e', '7a3cae', 'c48ce6'],
+  ['3a0814', '741426', 'b82a3c', 'ec6a6a'],
+  ['3a2808', '7a5212', 'c28a20', 'f2d264'],
+  ['0c2814', '1c5228', '3a8a3c', '9cd872'],
+];
+const PALETTE_LIGHTER = new Map();
+for (const ramp of PALETTE_RAMPS) ramp.forEach((hex, i) => PALETTE_LIGHTER.set(parseInt(hex, 16), parseInt(ramp[Math.min(i + 1, ramp.length - 1)], 16)));
+const SHIELD_BLINK_FRAMES = 2; // 결계 테두리 색 교대 주기(프레임)
 const DAMAGE_FLOAT_PX = 26;
 
 // assets/backgrounds/manifest.json 로딩 실패 시 쓰는 기본값(manifest.json 기준 고정값).
@@ -101,14 +116,53 @@ export class BattleRenderer {
     this._lastHudFloor = null;
     this._floorBannerText = '';
     this._floorBannerUntilMs = 0;
+
+    // 젬 기술 v3 이펙트(skillCast/effectImmune/적 effects). particles/shake는 CanvasRenderer가 꽂는다
+    // (파티클 풀 하나, 기존 화면 흔들림 재사용).
+    this._skillFx = new SkillFx();
+    this.particles = null;
+    this.shake = null;
+    this._frame = 0; // 결계 테두리 2프레임 교대용 카운터
+    this._brightProjectiles = new Map(); // color -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
+    this._seenRevives = new WeakSet(); // 이미 파편을 뿌린 wallRevived 이벤트
+  }
+
+  // 투사체 시트를 팔레트 한 단계 밝은 색으로 바꾼 캔버스(처음 한 번만 만들어 캐시).
+  _brightSheet(color, img) {
+    let c = this._brightProjectiles.get(color);
+    if (c) return c;
+    c = document.createElement('canvas');
+    c.width = img.width;
+    c.height = img.height;
+    const cctx = c.getContext('2d');
+    cctx.drawImage(img, 0, 0);
+    const data = cctx.getImageData(0, 0, c.width, c.height);
+    const px = data.data;
+    for (let i = 0; i < px.length; i += 4) {
+      if (px[i + 3] === 0) continue;
+      const to = PALETTE_LIGHTER.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+      if (to == null) continue;
+      px[i] = to >> 16;
+      px[i + 1] = (to >> 8) & 255;
+      px[i + 2] = to & 255;
+    }
+    cctx.putImageData(data, 0, 0);
+    this._brightProjectiles.set(color, c);
+    return c;
   }
 
   // hud = { floor, remainingEnemies, totalEnemies, tag('normal'|'elite'|'boss'), towerLevels[],
   // towerCosts[], gold }. tag/레벨·비용 표시는 docs/balance.md §2·§6, battle.md §3 요구사항
   // (상단 바 + 탑 아래 레벨/비용 표시) 때문에 battleState 자체가 아니라 BattleController/
   // playerState가 쥔 진행도 정보를 별도로 받는다(BattleState는 그 숫자들을 모른다).
-  draw(ctx, rect, battleState, now, assets, hud, paused = false) {
+  // itemIcons = 아이템 아이콘(Map<id, imgState>) - 모래시계 상태 아이콘용.
+  draw(ctx, rect, battleState, now, assets, hud, paused = false, itemIcons = null) {
     if (!battleState) return;
+    this._frame += 1;
+
+    // 모래시계 정지 중 - 걷기 프레임을 정지 시작 시각에 고정한다(멈춘 적만).
+    const frozen = !!battleState.frozen;
+    if (!frozen || this._freezeNow == null) this._freezeNow = now;
 
     // 일시정지 중에는 배경 프레임만 멈춘다(탑 공격/대기 애니메이션은 기존처럼 now를 그대로 씀) -
     // paused가 풀리는 순간의 now로 다시 흐르기 시작하도록 멈춘 시점만 기억한다.
@@ -132,12 +186,104 @@ export class BattleRenderer {
     this._drawWallHealthBar(ctx, layout.wallBar, battleState, assets);
     this._drawPauseButton(ctx, layout.pauseButton, assets);
     this._drawTrack(ctx, layout.track);
-    this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now);
+    this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now, battleState);
+    this._skillFx.update(battleState, layout.track, assets, now, this.particles, this.shake);
+    this._skillFx.draw(ctx, battleState, layout.track, assets, now);
+    if (battleState.wallShieldSec > 0) {
+      this._drawWallShield(ctx, layout.track, battleState.events || []);
+      this._drawStatusIcon(ctx, layout.wallBar, itemIcons, 'barrier', String(Math.ceil(battleState.wallShieldSec)), frozen ? 1 : 0, assets);
+    }
+    this._spawnReviveParticles(layout.track, battleState.events || []);
+    if (frozen) {
+      // 회색 틴트 - 불투명 픽셀 체커 디더(반투명 알파 없음), 적이 걷는 길 위.
+      ctx.fillStyle = ditherPattern(ctx, '#6a6672');
+      ctx.fillRect(layout.track.x, layout.track.y, layout.track.width, layout.track.height);
+      this._drawStatusIcon(ctx, layout.wallBar, itemIcons, 'hourglass', String(Math.ceil(Math.max(battleState._freeze?.normal ?? 0, battleState._freeze?.boss ?? 0))), 0, assets);
+    }
     this._updateTowerAnimations(battleState, layout, towers, assets, now);
     this._drawTowers(ctx, layout.towerArea, towers, assets, now, hud, bg, battleState.summon, rect);
     this._drawTowerProjectiles(ctx, assets, now, battleState);
     this._drawEventOverlays(ctx, layout, battleState, assets);
     this._drawFloorStartBanner(ctx, layout.track, now);
+  }
+
+  // 결계 두루마리(docs/items.md B3, 7장 "성벽 앞 코드 사각형") - 방어선(track.x)에 세로 테두리. 적 공격이
+  // 막힌 프레임(wallBlocked elapsedMs 0 = 이번 틱에 생긴 이벤트)엔 1프레임 밝게 번쩍인다.
+  // #386cbc/#8cc4ee 2프레임 교대 깜빡임(fillRect 픽셀 테두리, 원본 1px = 화면 2px), 막힌 프레임은 밝은 색으로.
+  _drawWallShield(ctx, track, events) {
+    const flash = events.some((e) => e.type === 'wallBlocked' && e.elapsedMs === 0);
+    const bright = flash || Math.floor(this._frame / SHIELD_BLINK_FRAMES) % 2 === 1;
+    const x = Math.round(track.x) - 4;
+    const y = Math.round(track.y) + 1;
+    const w = 8;
+    const h = Math.round(track.height) - 2;
+    const b = 2;
+    ctx.save();
+    ctx.fillStyle = bright ? '#8cc4ee' : '#386cbc';
+    ctx.fillRect(x, y, w, b);
+    ctx.fillRect(x, y + h - b, w, b);
+    ctx.fillRect(x, y, b, h);
+    ctx.fillRect(x + w - b, y, b, h);
+    ctx.restore();
+  }
+
+  // 성벽 HP 바 오른쪽 위 상태 아이콘(14x14 x2) + 남은 초(ui/font white). index = 오른쪽부터 몇 번째(모래시계와 겹치지 않게).
+  _drawStatusIcon(ctx, wallBar, itemIcons, id, text, index, assets) {
+    const size = 14 * 2;
+    const fontMeta = assets?.uiFont;
+    const fontState = getUiFont(assets, 'white');
+    const hasFont = !!(fontMeta?.chars && uiReady(fontState));
+    // 아이콘 + 숫자 묶음이 바 오른쪽 끝(일시정지 버튼 앞)에서 끝나게 - 숫자 폭은 폰트 widths로 계산.
+    let textW = 14;
+    if (hasFont) {
+      textW = 1;
+      for (const c of text) textW += fontMeta.widths[c] - 1;
+      textW *= 2;
+    }
+    const groupW = size + 4 + textW;
+    const x = Math.round(wallBar.x + wallBar.width - 4 - groupW - index * (groupW + 8)); // 일시정지 버튼과 4px 띄움
+    const y = Math.round(wallBar.y - size / 2);
+    const icon = itemIcons?.get(id);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (uiReady(icon)) ctx.drawImage(icon.img, x, y, size, size);
+    else drawItemIconFallback(ctx, id, x, y, size);
+    if (hasFont) {
+      drawDamage(ctx, fontState.img, fontMeta, text, x + size + 4 + textW / 2, Math.round(y + size / 2 - fontMeta.cellH), 2);
+    } else {
+      ctx.fillStyle = '#ffffff';
+      ctx.font = getFontString(12, true);
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      drawText(ctx, text, x + size + 2, y + size / 2);
+    }
+    ctx.restore();
+  }
+
+  // 부활(docs/items.md C3) - 새 wallRevived 이벤트마다 한 번, 성벽(방어선) 앞에 금색 빛 파편(#f2d264/#c28a20, 흰색 없음).
+  // 이벤트는 입력(팝업 탭) 시점에 생겨 렌더 전에 이미 한 틱 늙어 있으므로 elapsedMs 대신 WeakSet으로 "처음 본" 것을 가린다.
+  _spawnReviveParticles(track, events) {
+    if (!this.particles) return;
+    for (const e of events) {
+      if (e.type !== 'wallRevived' || this._seenRevives.has(e)) continue;
+      this._seenRevives.add(e);
+      const n = 36;
+      for (let i = 0; i < n; i++) {
+        const angle = (i / n) * Math.PI * 2;
+        const speed = 90 + (i % 3) * 40;
+        this.particles.spawn({
+          x: track.x,
+          y: track.y + track.height * ((i + 0.5) / n),
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 40,
+          life: 520 + (i % 4) * 60,
+          color: i % 2 === 0 ? '#f2d264' : '#c28a20',
+          size: 4 + (i % 3),
+          shape: 'rect',
+          battle: true,
+        });
+      }
+    }
   }
 
   // 지역 이름 배너 - 2.2초 보이고 마지막 0.4초 동안 페이드아웃.
@@ -370,7 +516,14 @@ export class BattleRenderer {
   // HP 숫자는 계속 코드로 그린다. 이미지가 없으면 기존 2중 사각형 폴백.
   _drawWallHealthBar(ctx, barRect, battleState, assets) {
     const max = battleState.wallMaxHealth || 1;
-    const cur = clamp(battleState.wallHealth ?? max, 0, max);
+    let cur = clamp(battleState.wallHealth ?? max, 0, max);
+    // 수리 망치 - 회복량만큼 비운 상태에서 이벤트 길이 동안 차오르는 트윈(ease-out).
+    // 수리 망치 회복 / 부활(0 -> 50%) 모두 같은 트윈.
+    const healed = battleState.events?.find((e) => e.type === 'wallHealed' || e.type === 'wallRevived');
+    if (healed?.durationMs) {
+      const p = clamp(healed.elapsedMs / healed.durationMs, 0, 1);
+      cur = clamp(cur - healed.amount * (1 - p) * (1 - p), 0, max);
+    }
     const ratio = cur / max;
 
     ctx.save();
@@ -755,6 +908,7 @@ export class BattleRenderer {
     const durationMs = Math.max(80, (dist / speed) * 1000);
     this._towerProjectiles.push({
       color: tower.color,
+      buffed: !!hitEvent?.buffed, // 분노의 북 - 한 단계 밝은 시트
       fromX: from.x,
       fromY: from.y,
       toX: to.x,
@@ -776,7 +930,10 @@ export class BattleRenderer {
     for (const p of this._towerProjectiles) {
       const t = (now - p.startMs) / p.durationMs;
       if (t >= 1) {
-        if (p.hitEvent) battleState.resolveTowerAttack(p.hitEvent);
+        if (p.hitEvent) {
+          this._skillFx.onTowerHit(battleState, p.hitEvent, now);
+          battleState.resolveTowerAttack(p.hitEvent);
+        }
         continue;
       }
       next.push(p);
@@ -791,7 +948,8 @@ export class BattleRenderer {
         const w = projData.frameW * scale;
         const h = projData.frameH * scale;
         const frame = Math.floor((now - p.startMs) / projData.frameMs) % projData.frames;
-        ctx.drawImage(projData.state.img, frame * projData.frameW, 0, projData.frameW, projData.frameH, x - w / 2, y - h / 2, w, h);
+        const sheet = p.buffed ? this._brightSheet(p.color, projData.state.img) : projData.state.img;
+        ctx.drawImage(sheet, frame * projData.frameW, 0, projData.frameW, projData.frameH, x - w / 2, y - h / 2, w, h);
       } else {
         ctx.fillStyle = GEM_COLOR_BY_ID.get(p.color) ?? '#ffffff';
         ctx.beginPath();
@@ -837,12 +995,13 @@ export class BattleRenderer {
     return 1;
   }
 
-  _drawEnemies(ctx, track, enemies, events, towers, assets, now) {
+  _drawEnemies(ctx, track, enemies, events, towers, assets, now, battleState = null) {
     const laneSize = track.height / ENEMY_LANE_COUNT;
     const baseShapeSize = Math.min(laneSize * 0.6, 40);
     const rules = assets?.enemySpriteRules ?? {};
     const displayScale = rules.displayScale ?? 2;
     const walkFrameMs = rules.frameMs?.walk ?? 110;
+    const knockMs = assets?.skillManifest?.skills?.line?.knockbackMs ?? 120;
 
     for (const enemy of enemies) {
       const pos = this._enemyPixelPos(track, enemy);
@@ -862,11 +1021,18 @@ export class BattleRenderer {
       let shiftX = 0;
       if (hitEvent) shiftX += 2 * (1 - clamp(hitEvent.elapsedMs / hitEvent.durationMs, 0, 1));
       if (wallHitEvent) shiftX -= 2 * Math.sin(clamp(wallHitEvent.elapsedMs / wallHitEvent.durationMs, 0, 1) * Math.PI);
+      const fxState = this._skillFx.enemyState(enemy);
+      const knockX = this._skillFx.knockOffset(fxState, now, knockMs); // 가시 넉백(렌더 오프셋만).
+      shiftX += knockX;
       const baseDrawX = pos.x + shiftX;
 
       const frames = assets?.enemySprites?.get(enemy.type);
       const loadedFrames = frames?.filter((f) => f && f.loaded && !f.failed);
-      const frame = loadedFrames && loadedFrames.length > 0 ? loadedFrames[Math.floor((now + hashOffset(String(enemy.id))) / walkFrameMs) % loadedFrames.length] : null;
+      // 경직(옐로우) 중에도 걷기 프레임을 경직 시작 시각에 고정한다.
+      if (enemy.effects?.stun.time > 1e-9) fxState.stunNow ??= now;
+      else fxState.stunNow = null;
+      const walkNow = battleState?.isEnemyFrozen?.(enemy) ? this._freezeNow : fxState.stunNow ?? now;
+      const frame = loadedFrames && loadedFrames.length > 0 ? loadedFrames[Math.floor((walkNow + hashOffset(String(enemy.id))) / walkFrameMs) % loadedFrames.length] : null;
 
       let visualHeight;
       let drawX = baseDrawX;
@@ -915,6 +1081,12 @@ export class BattleRenderer {
         this._drawEnemyFallback(ctx, enemy, drawX, pos.y - shapeSize / 2, shapeSize);
       }
       ctx.restore();
+      uiCenterX += knockX;
+      fxState.footX = uiCenterX;
+      fxState.footY = pos.y;
+      fxState.bodyX = uiCenterX;
+      fxState.bodyY = pos.y - visualHeight / 2;
+      fxState.headY = pos.y - visualHeight;
 
       if (hitEvent) {
         // 피격 1프레임 흰색 플래시.
@@ -935,12 +1107,19 @@ export class BattleRenderer {
         const barBottomY = pos.y - visualHeight - 2; // README: 바 아래쪽이 머리보다 화면 2px 위.
         const barWidth = baseShapeSize * (isBoss ? 1.8 : 1.3);
         const barTopY = this._drawEnemyHealthBar(ctx, uiCenterX, barBottomY, barWidth, enemy, assets, isBoss);
+        const iconTopY = this._skillFx.drawStatusIcons(ctx, assets, enemy, uiCenterX, barTopY - 2);
+        const nameY = iconTopY - 2;
+        const name = enemy.name ?? enemy.type ?? '';
         ctx.save();
         ctx.fillStyle = isBoss ? '#ff8a8a' : '#e8e8e8';
         ctx.font = getFontString(isBoss ? 13 : 10, isBoss);
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        drawText(ctx, enemy.name ?? enemy.type ?? '', uiCenterX, barTopY - 2);
+        drawText(ctx, name, uiCenterX, nameY);
+        // 면역·약점 아이콘(보스) - 이름 오른쪽, 아이콘 18px 높이를 이름 아랫줄에 맞춘다.
+        if (enemy.immune?.length || enemy.weak?.length) {
+          this._skillFx.drawBossIcons(ctx, assets, enemy, uiCenterX + ctx.measureText(name).width / 2 + 3, nameY - 18);
+        }
         ctx.restore();
       }
 
@@ -948,8 +1127,10 @@ export class BattleRenderer {
         const t = clamp(hitEvent.elapsedMs / hitEvent.durationMs, 0, 1);
         // 데미지 숫자는 "쏜 탑 색" 폰트로 그린다(README) - enemyHit 이벤트가 직접 들고 있는
         // towerId로 바로 찾는다.
+        // 독 틱은 작은(1배) 보라 숫자.
+        const poison = hitEvent.source === 'poison';
         const tower = towers.find((t2) => t2.id === hitEvent.towerId);
-        this._drawFloatingNumber(ctx, pos.x, pos.y - visualHeight, `-${hitEvent.damage}`, t, '#ff6b6b', assets, tower?.color ?? 'white');
+        this._drawFloatingNumber(ctx, pos.x, pos.y - visualHeight, `-${hitEvent.damage}`, t, '#ff6b6b', assets, hitEvent.buffed ? 'crit' : poison ? 'purple' : tower?.color ?? 'white', poison ? 1 : 2);
       }
     }
   }
@@ -1020,10 +1201,10 @@ export class BattleRenderer {
   }
 
   // font/damage_{variant}(README의 drawDamage) - 쏜 탑 색(red/blue/yellow/green/purple)
-  // 또는 성벽 피해(red)/기본(white)에 쓴다. 치명타(damage_crit, 3배)는 지금 게임에 크리티컬
+  // 또는 성벽 피해(red)/기본(white), 북 버프 중 피해(crit 색, 크기는 평소 2배)에 쓴다. 진짜 치명타(3배)는 scale 3으로 - 지금 게임에 크리티컬
   // 판정 자체가 없어 호출되지 않는다 - 헬퍼만 준비해 둔다. 이미지가 없으면 기존 코드 텍스트로
   // 폴백한다.
-  _drawFloatingNumber(ctx, x, y, text, t, color, assets, variant = 'white') {
+  _drawFloatingNumber(ctx, x, y, text, t, color, assets, variant = 'white', scale = 2) {
     const floatY = y - DAMAGE_FLOAT_PX * t;
     const fontMeta = assets?.uiFont;
     const fontState = getUiFont(assets, variant);
@@ -1032,7 +1213,7 @@ export class BattleRenderer {
     ctx.globalAlpha = 1 - t;
     if (fontMeta?.chars && uiReady(fontState)) {
       ctx.imageSmoothingEnabled = false;
-      const k = variant === 'crit' ? 3 : 2;
+      const k = scale;
       drawDamage(ctx, fontState.img, fontMeta, text, x, Math.round(floatY - (fontMeta.cellH * k) / 2), k);
     } else {
       ctx.fillStyle = color;

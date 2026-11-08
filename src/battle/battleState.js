@@ -37,9 +37,19 @@ export class BattleState {
     this.wallMaxHealth = resolvedFloor.wallHp;
     this.wallHealth = this.wallMaxHealth;
     this.status = 'active';
+    // 모래시계(docs/items.md B2) 남은 정지 시간(초) - 일반 적/보스 따로.
+    this._freeze = { normal: 0, boss: 0 };
+    // 결계(docs/items.md B3) 남은 시간(초) - 0보다 크면 성벽 피해(적 공격·시한폭탄) 0.
+    this.wallShieldSec = 0;
+    this._wallBlockFlashSec = 0; // 같은 적의 wallBlocked 이벤트 최소 간격(초, 결계 config).
+    // 분노의 북(B5) - 모든 탑 피해(기본 사격 + 특수 잼 기술)의 공격력 배율. 스왑 횟수 추적은
+    // ItemController가 맡고 여기는 배율만 켜고 끈다.
+    this.atkMul = 1;
 
     this.spawns = resolvedFloor.spawns;
     this.spawnInterval = resolvedFloor.interval;
+    // 무리 등장(floorShape.pack) 층은 적마다 등장 시각(초)이 따로 온다. 없으면 interval 간격.
+    this.spawnAt = resolvedFloor.spawnAt ?? null;
     this.totalEnemies = this.spawns.length;
 
     this.enemies = [];
@@ -68,6 +78,9 @@ export class BattleState {
   reset() {
     this.wallHealth = this.wallMaxHealth;
     this.status = 'active';
+    this._freeze = { normal: 0, boss: 0 };
+    this.wallShieldSec = 0;
+    this.atkMul = 1;
     this.enemies = [];
     this.events = [];
     this._pendingShots = new Map();
@@ -115,12 +128,86 @@ export class BattleState {
   // GameState.effects의 obstacleExpire를 읽고 전달) - 성벽 사격이 아니라 성벽 최대 HP의
   // 일정 비율을 직접 깎는다(docs/balance.md 7-2/7-3). 탑 사격과 같은 'wallDamaged' 이벤트를
   // 재사용해 렌더가 화면 흔들림 등을 그대로 처리할 수 있게 한다.
+  // 결계 중이면 피해 0 - 대신 wallBlocked(source 'timeBomb')로 렌더가 적 공격 때와 같이 번쩍인다.
   applyObstacleWallDamage(pct) {
     if (this.status !== 'active') return;
+    if (this.wallShieldSec > 0) {
+      this._pushEvent('wallBlocked', { source: 'timeBomb' });
+      return;
+    }
     const amount = Math.round(this.wallMaxHealth * pct);
     this.wallHealth = Math.max(0, this.wallHealth - amount);
     this._pushEvent('wallDamaged', { amount, remainingHealth: this.wallHealth, source: 'obstacle' });
     if (this.wallHealth <= 0) this.status = 'failed';
+  }
+
+  // 수리 망치(docs/items.md B1) - 성벽 최대 HP x pct 회복, 최대치는 넘지 않는다.
+  healWall(pct) {
+    if (this.status !== 'active') return false;
+    const before = this.wallHealth;
+    this.wallHealth = Math.min(this.wallMaxHealth, before + Math.round(this.wallMaxHealth * pct));
+    this._pushEvent('wallHealed', { amount: this.wallHealth - before, remainingHealth: this.wallHealth });
+    return true;
+  }
+
+  // 모래시계(docs/items.md B2) - sec초 동안 모든 적의 이동·성벽 공격 정지(보스는 sec x bossMul).
+  // 스폰·탑 사격·피해는 그대로. 진행 중에 다시 쓰면 남은 시간을 새로 덮어쓴다(합산 안 함).
+  // 정지 중에 새로 나온 적도 같이 멈춘다(전역 타이머).
+  freezeEnemies(sec, bossMul) {
+    if (this.status !== 'active') return false;
+    this._freeze.normal = sec;
+    this._freeze.boss = sec * bossMul;
+    this._pushEvent('enemiesFrozen', { durationSec: sec, bossDurationSec: this._freeze.boss });
+    return true;
+  }
+
+  // 결계 두루마리(B3) - sec초 동안 성벽 피해 0. 다시 쓰면 남은 시간을 새로 덮어쓴다(합산 안 함).
+  // blockFlashSec = 같은 적이 막힐 때 wallBlocked 이벤트를 다시 내기까지의 최소 간격.
+  shieldWall(sec, blockFlashSec = 0) {
+    if (this.status !== 'active') return false;
+    this.wallShieldSec = sec;
+    this._wallBlockFlashSec = blockFlashSec;
+    this._pushEvent('wallShieldOn', { durationSec: sec });
+    return true;
+  }
+
+  // 분노의 북(B5) - 탑 공격력 배율 켜기/끄기(끝나는 시점은 ItemController가 스왑 수로 판단).
+  setAtkBuff(mul) {
+    if (this.status !== 'active') return false;
+    this.atkMul = mul;
+    this._pushEvent('atkBuffOn', { mul });
+    return true;
+  }
+
+  clearAtkBuff() {
+    if (this.atkMul === 1) return;
+    this.atkMul = 1;
+    this._pushEvent('atkBuffOff', {});
+  }
+
+  // 부활(C3) - 실패 직후에만. 성벽 HP = 최대 x pct, 모든 적 freezeSec초 정지(보스는 x bossMul), 다시 active.
+  revive(pct, freezeSec, bossMul = 1) {
+    if (this.status !== 'failed') return false;
+    this.status = 'active';
+    this.wallHealth = Math.round(this.wallMaxHealth * pct);
+    this._pushEvent('wallRevived', { amount: this.wallHealth, remainingHealth: this.wallHealth });
+    this.freezeEnemies(freezeSec, bossMul);
+    return true;
+  }
+
+  isEnemyFrozen(enemy) {
+    return (enemy.rank === 'boss' ? this._freeze.boss : this._freeze.normal) > 0;
+  }
+
+  get frozen() {
+    return this._freeze.normal > 0 || this._freeze.boss > 0;
+  }
+
+  _advanceFreeze(dtSec) {
+    if (!this.frozen) return;
+    this._freeze.normal = Math.max(0, this._freeze.normal - dtSec);
+    this._freeze.boss = Math.max(0, this._freeze.boss - dtSec);
+    if (!this.frozen) this._pushEvent('enemiesUnfrozen', {});
   }
 
   // 남은 몬스터 수(아직 못 죽인 수) - HUD("남은 몬스터 n/N") 표시용.
@@ -190,6 +277,7 @@ export class BattleState {
       color,
       isSpecial,
       shotId,
+      buffed: this.atkMul > 1, // 분노의 북 중 발사 - 렌더 전용(crit 폰트, 밝은 투사체).
     });
   }
 
@@ -204,13 +292,14 @@ export class BattleState {
     const target = this.enemies.find((e) => e.id === event.targetEnemyId && e.state === 'alive');
     if (!target) return;
 
-    this._damageEnemy(target, event.damage, { towerId: event.towerId });
+    this._damageEnemy(target, event.damage, { towerId: event.towerId, buffed: !!event.buffed });
 
     // fromModifier(합성 피해 - 범위/관통/연쇄/도트가 만든 2차 피해)는 색 효과·onHit을 다시 타지
-    // 않는다(연쇄가 자기 자신을 다시 트리거해 무한 증폭되는 것을 막는다). 실제 색 효과가 먼저,
+    // 않는다(연쇄가 자기 자신을 다시 트리거해 무한 증폭되는 것을 막는다). 기본 사격의 색 효과는
+    // colorEffects.appliesTo === 'all'일 때만(기본 'skills' = 기술 피해에만, docs/skills.md 1장).
     // tools/sim 전용 hooks(docs/simulation.md T2)는 그 뒤에 그대로.
     if (!event.fromModifier) {
-      if (event.color) this._applyColorEffect(target, event.color, event.damage);
+      if (event.color && this.skills?.colorEffects.appliesTo === 'all') this._applyColorEffect(target, event.color, event.damage);
       this.hooks?.onHit?.(this, event, target);
     }
   }
@@ -371,7 +460,7 @@ export class BattleState {
       if (!tower) return;
       attack = tower.stats.attack;
     }
-    const raw = attack * spec.mul;
+    const raw = attack * this.atkMul * spec.mul;
 
     const order = this._enemiesFrontToBack();
     if (order.length === 0) return;
@@ -438,6 +527,7 @@ export class BattleState {
       damages,
       cascadeIndex,
       extra,
+      buffed: this.atkMul > 1,
     });
     this._pendingSkills.set(castId, { event, remaining, ageMs: 0 });
     if (!this.battleConfig.deferSkillHits) for (const e of targets) this.resolveSkillHit(event, e.id);
@@ -455,7 +545,7 @@ export class BattleState {
     if (target) target.pendingDamage = Math.max(0, target.pendingDamage - dmg);
     if (this.status !== 'active' || !target || target.state !== 'alive') return;
 
-    this._damageEnemy(target, dmg, { source: 'skill', skill: event.skill });
+    this._damageEnemy(target, dmg, { source: 'skill', skill: event.skill, buffed: !!event.buffed });
 
     const spec = this.skills.specialSkills[event.skill];
     if (event.skill === 'line' && !target.knockbackImmune && target.state === 'alive') {
@@ -467,10 +557,38 @@ export class BattleState {
       }
     }
     if (event.skill === 'color_color') {
-      for (const c of Object.keys(this.skills.colorEffects)) this._applyColorEffect(target, c, dmg, true);
+      for (const c of Object.keys(this.skills.unlocked?.colorEffects ?? {})) this._applyColorEffect(target, c, dmg, true);
     } else if (event.color) {
       this._applyColorEffect(target, event.color, dmg, event.skill === 'color');
     }
+  }
+
+  // 영혼 불꽃처럼 날아가는 기술의 대상이 명중 전에 죽었을 때 렌더가 부른다. fromEnemyId 몫 1발의
+  // 예약을 풀고, (HP - 예약 피해)가 남은 살아 있는 적 중 현재 HP 최대(동률이면 앞쪽)에게 새 피해로
+  // 다시 예약한다. 반환 = 새 대상 id, 없으면 null(예약만 버림 - 렌더는 불꽃을 소멸시킨다).
+  retargetSkillHit(event, fromEnemyId) {
+    const rec = this._pendingSkills.get(event.castId);
+    const list = rec?.remaining.get(fromEnemyId);
+    if (!list) return null;
+    const old = list.shift();
+    if (list.length === 0) rec.remaining.delete(fromEnemyId);
+    const from = this.enemies.find((e) => e.id === fromEnemyId);
+    if (from) from.pendingDamage = Math.max(0, from.pendingDamage - old);
+
+    let pick = null;
+    for (const e of this._enemiesFrontToBack()) {
+      if (e.currentHealth - e.pendingDamage <= 0) continue;
+      if (!pick || e.currentHealth > pick.currentHealth) pick = e;
+    }
+    if (!pick || this.status !== 'active') {
+      if (rec.remaining.size === 0) this._pendingSkills.delete(event.castId);
+      return null;
+    }
+    const dmg = Math.max(this.battleConfig.minDamage, Math.round((event.damage - pick.def) * this._damageMul(pick, event.color)));
+    pick.pendingDamage += dmg;
+    if (!rec.remaining.has(pick.id)) rec.remaining.set(pick.id, []);
+    rec.remaining.get(pick.id).push(dmg);
+    return pick.id;
   }
 
   // 전부 스폰됐고 살아있는 적이 없으면 층 클리어(웨이브 구분 없음 - docs/balance.md §6).
@@ -499,7 +617,7 @@ export class BattleState {
     if (!target) return undefined;
 
     const { cascadeBonusPerStep, minDamage } = this.battleConfig;
-    let rawDamage = tower.stats.attack * count * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
+    let rawDamage = tower.stats.attack * this.atkMul * count * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
     // 가상 효과(modifier) 훅 - 기본은 battleConfig.hooks가 없어 아무 영향도 없다(docs/simulation.md
     // T2). 나중에 실제 잼 특수 효과/아이템이 생기면 이 자리에 onShot을 붙인다(피해 배율/연타).
     if (this.hooks?.onShot) {
@@ -543,6 +661,7 @@ export class BattleState {
       _spawnSeq: this._nextSpawnSeq++,
       _reachedLine: false,
       _attackTimer: 0,
+      _blockFlashTimer: 0, // 결계에 막힌 wallBlocked 이벤트 쿨다운(초).
       immune: stat.immune ?? [],
       weak: stat.weak ?? [],
       knockbackImmune: !!stat.knockbackImmune,
@@ -557,7 +676,7 @@ export class BattleState {
   }
 
   _spawnDue() {
-    while (this._spawnedCount < this.spawns.length && this._elapsedSec >= this._spawnedCount * this.spawnInterval) {
+    while (this._spawnedCount < this.spawns.length && this._elapsedSec >= (this.spawnAt ? this.spawnAt[this._spawnedCount] : this._spawnedCount * this.spawnInterval)) {
       this._spawnEnemy(this.spawns[this._spawnedCount]);
       this._spawnedCount++;
     }
@@ -604,12 +723,20 @@ export class BattleState {
     }
 
     const attackInterval = this.battleConfig.attackIntervalSec;
+    const { normal: frozenNormal, boss: frozenBoss } = this._freeze;
+    this._advanceFreeze(dtSec);
+    const shielded = this.wallShieldSec > 0;
+    if (shielded) {
+      this.wallShieldSec = Math.max(0, this.wallShieldSec - dtSec);
+      if (this.wallShieldSec === 0) this._pushEvent('wallShieldOff', {});
+    }
     for (const enemy of this.enemies) {
       if (enemy.state !== 'alive') continue;
 
       const moveMul = this.skills ? this._tickEffects(enemy, dtSec) : 1;
       if (enemy.state !== 'alive' || this.status !== 'active') continue; // 독으로 죽음/클리어.
       if (moveMul === 0) continue; // 경직 - 이동·성벽 공격(_attackTimer) 정지.
+      if ((enemy.rank === 'boss' ? frozenBoss : frozenNormal) > 0) continue; // 모래시계 정지(isEnemyFrozen과 같은 판정, 갱신 전 값).
 
       if (enemy.progress < 1) {
         enemy.progress = Math.min(1, enemy.progress + enemy.speed * moveMul * dtSec);
@@ -622,8 +749,17 @@ export class BattleState {
 
       if (enemy.progress >= 1) {
         enemy._attackTimer += dtSec;
+        if (enemy._blockFlashTimer > 0) enemy._blockFlashTimer -= dtSec;
         while (enemy._attackTimer >= attackInterval && this.status === 'active') {
           enemy._attackTimer -= attackInterval;
+          if (shielded) {
+            // 결계 - 공격 박자는 그대로, 피해 0. 렌더 번쩍임용 wallBlocked는 같은 적당 _wallBlockFlashSec에 한 번만.
+            if (enemy._blockFlashTimer <= 0) {
+              enemy._blockFlashTimer = this._wallBlockFlashSec;
+              this._pushEvent('wallBlocked', { sourceEnemyId: enemy.id, source: 'enemy' });
+            }
+            continue;
+          }
           this.wallHealth = Math.max(0, this.wallHealth - enemy.wallDmg);
           this._pushEvent('wallDamaged', {
             amount: enemy.wallDmg,

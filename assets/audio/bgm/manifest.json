@@ -1,0 +1,81 @@
+{
+  "version": 3,
+  "tracks": {
+    "bgm_title": {
+      "files": {
+        "ogg": "bgm_title.ogg",
+        "mp3": "bgm_title.mp3"
+      },
+      "loop": true,
+      "loopStartSec": 0,
+      "loopEndSec": 82.285714,
+      "loopEndFrames": 3628800,
+      "sampleRate": 44100,
+      "bpm": 70,
+      "bars": 24,
+      "volume": 1.0,
+      "fadeInMs": 1500,
+      "fadeOutMs": 800,
+      "scenes": [
+        "title"
+      ]
+    },
+    "bgm_menu": {
+      "files": {
+        "ogg": "bgm_menu.ogg",
+        "mp3": "bgm_menu.mp3"
+      },
+      "loop": true,
+      "loopStartSec": 0,
+      "loopEndSec": 72.0,
+      "loopEndFrames": 3175200,
+      "sampleRate": 44100,
+      "bpm": 80,
+      "bars": 24,
+      "volume": 1.0,
+      "fadeInMs": 1200,
+      "fadeOutMs": 800,
+      "scenes": [
+        "menu"
+      ]
+    },
+    "bgm_battle": {
+      "files": {
+        "ogg": "bgm_battle.ogg",
+        "mp3": "bgm_battle.mp3"
+      },
+      "loop": true,
+      "loopStartSec": 0,
+      "loopEndSec": 73.142857,
+      "loopEndFrames": 3225600,
+      "sampleRate": 44100,
+      "bpm": 105,
+      "bars": 32,
+      "volume": 1.0,
+      "fadeInMs": 1000,
+      "fadeOutMs": 800,
+      "scenes": [
+        "ingame"
+      ]
+    },
+    "bgm_boss": {
+      "files": {
+        "ogg": "bgm_boss.ogg",
+        "mp3": "bgm_boss.mp3"
+      },
+      "loop": true,
+      "loopStartSec": 0,
+      "loopEndSec": 68.571429,
+      "loopEndFrames": 3024000,
+      "sampleRate": 44100,
+      "bpm": 140,
+      "bars": 40,
+      "volume": 1.0,
+      "fadeInMs": 600,
+      "fadeOutMs": 1000,
+      "scenes": [
+        "ingame-boss"
+      ]
+    }
+  }
+}

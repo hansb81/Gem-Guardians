@@ -29,38 +29,46 @@ test('getFloor: 1~100층은 floors.json 캐시를, 101층 이후는 genFloor로 
   assert.equal(getFloor(B, E, O, floorsData, 150).floor, 150);
 });
 
-test('unitStats: 1층 민달팽이(grunt 역할, 배율 전부 1)', () => {
+// 아래 세 테스트는 수치를 박지 않고 balance/enemies.json에서 계산한다(밸런스를 바꿀 때마다 깨지지 않게).
+// 검증 대상은 공식(역할 스탯 x 층 배율 x 엘리트/보스 배율 x enemyHpMul)이다.
+const hpMulAll = B.scaling.enemyHpMul ?? 1;
+
+test('unitStats: 1층 민달팽이(grunt 역할, 층 배율 전부 1)', () => {
   const floor = getFloor(B, E, O, floorsData, 1);
+  const role = E.roles[E.monsters.slug.role];
   assert.deepEqual(unitStats(B, E, floor, 'slug'), {
     type: 'slug',
     rank: 'normal',
-    hp: 30,
-    def: 0,
-    speed: 1 / 20,
-    wallDmg: 8,
-    gold: 2,
+    hp: Math.round(role.hp * hpMulAll),
+    def: role.def,
+    speed: 1 / role.travelTime,
+    wallDmg: role.wallDmg,
+    gold: role.gold,
   });
 });
 
 test('unitStats: 10층 보스(거대 버섯) - 종류와 무관하게 bossMul 기준', () => {
   const floor = getFloor(B, E, O, floorsData, 10);
   const boss = unitStats(B, E, floor, 'large_mushroom@boss');
+  const mul = B.floorShape.bossMul;
   assert.equal(boss.rank, 'boss');
-  assert.equal(boss.hp, 783); // 600 * hpMul(1.3048) 반올림
-  assert.equal(boss.def, 1); // defAdd(0) + bossMul.def(1)
-  assert.equal(boss.wallDmg, 50); // 40 * wallDmgMul(1.2489) 반올림
-  assert.equal(boss.gold, 85); // 60 * goldMul(1.4233) 반올림
+  assert.equal(boss.hp, Math.round(mul.hpBase * floor.scaling.hpMul * (mul.hpMulByFloor?.['10'] ?? 1) * hpMulAll));
+  assert.equal(boss.def, floor.scaling.defAdd + mul.def);
+  assert.equal(boss.wallDmg, Math.round(mul.wallDmgBase * floor.scaling.wallDmgMul));
+  assert.equal(boss.gold, Math.round(mul.goldBase * floor.scaling.goldMul));
 });
 
-test('unitStats: 엘리트(brute 역할) - HP x4, 성벽공격 x2, 방어 +1, 속도 x0.9, 골드 x5', () => {
-  const floor = getFloor(B, E, O, floorsData, 1); // 배율 전부 1이라 역할 스탯을 그대로 검증
+test('unitStats: 엘리트(brute 역할) - eliteMul(HP x4, 성벽공격 x2, 방어 +1, 속도 x0.9, 골드 x5)', () => {
+  const floor = getFloor(B, E, O, floorsData, 1); // 층 배율 전부 1이라 역할 스탯 x eliteMul을 그대로 검증
   const elite = unitStats(B, E, floor, 'muddy@elite');
+  const role = E.roles[E.monsters.muddy.role];
+  const mul = B.floorShape.eliteMul;
   assert.equal(elite.rank, 'elite');
-  assert.equal(elite.hp, 300); // 75 * 4
-  assert.equal(elite.def, 2); // brute.def(1) + defAdd(0) + eliteMul.def(1)
-  assert.equal(elite.wallDmg, 30); // 15 * 2
-  assert.equal(elite.speed, (1 / 19) * 0.9);
-  assert.equal(elite.gold, 25); // 5 * 5
+  assert.equal(elite.hp, Math.round(role.hp * mul.hp * hpMulAll));
+  assert.equal(elite.def, role.def + mul.def);
+  assert.equal(elite.wallDmg, Math.round(role.wallDmg * mul.wallDmg));
+  assert.equal(elite.speed, (1 / role.travelTime) * mul.speed);
+  assert.equal(elite.gold, Math.round(role.gold * mul.gold));
 });
 
 test('resolveFloorSpawns: 소환 문자열을 이름/애니메이션이 붙은 스탯 객체로 바꾼다', () => {

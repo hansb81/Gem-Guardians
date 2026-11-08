@@ -5,7 +5,13 @@
 import { runFloorAttempt } from '../floorSim.js';
 import { clearBonus, towerLevelCost, maxTowerLevelUps } from '../../../src/core/economy/economy.js';
 import { GEM_TYPES } from '../../../src/config/gems.js';
+import { getFloor } from '../../../src/core/balance/floorGen.js';
+import { createRng } from '../../../src/core/rng.js';
 import { mdTable } from '../report.js';
+import { newAgg, addResult, aggRow, aggTable } from '../agg.js';
+import { buyItems, SLOT4_ITEM } from '../itemBot.js';
+import { openUnlocks } from '../skills.js';
+import { defaultShopSave } from '../../../src/core/shop/shop.js';
 
 const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
 
@@ -42,9 +48,43 @@ export function spendGold(strategy, balance, towerLevels, gold, colorUsage) {
   return { towerLevels: levels, gold: remaining };
 }
 
-export function runOneProgression(env, player, strategy, seed) {
-  const { balance, enemies, obstacles, floorsData, sim, battleEffects, summon } = env.configs;
+// itemPolicy(T6, docs/items.md 4장): none = 아이템 없음, boss = 보스층에서만 사서 씀, always = 모든 층.
+// 시작 지급(starter)·보스 첫 클리어 보상 2개·20층 4번째 슬롯은 게임(BattleController._grantFirstClearItems)과
+// 같은 규칙을 여기서 따른다(그 메서드는 playerState에 묶여 있어 import하지 못함).
+export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'none' } = {}) {
+  const { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, items: itemsCfg } = env.configs;
   const playerCfg = sim.players[player];
+  const agg = newAgg();
+  const useItems = itemPolicy !== 'none';
+  const inventory = useItems ? Object.fromEntries(Object.keys(itemsCfg.items).map((id) => [id, itemsCfg.starter.count])) : {};
+  const equipped = useItems ? itemsCfg.starter.equipped.slice() : [];
+  let goldEarned = 0;
+  let goldSpentItems = 0;
+  let goldSpentLevels = 0;
+  // --skills=shop: 특수 기술 해금은 상점에서 골드로 산다(A안). 조건이 풀린 기술이 있으면 그 골드를 모을 때까지
+  // 탑 레벨업을 미루고, 모이면 바로 산다. 사기 전에는 잠긴 채로 싸운다. 다른 모드는 skillLv = null(조건만 봄).
+  const skillLv = env.skillsMode === 'shop' ? defaultShopSave(env.configs.shop).skillLv : null;
+  const unlockFloors = {}; // 기술 id -> 산 시점의 층(= bestFloor)
+  let goldSpentUnlock = 0;
+  // 살 수 있는 만큼 사고, 아직 못 산 해금이 남았으면 true(그동안 레벨업 금지).
+  const buyUnlocks = () => {
+    if (!skillLv) return false;
+    for (const { skill, price } of openUnlocks(env.configs, floor, skillLv)) {
+      if (gold < price) return true;
+      gold -= price;
+      goldSpentUnlock += price;
+      skillLv[skill] = 1;
+      unlockFloors[skill] = floor;
+    }
+    return false;
+  };
+  const levelUp = () => {
+    if (buyUnlocks()) return;
+    const spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
+    goldSpentLevels += gold - spent.gold;
+    towerLevels = spent.towerLevels;
+    gold = spent.gold;
+  };
 
   let towerLevels = [1, 1, 1, 1, 1];
   let gold = 0;
@@ -63,8 +103,16 @@ export function runOneProgression(env, player, strategy, seed) {
 
   while (floor <= env.floorsRange.to) {
     const avgLevel = towerLevels.reduce((s, l) => s + l, 0) / towerLevels.length;
+    buyUnlocks();
     const levelsAtEntry = towerLevels.slice();
     attempt++;
+    const tag = getFloor(balance, enemies, obstacles, floorsData, floor).tag;
+    const itemsHere = useItems && (itemPolicy === 'always' || tag === 'boss');
+    if (itemsHere) {
+      const spent = buyItems(env.configs, inventory, equipped, gold, floor);
+      gold -= spent;
+      goldSpentItems += spent;
+    }
     const attemptFloor = (floorNumber, attemptSeed) =>
       runFloorAttempt({
         balance,
@@ -76,6 +124,8 @@ export function runOneProgression(env, player, strategy, seed) {
         towerLevels,
         playerCfg,
         modifierHooks: null,
+        ...env.skillArgsAt(floor, skillLv ?? undefined),
+        itemBot: itemsHere && floorNumber === floor ? { config: itemsCfg, inventory, equipped } : null,
         seed: attemptSeed,
         dt: sim.dt,
         maxFloorSeconds: sim.maxFloorSeconds,
@@ -85,10 +135,23 @@ export function runOneProgression(env, player, strategy, seed) {
     const result = attemptFloor(floor, seed * 100000 + attempt);
     cumulativeTimeSec += result.timeSec;
     floorTimeSec += result.timeSec;
+    addResult(agg, result);
     for (const [color, count] of Object.entries(result.stats.colorCounts)) colorUsage[color] += count;
 
     if (result.status === 'cleared') {
-      gold += result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
+      const reward = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
+      gold += reward;
+      goldEarned += reward;
+      if (useItems && tag === 'boss') {
+        // 보스 첫 클리어 = 서로 다른 무작위 아이템 2개(층 번호 seed), 20층 = 4번째 슬롯(모래시계 장착).
+        const ids = Object.keys(itemsCfg.items);
+        const rng = createRng(floor);
+        for (let i = 0; i < itemsCfg.bossFirstClearReward.count && ids.length > 0; i++) {
+          const id = ids.splice(Math.floor(rng() * ids.length), 1)[0];
+          inventory[id] = (inventory[id] ?? 0) + 1;
+        }
+        if (floor === itemsCfg.slots.unlock4BossFirstClear && !equipped.includes(SLOT4_ITEM)) equipped.push(SLOT4_ITEM);
+      }
       retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
       const isWall = result.tag === 'boss' && bossWallMin != null ? floorTimeSec / 60 > bossWallMin : attempt - 1 >= wallFlagAt(result.tag);
       if (isWall) wallFloors.push(floor);
@@ -97,30 +160,61 @@ export function runOneProgression(env, player, strategy, seed) {
       floorTimeSec = 0;
     } else {
       gold += result.killGoldTotal;
+      goldEarned += result.killGoldTotal;
       if (attempt >= HARD_STOP_RETRIES) {
         retriesByFloor.push({ floor, tag: result.tag, retries: attempt, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
         wallFloors.push(floor);
         stoppedEarly = true;
         break;
       }
-      let spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
-      towerLevels = spent.towerLevels;
-      gold = spent.gold;
+      levelUp();
       const farmCount = result.tag === 'boss' && strategy !== 'none' && floor > 1 ? sim.bossFailFarmRuns ?? 1 : 0;
       for (let k = 0; k < farmCount; k++) {
         farmRuns++;
         const farm = attemptFloor(floor - 1, seed * 100000 + 50000 + attempt * 10 + k);
         cumulativeTimeSec += farm.timeSec;
         floorTimeSec += farm.timeSec;
-        gold += farm.killGoldTotal + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
-        spent = spendGold(strategy, balance, towerLevels, gold, colorUsage);
-        towerLevels = spent.towerLevels;
-        gold = spent.gold;
+        const farmReward = farm.killGoldTotal + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
+        gold += farmReward;
+        goldEarned += farmReward;
+        levelUp();
       }
     }
   }
 
-  return { reachedFloor: floor - 1, farmRuns, cumulativeTimeMin: cumulativeTimeSec / 60, retriesByFloor, wallFloors, stoppedEarly, stoppedFloor: stoppedEarly ? floor : null };
+  return {
+    reachedFloor: floor - 1,
+    farmRuns,
+    cumulativeTimeMin: cumulativeTimeSec / 60,
+    retriesByFloor,
+    wallFloors,
+    stoppedEarly,
+    stoppedFloor: stoppedEarly ? floor : null,
+    agg,
+    goldEarned,
+    goldSpentItems,
+    goldSpentLevels,
+    goldSpentUnlock,
+    unlockFloors,
+    itemsUsed: agg.itemsUsed,
+  };
+}
+
+// 여러 진행(시드)의 계측을 하나로 합친다(T4/T6 표용).
+export function mergeAggs(runs) {
+  const merged = newAgg();
+  for (const r of runs) {
+    merged.runs += r.agg.runs;
+    for (const k of Object.keys(merged.damage)) merged.damage[k] += r.agg.damage[k];
+    for (const [c, n] of Object.entries(r.agg.effects)) merged.effects[c] = (merged.effects[c] ?? 0) + n;
+    merged.immune += r.agg.immune;
+    for (const [k, n] of Object.entries(r.agg.casts)) merged.casts[k] = (merged.casts[k] ?? 0) + n;
+    for (const k of Object.keys(merged.blocked)) merged.blocked[k] += r.agg.blocked[k];
+    merged.wallDamage += r.agg.wallDamage;
+    merged.bombDamage += r.agg.bombDamage;
+    for (const [k, n] of Object.entries(r.agg.itemsUsed)) merged.itemsUsed[k] = (merged.itemsUsed[k] ?? 0) + n;
+  }
+  return merged;
 }
 
 function avg(arr) {
@@ -134,11 +228,32 @@ export async function run(env) {
   const summaryRows = [];
   const bossAgg = new Map(); // `${player}|${strategy}|${floor}` -> { retries[], wallLeft[] }
   const outOfRange = [];
+  const aggRows = [];
+  const unlockRows = []; // --skills=shop: 기술별 실제 해금 층, 해금 골드 비율
+  const special = env.configs.shop.skills.special;
+  const unlockIds = Object.keys(special).filter((id) => special[id].unlockBossFloor);
 
   for (const player of env.players) {
     for (const strategy of strategies) {
       const runs = [];
       for (let s = 0; s < env.seeds; s++) runs.push(runOneProgression(env, player, strategy, s + 1));
+      aggRows.push(aggRow(`${player}:${strategy}`, mergeAggs(runs)));
+      if (env.skillsMode === 'shop') {
+        // 해금 층 = 산 시점의 최고 층(bestFloor). 못 산 시드는 '미해금 n'으로 따로 센다.
+        const row = { player, strategy, section: 'unlock' };
+        const cells = unlockIds.map((id) => {
+          const fl = runs.map((r) => r.unlockFloors[id]).filter((f) => f != null);
+          const miss = runs.length - fl.length;
+          const a = fl.length ? avg(fl).toFixed(1) : '';
+          Object.assign(row, { [`unlock_${id}_avgFloor`]: a, [`unlock_${id}_minFloor`]: fl.length ? Math.min(...fl) : '', [`unlock_${id}_maxFloor`]: fl.length ? Math.max(...fl) : '', [`unlock_${id}_missingSeeds`]: miss });
+          const txt = fl.length ? `${a} (${Math.min(...fl)}~${Math.max(...fl)})` : '-';
+          return miss ? `${txt} 미해금 ${miss}` : txt;
+        });
+        const share = runs.reduce((t, r) => t + r.goldSpentUnlock, 0) / Math.max(1, runs.reduce((t, r) => t + r.goldEarned, 0));
+        row.unlockGoldShare = share.toFixed(4);
+        csvRows.push(row);
+        unlockRows.push([`${player}:${strategy}`, ...cells, `${(share * 100).toFixed(1)}%`]);
+      }
 
       const reachedFloors = runs.map((r) => r.reachedFloor);
       const times = runs.map((r) => r.cumulativeTimeMin);
@@ -228,7 +343,11 @@ export async function run(env) {
   }
 
   const summaryMd =
-    `## T4 진행\n${mdTable(['구간', '일반층 재도전', '보스층 재도전', '진입 시 평균 Lv', '누적 시간(분)', '반복 사냥(회)', '멈춘 층', '벽 층'], summaryRows)}` +
+    `## T4 진행 (기술 ${env.skillsMode}, enemyHpMul ${env.configs.balance.scaling.enemyHpMul ?? 1})\n${mdTable(['구간', '일반층 재도전', '보스층 재도전', '진입 시 평균 Lv', '누적 시간(분)', '반복 사냥(회)', '멈춘 층', '벽 층'], summaryRows)}` +
+    (unlockRows.length
+      ? `\n\n### T4 특수 기술 해금 (A안, 해금 골드 차감 - 층 = 산 시점의 최고 층, 시드 평균 (최소~최대))\n${mdTable(['플레이어:전략', ...unlockIds.map((id) => `${id} 해금 층`), '해금 골드 / 전체 획득 골드'], unlockRows)}`
+      : '') +
+    `\n\n### T4 기술 몫·발동 횟수 (진행 전체 시도 평균)\n${aggTable(aggRows)}` +
     `\n\n### T4 보스층만\n${mdTable(
       ['플레이어:전략', '층', '평균 재도전', '남은 성벽', '층에 쓴 시간(분)'],
       bossRows.map((r) => [`${r.player}:${r.strategy}`, r.floor, r.retries.toFixed(2), `${(r.wallLeft * 100).toFixed(0)}%`, r.minutes?.toFixed(1) ?? '-'])

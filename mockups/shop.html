@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 상점 시안</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../assets/fonts/Galmuri11.woff2') format('woff2'); font-display: swap; }
+  :root {
+    /* palette.hex 25색만 사용 */
+    --outline: #0d0a10; --bg1: #221c2b; --bg2: #3b3347; --bg3: #655a74; --bone: #e8dcc0;
+    --blue-d: #0c1838; --blue-m: #1c3a76; --blue: #386cbc; --blue-l: #8cc4ee;
+    --pur-d: #220e38; --pur-m: #48206e; --pur: #7a3cae; --pur-l: #c48ce6;
+    --red-d: #3a0814; --red-m: #741426; --red: #b82a3c; --red-l: #ec6a6a;
+    --brn-d: #3a2808; --brn-m: #7a5212; --gold: #c28a20; --gold-l: #f2d264;
+    --grn-d: #0c2814; --grn-m: #1c5228; --grn: #3a8a3c; --grn-l: #9cd872;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000; color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 12px; -webkit-font-smoothing: none; }
+  body { padding: 20px; }
+  img { image-rendering: pixelated; }
+  button { font-family: inherit; color: inherit; cursor: pointer; background: none; }
+  button:focus-visible { outline: 3px solid var(--blue-l); outline-offset: 2px; }
+
+  .toolbar { max-width: 540px; margin: 0 auto 12px; background: var(--bg1); border: 2px solid var(--outline); padding: 12px; line-height: 1.8; }
+  .toolbar h1 { font-size: 12px; color: var(--gold-l); }
+
+  /* 디바이스 540x960 = 180x320 x3 */
+  .device { position: relative; width: 540px; height: 960px; margin: 0 auto; overflow: hidden; border: 3px solid var(--outline);
+    background: var(--bg1); display: grid; grid-template-rows: auto auto 1fr; }
+
+  /* 9-slice 헬퍼 (화면 2배) */
+  .iron { border: 16px solid transparent; border-image: url('../assets/ui/panels/panel_iron.png') 8 fill / 16px stretch; image-rendering: pixelated; }
+  .inset { border: 8px solid transparent; border-image: url('../assets/ui/panels/panel_inset.png') 4 fill / 8px stretch; image-rendering: pixelated; }
+
+  /* 상단: 뒤로 + 제목 + 재화 */
+  .top { display: flex; align-items: center; gap: 8px; padding: 6px 8px; margin: 0; }
+  .back { width: 48px; height: 48px; border: 10px solid transparent; border-image: url('../assets/ui/buttons/btn_secondary.png') 4 4 5 4 fill / 10px 10px 12px 10px stretch;
+    image-rendering: pixelated; display: grid; place-items: center; }
+  .back svg { width: 22px; height: 22px; }
+  .top h2 { flex: 1; font-size: 22px; color: var(--gold-l); text-shadow: 2px 2px 0 var(--outline); }
+  .cur { display: flex; align-items: center; gap: 4px; min-width: 112px; height: 40px; padding: 0 4px; font-size: 14px; }
+  .cur img { width: 24px; height: 24px; }
+  .cur span { flex: 1; text-align: right; }
+
+  /* 상단 배너(추천 패키지 1개) */
+  .banner { position: relative; margin: 8px 10px 0; height: 112px; display: flex; align-items: center; gap: 12px; padding: 0 12px;
+    background: linear-gradient(90deg, var(--pur-m), var(--pur-d)); border: 3px solid var(--outline); box-shadow: inset 0 0 0 3px var(--pur); overflow: hidden; }
+  .banner img { width: 80px; height: 80px; }
+  .banner .txt { flex: 1; line-height: 1.6; }
+  .banner .txt b { font-size: 17px; color: var(--gold-l); display: block; }
+  .banner .timer { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--red-l); }
+
+  /* 본문: 왼쪽 세로 탭 + 오른쪽 스크롤 */
+  .body { display: grid; grid-template-columns: 112px 1fr; min-height: 0; margin-top: 8px; }
+  .tabs { display: flex; flex-direction: column; gap: 6px; padding: 4px 0 4px 8px; background: var(--outline); }
+  .tab { position: relative; height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 13px;
+    border: 8px solid transparent; border-right-width: 0; border-image: url('../assets/ui/upgrade/tab_off.png') 4 4 4 4 fill / 8px 0 8px 8px stretch; image-rendering: pixelated; color: var(--bg3); }
+  .tab img { width: 28px; height: 28px; opacity: .55; }
+  .tab.on { border-image-source: url('../assets/ui/upgrade/tab_on.png'); color: var(--bone); margin-right: -2px; }
+  .tab.on img { opacity: 1; }
+  .tab .dot { position: absolute; top: -2px; right: 6px; width: 12px; height: 12px; background: var(--red); border: 2px solid var(--outline); }
+
+  .list { position: relative; overflow-y: auto; scroll-behavior: smooth; padding: 0 10px 24px; background: var(--bg2); border-left: 3px solid var(--outline);
+    scrollbar-width: thin; scrollbar-color: var(--bg3) var(--bg1); overscroll-behavior: contain; }
+  @media (prefers-reduced-motion: reduce) { .list { scroll-behavior: auto; } }
+  .sec h3 { position: sticky; top: 0; z-index: 1; margin: 0 -10px 8px; padding: 10px 12px 8px; font-size: 14px; color: var(--gold-l);
+    background: var(--bg2); border-bottom: 3px solid var(--outline); display: flex; justify-content: space-between; }
+  .sec h3 small { color: var(--bone); font-size: 11px; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px 2px 2px;
+    border: 8px solid transparent; border-image: url('../assets/ui/upgrade/card.png') 4 fill / 8px stretch; image-rendering: pixelated; }
+  .card.hot { border-image-source: url('../assets/ui/upgrade/card_selected.png'); }
+  .card.wide { grid-column: span 2; flex-direction: row; gap: 10px; padding: 4px 6px; }
+  .card .pic { width: 56px; height: 56px; display: grid; place-items: center; }
+  .card .pic img { width: 48px; height: 48px; }
+  .card .pic.stack img:nth-child(n+2) { margin-left: -28px; }
+  .card .pic.stack { display: flex; }
+  .card .name { font-size: 13px; text-align: center; }
+  .card .desc { font-size: 11px; color: var(--blue-l); text-align: center; min-height: 14px; }
+  .card.wide .meta { flex: 1; text-align: left; } .card.wide .name, .card.wide .desc { text-align: left; }
+  .badge { position: absolute; top: -10px; left: -10px; font-size: 11px; padding: 2px 6px; background: var(--red); border: 2px solid var(--outline); color: var(--bone); }
+  .badge.blue { background: var(--blue); }
+  .badge.gold { background: var(--gold); color: var(--outline); }
+
+  /* 가격 버튼 btn_gold / btn_primary 9-slice [4,4,4,5] -> 3배 */
+  .price { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: center; gap: 4px; font-size: 14px;
+    border: 12px solid transparent; border-bottom-width: 15px; padding: 0;
+    border-image: url('../assets/ui/buttons/btn_primary.png') 4 4 5 4 fill / 12px 12px 15px 12px stretch; image-rendering: pixelated; }
+  .price:active { border-image-source: url('../assets/ui/buttons/btn_primary_pressed.png'); padding-top: 3px; }
+  .price.gold { border-image-source: url('../assets/ui/buttons/btn_gold.png'); color: var(--outline); }
+  .price.gold:active { border-image-source: url('../assets/ui/buttons/btn_gold_pressed.png'); }
+  .price img { width: 18px; height: 18px; }
+  .price:disabled { border-image-source: url('../assets/ui/upgrade/btn_disabled.png'); border-image-slice: 4; border-width: 12px; color: var(--bg3); cursor: default; }
+  .card.wide .price { width: 128px; flex: none; }
+  .left { font-size: 11px; color: var(--bone); opacity: .8; }
+
+  .toast { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); opacity: 0; pointer-events: none; transition: opacity .15s steps(3);
+    background: var(--bg1); border: 3px solid var(--outline); box-shadow: 0 0 0 3px var(--grn); padding: 10px 16px; font-size: 13px; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <h1>GEM GUARDIANS - 상점 시안 (배치/흐름 검토용, 최종 그림 아님)</h1>
+    <div>왼쪽 탭을 누르면 해당 종류로 스크롤되고, 직접 스크롤하면 지금 보이는 종류의 탭이 켜집니다. 상품·가격·탭 구성은 모두 예시입니다(기획 미정).</div>
+  </div>
+
+  <div class="device">
+    <header class="top iron">
+      <button class="back" aria-label="뒤로"><svg viewBox="0 0 11 11" shape-rendering="crispEdges"><path fill="#e8dcc0" d="M4 1h2v2H5v1h5v3H5v1h1v2H4V9H3V8H2V7H1V4h1V3h1V2h1z"/></svg></button>
+      <h2>상점</h2>
+      <div class="cur inset"><img src="../assets/ui/icons/gold.png" alt="골드"><span>12,480</span></div>
+      <div class="cur inset"><img src="../assets/ui/icons/diamond.png" alt="다이아"><span>320</span></div>
+    </header>
+
+    <div class="banner">
+      <span class="timer">남은 시간 23:59:12</span>
+      <img src="../assets/statues/purple.png" alt="">
+      <div class="txt"><b>수호자 시작 패키지</b>다이아 500 + 골드 20,000<br>계정당 1회</div>
+      <button class="price gold" style="width:120px" data-buy="수호자 시작 패키지">₩5,900</button>
+    </div>
+
+    <div class="body">
+      <nav class="tabs" role="tablist" aria-label="상품 종류" id="tabs"></nav>
+      <main class="list" id="list"></main>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+<script>
+  const I = {
+    gold: '../assets/ui/icons/gold.png', dia: '../assets/ui/icons/diamond.png',
+    gem: (c) => `../assets/gems/normal/${c}.png`, statue: (c) => `../assets/statues/${c}.png`,
+  };
+  // 예시 상품. price: { cur: 'krw'|'dia'|'gold'|'free', v }
+  const SECTIONS = [
+    { id: 'daily', name: '일일', icon: I.gold, dot: true, note: '매일 0시 갱신', items: [
+      { name: '무료 골드', desc: '하루 1번', pics: [I.gold], price: { cur: 'free' }, badge: ['무료', 'blue'] },
+      { name: '광고 보고 다이아', desc: '남은 횟수 3/3', pics: [I.dia], price: { cur: 'ad' } },
+      { name: '골드 더미', desc: '골드 5,000', pics: [I.gold, I.gold], price: { cur: 'dia', v: 30 } },
+      { name: '잼 상자', desc: '무작위 잼 강화 재료', pics: [I.gem('red'), I.gem('blue')], price: { cur: 'dia', v: 50 }, sold: true },
+    ] },
+    { id: 'pack', name: '패키지', icon: I.statue('red'), note: '한정', items: [
+      { wide: true, hot: true, name: '불꽃 석상 패키지', desc: '화염 수정탑 강화 + 다이아 300', pics: [I.statue('red')], price: { cur: 'krw', v: '₩11,000' }, badge: ['BEST', 'gold'] },
+      { wide: true, name: '서리 석상 패키지', desc: '서리 첨탑 강화 + 다이아 300', pics: [I.statue('blue')], price: { cur: 'krw', v: '₩11,000' } },
+      { wide: true, name: '30일 다이아 정기권', desc: '즉시 300 + 매일 100', pics: [I.dia], price: { cur: 'krw', v: '₩5,500' }, badge: ['이득', 'red'] },
+    ] },
+    { id: 'dia', name: '다이아', icon: I.dia, note: '첫 구매 2배', items: [
+      { name: '다이아 60', desc: '첫 구매 +60', pics: [I.dia], price: { cur: 'krw', v: '₩1,200' }, badge: ['2배', 'red'] },
+      { name: '다이아 300', desc: '첫 구매 +300', pics: [I.dia, I.dia], price: { cur: 'krw', v: '₩5,900' }, badge: ['2배', 'red'] },
+      { name: '다이아 980', desc: '+보너스 100', pics: [I.dia, I.dia, I.dia], price: { cur: 'krw', v: '₩19,000' } },
+      { name: '다이아 2,280', desc: '+보너스 300', pics: [I.dia, I.dia, I.dia], price: { cur: 'krw', v: '₩39,000' }, hot: true, badge: ['인기', 'gold'] },
+    ] },
+    { id: 'gold', name: '골드', icon: I.gold, note: '층이 오를수록 양 증가', items: [
+      { name: '골드 주머니', desc: '골드 10,000', pics: [I.gold], price: { cur: 'dia', v: 50 } },
+      { name: '골드 상자', desc: '골드 60,000', pics: [I.gold, I.gold], price: { cur: 'dia', v: 250 } },
+      { name: '골드 금고', desc: '골드 150,000', pics: [I.gold, I.gold, I.gold], price: { cur: 'dia', v: 550 }, badge: ['+10%', 'blue'] },
+      { name: '골드 산', desc: '골드 400,000', pics: [I.gold, I.gold, I.gold], price: { cur: 'dia', v: 1300 }, badge: ['+20%', 'blue'] },
+    ] },
+    { id: 'item', name: '아이템', icon: I.gem('purple'), note: '골드로 구매', items: [
+      { name: '빨강 잼 조각', desc: '화염탑 강화 재료', pics: [I.gem('red')], price: { cur: 'gold', v: '2,000' } },
+      { name: '파랑 잼 조각', desc: '서리탑 강화 재료', pics: [I.gem('blue')], price: { cur: 'gold', v: '2,000' } },
+      { name: '노랑 잼 조각', desc: '뇌전탑 강화 재료', pics: [I.gem('yellow')], price: { cur: 'gold', v: '2,000' } },
+      { name: '초록 잼 조각', desc: '가시독탑 강화 재료', pics: [I.gem('green')], price: { cur: 'gold', v: '2,000' } },
+      { name: '보라 잼 조각', desc: '저주탑 강화 재료', pics: [I.gem('purple')], price: { cur: 'gold', v: '2,000' } },
+      { name: '부활 깃발', desc: '패배 시 성벽 50% 회복', pics: [I.statue('yellow')], price: { cur: 'dia', v: 20 } },
+    ] },
+  ];
+
+  function priceHtml(p, sold) {
+    if (sold) return { cls: '', html: '품절', disabled: true };
+    if (p.cur === 'free') return { cls: '', html: '무료' };
+    if (p.cur === 'ad') return { cls: '', html: '광고 보기' };
+    if (p.cur === 'krw') return { cls: 'gold', html: p.v };
+    return { cls: '', html: `<img src="${p.cur === 'dia' ? I.dia : I.gold}" alt="">${p.v}` };
+  }
+
+  const tabs = document.getElementById('tabs'), list = document.getElementById('list');
+  for (const s of SECTIONS) {
+    const t = document.createElement('button');
+    t.className = 'tab'; t.role = 'tab'; t.dataset.id = s.id;
+    t.innerHTML = `<img src="${s.icon}" alt="">${s.name}${s.dot ? '<span class="dot" aria-label="새 상품"></span>' : ''}`;
+    t.onclick = () => { activate(s.id); list.scrollTop = document.getElementById(`sec-${s.id}`).offsetTop; };
+    tabs.appendChild(t);
+
+    const sec = document.createElement('section');
+    sec.className = 'sec'; sec.id = `sec-${s.id}`;
+    sec.innerHTML = `<h3>${s.name}<small>${s.note}</small></h3><div class="cards">${s.items.map((it) => {
+      const pr = priceHtml(it.price, it.sold);
+      const pics = `<div class="pic ${it.pics.length > 1 ? 'stack' : ''}">${it.pics.map((p) => `<img src="${p}" alt="">`).join('')}</div>`;
+      const meta = `<div class="meta"><div class="name">${it.name}</div><div class="desc">${it.desc}</div></div>`;
+      return `<div class="card ${it.wide ? 'wide' : ''} ${it.hot ? 'hot' : ''}">${it.badge ? `<span class="badge ${it.badge[1]}">${it.badge[0]}</span>` : ''}${pics}${meta}` +
+        `<button class="price ${pr.cls}" ${pr.disabled ? 'disabled' : ''} data-buy="${it.name}">${pr.html}</button></div>`;
+    }).join('')}</div>`;
+    list.appendChild(sec);
+  }
+
+  function activate(id) {
+    for (const t of tabs.children) { const on = t.dataset.id === id; t.classList.toggle('on', on); t.setAttribute('aria-selected', on); }
+  }
+  // 스크롤 위치에 맞춰 탭 켜기: 맨 위 헤더 바로 아래에 걸친 섹션이 현재 섹션.
+  list.addEventListener('scroll', () => {
+    let cur = SECTIONS[0].id;
+    for (const s of SECTIONS) if (document.getElementById(`sec-${s.id}`).offsetTop - list.scrollTop <= 40) cur = s.id;
+    if (list.scrollTop + list.clientHeight >= list.scrollHeight - 2) cur = SECTIONS[SECTIONS.length - 1].id;
+    activate(cur);
+  }, { passive: true });
+  activate(SECTIONS[0].id);
+
+  const toast = document.getElementById('toast');
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-buy]');
+    if (!b || b.disabled) return;
+    toast.textContent = `"${b.dataset.buy}" 구매 확인 팝업 자리`;
+    toast.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(() => toast.classList.remove('show'), 1200);
+  });
+</script>
+</body>
+</html>

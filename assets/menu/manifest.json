@@ -268,5 +268,74 @@
    360,
    64
   ]
+ },
+ "altarInventory": {
+  "note": "신단 = 보관함(인벤토리) 입구. idle 조각을 배경 루프와 같은 시계(frameMs 200, 32프레임)로 배경 조각 다음·sparks 전에 그린다. 켜진 픽셀만 불투명(알파 0/255). 누를 때 연출 없음(이름판만 1px 눌림), 손을 떼면 바로 열기.",
+  "idle": {
+   "file": "menu_altar_idle.png",
+   "x": 64,
+   "y": 168,
+   "w": 53,
+   "h": 36,
+   "frames": 18,
+   "cols": 6,
+   "periodFrames": 32,
+   "seq": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    0,
+    0,
+    16,
+    17,
+    17,
+    17,
+    16,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "coords": "native (x3)",
+   "frameMs": 200
+  },
+  "hitArea_screenPx": [
+   174,
+   510,
+   192,
+   174
+  ],
+  "crystalReserved_screenPx": [
+   204,
+   270,
+   132,
+   234
+  ],
+  "plate_screenPx": [
+   214,
+   648,
+   112,
+   36
+  ],
+  "plate": "ui/menu/plate.png 9-slice [8,8,8,8] x2, text '보관함' (i18n menu.inventory) #e8dcc0 + #0d0a10 outline",
+  "badge": "ui/menu/badge.png x2 at plate top-right (x+w-10, y-6)"
  }
 }

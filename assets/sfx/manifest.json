@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "sampleRate": 44100,
   "formats": [
     "ogg",
@@ -231,6 +231,56 @@
         "timebomb_explode"
       ],
       "durationMs": 1448,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "ui_click": {
+      "event": "일반 버튼 누를 때 (확인, 열기, 탭 이동 등)",
+      "files": [
+        "ui_click"
+      ],
+      "durationMs": 103,
+      "volume": 1.0,
+      "maxInstances": 3,
+      "minGapMs": 40
+    },
+    "ui_cancel": {
+      "event": "취소/닫기/뒤로 버튼",
+      "files": [
+        "ui_cancel"
+      ],
+      "durationMs": 144,
+      "volume": 1.0,
+      "maxInstances": 2,
+      "minGapMs": 40
+    },
+    "ui_game_enter": {
+      "event": "플레이 버튼 -> 인게임 진입 (전환 시작 순간). 약 1.5초, 전환 연출 1~1.5초 권장",
+      "files": [
+        "ui_game_enter"
+      ],
+      "durationMs": 1510,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "ui_game_exit": {
+      "event": "인게임 -> 메인 메뉴로 나갈 때 (전환 시작 순간). 약 1.3초, 전환 연출 1~1.3초 권장",
+      "files": [
+        "ui_game_exit"
+      ],
+      "durationMs": 1316,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 0
+    },
+    "ui_door_open": {
+      "event": "타이틀 터치 -> 문 열림 전환 시작 순간(0ms). 0~280ms 짧게 차오르는 소리 -> 280ms 묵직하고 둔탁한 충돌음(문 봉인이 풀림) -> 문이 열리는 동안 낮은 울림, 1000ms 작은 쿵. 문 열림 약 1.1초 기준",
+      "files": [
+        "ui_door_open"
+      ],
+      "durationMs": 1640,
       "volume": 1.0,
       "maxInstances": 1,
       "minGapMs": 0

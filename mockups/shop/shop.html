@@ -1,0 +1,745 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 상점 목업 (시안 2)</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../../assets/fonts/Galmuri11.woff2') format('woff2'); }
+  :root {
+    /* assets/gems/palette.hex 25색 (+ characters.hex 피부 2색은 안 씀) */
+    --outline:#0d0a10; --bg1:#221c2b; --bg2:#3b3347; --bg3:#655a74; --bone:#e8dcc0;
+    --blue-d:#0c1838; --blue-m:#1c3a76; --blue:#386cbc; --blue-l:#8cc4ee;
+    --pur-d:#220e38; --pur-m:#48206e; --pur:#7a3cae; --pur-l:#c48ce6;
+    --red-d:#3a0814; --red-m:#741426; --red:#b82a3c; --red-l:#ec6a6a;
+    --brn-d:#3a2808; --brn-m:#7a5212; --gold:#c28a20; --gold-l:#f2d264;
+    --grn-d:#0c2814; --grn-m:#1c5228; --grn:#3a8a3c; --grn-l:#9cd872;
+    /* 가짜 반투명 대신 2px 체크무늬 디더 (단색 #0d0a10 + 투명, 그라데이션처럼 번지지 않음) */
+    --dither: conic-gradient(var(--outline) 25%, transparent 0 50%, var(--outline) 0 75%, transparent 0);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--outline); color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 11px; line-height: 14px; }
+  body { padding: 16px; }
+  img { image-rendering: pixelated; display: block; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
+  button:focus-visible { outline: 2px solid var(--blue-l); outline-offset: 2px; }
+  .t22 { font-size: 22px; line-height: 22px; }
+  .ol { text-shadow: 1px 0 var(--outline), -1px 0 var(--outline), 0 1px var(--outline), 0 -1px var(--outline); }
+
+  /* ---------- 검토용 페이지 크롬 (게임 UI 아님) ---------- */
+  .toolbar { width: 540px; margin: 0 auto 10px; background: var(--bg1); border: 2px solid var(--bg2); padding: 10px; line-height: 18px; }
+  .toolbar h1 { font-size: 11px; color: var(--gold-l); }
+  .toolbar .vt { display: flex; gap: 6px; margin: 6px 0; }
+  .toolbar .vt button { padding: 8px 12px; border: 2px solid var(--bg3); background: var(--bg2); min-height: 36px; }
+  .toolbar .vt button.on { background: var(--pur); border-color: var(--gold-l); }
+  .dbg { position: fixed; right: 12px; bottom: 12px; width: 260px; background: var(--bg1); border: 2px solid var(--gold); z-index: 1000; line-height: 18px; }
+  .dbg > button { width: 100%; padding: 8px 10px; color: var(--gold-l); background: var(--bg2); }
+  .dbg .body { padding: 8px 10px; display: grid; gap: 6px; max-height: 70vh; overflow: auto; }
+  .dbg.closed .body { display: none; }
+  .dbg label { display: flex; align-items: center; gap: 6px; }
+  .dbg input[type=number] { width: 90px; font: inherit; background: var(--outline); color: var(--bone); border: 1px solid var(--bg3); padding: 2px 4px; }
+  .dbg input[type=range] { flex: 1; }
+  .dbg .sep { color: var(--bg3); border-top: 1px solid var(--bg2); padding-top: 4px; }
+  .dbg .reset { padding: 4px 6px; border: 1px solid var(--bg3); background: var(--bg2); }
+  body.shot { padding: 0; }
+  body.shot .toolbar, body.shot .dbg { display: none; }
+  body.shot .device { border: 0; }
+
+  /* ---------- 디바이스 540x960 = 180x320 x3 ---------- */
+  .device { position: relative; width: 540px; height: 960px; margin: 0 auto; overflow: hidden; background: var(--bg1); border: 3px solid var(--bg2); box-sizing: content-box; }
+  .tempnote { position: absolute; right: 8px; top: 6px; color: var(--bg3); }
+
+  /* ---------- 9-slice (원본 slice px → 화면 2배 border) ---------- */
+  .n { border-style: solid; border-color: transparent; border-image-repeat: stretch; image-rendering: pixelated; }
+  .n-plate { border-width: 16px; border-image-source: url('../../assets/ui/menu/plate.png'); border-image-slice: 8 fill; }
+  .n-inset { border-width: 8px; border-image-source: url('../../assets/ui/menu/inset.png'); border-image-slice: 4 fill; }
+  .n-pinset { border-width: 8px; border-image-source: url('../../assets/ui/panels/panel_inset.png'); border-image-slice: 4 fill; }
+  .n-iron { border-width: 16px; border-image-source: url('../../assets/ui/panels/panel_iron.png'); border-image-slice: 8 fill; }
+  .n-popup { border-width: 32px; border-image-source: url('../../assets/ui/menu/popup_menu.png'); border-image-slice: 16 fill; }
+  .n-body { border-width: 8px; border-image-source: url('../../assets/ui/upgrade/tab_body.png'); border-image-slice: 4 fill; }
+  .n-card { border-width: 8px; border-image-source: url('../../assets/ui/upgrade/card.png'); border-image-slice: 4 fill; }
+  .n-card.sel { border-image-source: url('../../assets/ui/upgrade/card_selected.png'); }
+  /* tab: manifest [L6,T6,R6,B3] → CSS slice 순서 T R B L */
+  .n-tab { border-width: 12px 12px 6px 12px; border-image-slice: 6 6 3 6 fill; border-image-source: url('../../assets/ui/upgrade/tab_off.png'); }
+  .n-tab.on { border-image-source: url('../../assets/ui/upgrade/tab_on.png'); }
+  /* btn: manifest [L4,T4,R4,B5] */
+  .n-btn { border-width: 8px 8px 10px 8px; border-image-slice: 4 4 5 4 fill; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--bone); }
+  .b-gold { border-image-source: url('../../assets/ui/buttons/btn_gold.png'); color: var(--outline); }
+  .b-primary { border-image-source: url('../../assets/ui/buttons/btn_primary.png'); }
+  .b-secondary { border-image-source: url('../../assets/ui/buttons/btn_secondary.png'); }
+  .b-danger { border-image-source: url('../../assets/ui/buttons/btn_danger.png'); }
+  .b-disabled { border-image-source: url('../../assets/ui/upgrade/btn_disabled.png'); color: var(--bg3); }
+  button:active > .b-gold, .b-gold:active { border-image-source: url('../../assets/ui/buttons/btn_gold_pressed.png'); padding-top: 2px; }
+  button:active > .b-primary, .b-primary:active { border-image-source: url('../../assets/ui/buttons/btn_primary_pressed.png'); padding-top: 2px; }
+  button:active > .b-secondary, .b-secondary:active { border-image-source: url('../../assets/ui/buttons/btn_secondary_pressed.png'); padding-top: 2px; }
+  .poor-num { color: var(--red-l); }
+
+  /* ---------- 상단: 닫기 + 재화 바 (메뉴와 같은 자리 154,28,232,56) ---------- */
+  .close { position: absolute; left: 20px; top: 28px; width: 48px; height: 48px; display: grid; place-items: center; }
+  .close img { width: 32px; height: 32px; }
+  .close:active img { content: url('../../assets/ui/upgrade/btn_close_pressed.png'); }
+  .bar { position: absolute; left: 154px; top: 28px; width: 232px; height: 56px; }
+  .bar .ic { position: absolute; top: 12px; width: 32px; height: 32px; }
+  .bar .box { position: absolute; top: 14px; height: 28px; display: flex; align-items: center; justify-content: flex-end; padding-right: 0; }
+  .bar .box span { position: relative; top: -1px; }
+  .bar .box.drop span { color: var(--red-l); }
+  .bar .box.gain span { color: var(--grn-l); }
+  .plus { position: absolute; left: 388px; top: 34px; width: 44px; height: 44px; display: grid; place-items: center; }
+  .plus img { width: 32px; height: 32px; }
+  .plus:active img { content: url('../../assets/ui/buttons/btn_plus_pressed.png'); }
+
+  /* ---------- 탭 ---------- */
+  .bigtabs { position: absolute; left: 12px; top: 96px; width: 516px; height: 48px; display: flex; gap: 4px; z-index: 2; }
+  .bigtabs > button { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--bg3); }
+  .bigtabs > button.on { color: var(--gold-l); height: 54px; } /* overlapBody 3 → 6px 본문과 겹침 */
+  .bigtabs img.ic { width: 32px; height: 32px; }
+  .badge { position: absolute; width: 16px; height: 16px; }
+  .panel { position: absolute; left: 12px; top: 138px; width: 516px; bottom: 12px; display: flex; flex-direction: column; }
+  .smalltabs { display: flex; gap: 4px; padding: 0 0 6px; }
+  .smalltabs button { flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; gap: 4px; color: var(--bg3); white-space: nowrap; }
+  .smalltabs button.on { color: var(--gold-l); }
+  .smalltabs img { width: 24px; height: 24px; }
+  .scroll { flex: 1; overflow-y: auto; scrollbar-width: none; }
+  .scroll::-webkit-scrollbar { display: none; }
+  .grid { display: grid; grid-template-columns: 244px 244px; gap: 14px 12px; padding: 10px 0 16px; }
+
+  /* 시안 2: 왼쪽 레일 + 1열 */
+  .rail { position: absolute; left: 12px; top: 96px; width: 100px; display: flex; flex-direction: column; gap: 6px; }
+  .rail button { position: relative; height: 72px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--bg3); }
+  .rail button.on { color: var(--gold-l); }
+  .rail img { width: 24px; height: 24px; }
+  .raildots { display: flex; gap: 2px; height: 24px; align-items: center; } .raildots i { width: 8px; height: 8px; }
+  .device.v2 .panel { left: 118px; top: 96px; width: 410px; }
+  .device.v2 .grid { grid-template-columns: 1fr; gap: 8px; }
+
+  .hdr { grid-column: 1 / -1; display: flex; align-items: flex-end; justify-content: space-between; padding: 10px 2px 2px; border-bottom: 2px solid var(--bg2); }
+  .hdr b { font-weight: normal; color: var(--gold-l); }
+  .hdr i { font-style: normal; color: var(--bg3); }
+
+  /* ---------- 카드 ---------- */
+  .card { position: relative; height: 164px; display: block; width: 100%; }
+  .card .slot { position: absolute; left: 4px; top: 4px; width: 44px; height: 44px; background: url('../../assets/ui/items/slot_normal.png') 0 0 / 44px 44px; image-rendering: pixelated; }
+  .card .slot.locked { background-image: url('../../assets/ui/items/slot_locked.png'); }
+  .slot > img.it { position: absolute; left: 8px; top: 8px; width: 28px; height: 28px; }
+  .slot .cnt { position: absolute; right: 2px; bottom: 0; }
+  .ph { position: absolute; left: 8px; top: 8px; width: 28px; height: 28px; display: grid; place-items: center; color: var(--outline); text-align: center; line-height: 11px; }
+  .ph.sk { height: 20px; }
+  .dots { position: absolute; left: 8px; top: 30px; display: flex; gap: 2px; }
+  .dots i { width: 4px; height: 4px; }
+  .stack { position: absolute; left: 4px; top: 4px; width: 76px; height: 44px; }
+  .stack img { position: absolute; width: 32px; height: 32px; }
+  .card .name { position: absolute; left: 56px; top: 4px; right: 4px; white-space: nowrap; overflow: hidden; }
+  .card.wideicon .name, .card.wideicon .sub { left: 88px; }
+  .card .sub { position: absolute; left: 56px; top: 32px; color: var(--blue-l); white-space: nowrap; }
+  .card .desc { position: absolute; left: 4px; right: 4px; top: 54px; height: 42px; overflow: hidden; }
+  .desc em { font-style: normal; color: var(--gold-l); }
+  .card .price { position: absolute; left: 0; right: 0; bottom: 0; height: 48px; white-space: nowrap; }
+  .price img { width: 32px; height: 32px; margin-top: -4px; margin-bottom: -4px; }
+  .price img.lk { width: 24px; height: 24px; }
+  .price.small { font-size: 11px; }
+  /* 해금: 132px 버튼 안에 글자+아이콘+숫자가 안 들어가서 버튼 위 작은 라벨로 */
+  .price .pre { position: absolute; left: -8px; right: -8px; top: -24px; text-align: center; font-size: 11px; color: var(--gold-l); }
+  .tag { position: absolute; right: -4px; top: -16px; padding: 2px 4px; background: var(--red); color: var(--bone); border: 2px solid var(--outline); z-index: 1; white-space: nowrap; }
+  .tag.blue { background: var(--blue-m); }
+  .tag.gray { background: var(--bg3); }
+  .tag.gold { background: var(--gold); color: var(--outline); }
+  .card.sold::after { content: ''; position: absolute; inset: -8px; background: var(--dither); background-size: 4px 4px; pointer-events: none; }
+  .card.sold .price { z-index: 1; }
+  .bump { color: var(--grn-l) !important; }
+
+  /* 가로 한 줄 카드: 무료 카드, 그리고 시안 2의 모든 카드 */
+  .card.row, .device.v2 .card:not(.banner) { grid-column: 1 / -1; height: 96px; }
+  .card.row .desc, .device.v2 .card:not(.banner) .desc { left: 56px; top: 28px; right: 140px; height: 28px; }
+  .card.row .sub, .device.v2 .card:not(.banner) .sub { top: 62px; }
+  .card.row .name, .device.v2 .card:not(.banner) .name { right: 140px; }
+  .card.row .price, .device.v2 .card:not(.banner) .price { left: auto; width: 132px; top: 16px; bottom: auto; }
+  .card.row.wideicon .desc, .device.v2 .card.wideicon:not(.banner) .desc { left: 88px; }
+
+  /* 배너 (한 줄 전체) */
+  .card.banner { grid-column: 1 / -1; height: 220px; }
+  .card.banner .art { position: absolute; left: 4px; top: 4px; width: 120px; height: 120px; display: grid; place-items: center; text-align: center; color: var(--outline); line-height: 16px; }
+  .card.banner .name { left: 136px; }
+  .card.banner .sub { left: 136px; top: 30px; }
+  .card.banner .desc { left: 136px; top: 50px; height: 72px; }
+  .card.banner .timer { position: absolute; left: 4px; bottom: 4px; width: 180px; height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .card.banner .price { left: auto; width: 220px; bottom: 0; }
+  .card.banner .tags { position: absolute; left: 4px; top: 130px; display: flex; gap: 6px; }
+  .card.banner .tags .tag { position: static; }
+  .device.v2 .card.banner { height: 220px; }
+  .device.v2 .card.banner .desc { right: 4px; height: 72px; }
+  .device.v2 .card.banner .price { left: auto; right: 0; top: auto; bottom: 0; width: 180px; }
+  .device.v2 .card.banner .timer { width: 168px; }
+  
+  .legal { grid-column: 1 / -1; display: flex; justify-content: center; gap: 4px; color: var(--bg3); padding: 4px 0 8px; }
+  .legal button { min-height: 44px; padding: 0 8px; color: var(--bg3); text-decoration: underline; }
+
+  /* ---------- 팝업 / 토스트 ---------- */
+  .veil { position: absolute; inset: 0; background: var(--dither); background-size: 4px 4px; display: none; z-index: 50; }
+  .veil.open { display: block; }
+  .pop { position: absolute; left: 40px; width: 460px; top: 180px; }
+  .pop .x { position: absolute; right: -24px; top: -24px; width: 44px; height: 44px; display: grid; place-items: center; }
+  .pop .x img { width: 32px; height: 32px; }
+  .pop .head { position: relative; height: 52px; }
+  .pop .head .slot, .pop .head .stack, .pop .head .art { left: 0; top: 0; }
+  .pop .head .slot { position: absolute; width: 44px; height: 44px; background: url('../../assets/ui/items/slot_normal.png') 0 0 / 44px 44px; image-rendering: pixelated; }
+  .pop .head .art { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; color: var(--outline); font-size: 11px; text-align: center; line-height: 11px; }
+  .pop .head .name { position: absolute; left: 56px; top: 0; color: var(--gold-l); }
+  .pop .head.wideicon .name, .pop .head.wideicon .sub { left: 88px; }
+  .pop .head .sub { position: absolute; left: 56px; top: 30px; color: var(--blue-l); }
+  .pop p { line-height: 18px; margin: 8px 0; }
+  .pop .info { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; padding: 4px 6px; margin: 8px 0; }
+  .pop .info dt { color: var(--bg3); }
+  .qty { display: flex; align-items: center; gap: 6px; margin: 10px 0; }
+  .qty .n-btn { width: 44px; height: 44px; }
+  .qty .q { width: 64px; height: 44px; display: flex; align-items: center; justify-content: center; }
+  .qty .quick { width: 52px; }
+  .total { display: flex; align-items: center; justify-content: space-between; height: 48px; padding: 0 8px; margin: 8px 0 12px; }
+  .total span { display: flex; align-items: center; gap: 6px; }
+  .total img { width: 32px; height: 32px; }
+  .acts { display: flex; gap: 10px; }
+  .acts .n-btn { flex: 1; height: 52px; }
+  .store { height: 120px; display: grid; place-items: center; text-align: center; line-height: 18px; margin: 10px 0; color: var(--bg3); }
+  .toast { position: absolute; left: 40px; right: 40px; bottom: 120px; display: none; align-items: center; justify-content: space-between; gap: 8px; z-index: 60; min-height: 76px; padding: 0 4px; }
+  .toast.open { display: flex; }
+  .toast .n-btn { height: 44px; padding: 0 10px; white-space: nowrap; }
+
+  /* 가이드: 44px 터치 영역 확인 */
+  .device.guides button { outline: 1px dashed var(--blue-l); outline-offset: -1px; }
+  .device.guides .safe { display: block; }
+  .safe { display: none; position: absolute; left: 0; right: 0; top: 0; height: 28px; border-bottom: 1px dashed var(--grn-l); color: var(--grn-l); padding: 6px 8px; pointer-events: none; }
+  @media (prefers-reduced-motion: reduce) { .bump { color: inherit !important; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>상점 목업 · 540x960 (180x320 x3) · 메뉴 오른쪽 위 상점 아이콘에서 진입하는 전체 화면</h1>
+  <div class="vt">
+    
+    <span>시안 2 확정 (2026-11-06) · 아트 적용판</span>
+  </div>
+  <div id="vdesc"></div>
+</div>
+
+<div class="device" id="dev" role="application" aria-label="상점 화면">
+  <div class="safe">safe area 28px</div>
+  <span class="tempnote">※ 숫자는 전부 임시</span>
+  <button class="close" data-act="close" aria-label="닫기, 메뉴로"><img src="../../assets/ui/upgrade/btn_close.png" alt=""></button>
+  <div class="bar n n-plate" style="position:absolute;border-width:16px" aria-label="재화">
+  </div>
+  <div class="bar" id="bar">
+    <img class="ic" style="left:18px" src="../../assets/ui/icons/gold.png" alt="골드">
+    <div class="box n n-inset" id="box-gold" style="left:50px;width:72px"><span class="ol" id="v-gold"></span></div>
+    <img class="ic" style="left:132px" src="../../assets/ui/icons/diamond.png" alt="다이아">
+    <div class="box n n-inset" id="box-dia" style="left:162px;width:62px"><span class="ol" id="v-dia"></span></div>
+  </div>
+  <button class="plus" data-act="plus" aria-label="다이아 충전"><img src="../../assets/ui/buttons/btn_plus.png" alt=""></button>
+  <div id="nav"></div>
+  <div class="panel n n-body" id="panel">
+    <div class="smalltabs" id="small"></div>
+    <div class="scroll" id="scroll"><div class="grid" id="grid"></div></div>
+  </div>
+  <div class="veil" id="veil"><div class="pop n n-popup" id="pop"></div></div>
+  <div class="toast n n-iron" id="toast" role="status" aria-live="polite"></div>
+</div>
+
+<div class="dbg" id="dbg">
+  <button data-act="dbg">디버그 패널 ▾ (목업 전용)</button>
+  <div class="body">
+    <label>최고 층 <input type="range" min="1" max="100" data-k="floor"><span id="d-floor"></span></label>
+    <label>골드 <input type="number" min="0" data-k="gold"></label>
+    <label>다이아 <input type="number" min="0" data-k="dia"></label>
+    <div class="sep">젬 스킬 해금 방식</div>
+    <label><input type="radio" name="mode" value="A" data-k="mode"> A: 보스 클리어 + 골드</label>
+    <label><input type="radio" name="mode" value="B" data-k="mode"> B: 골드만</label>
+    <label><input type="radio" name="mode" value="C" data-k="mode"> C: 다이아로도 바로 해금</label>
+    <div class="sep">구매 상태</div>
+    <label><input type="checkbox" data-k="starter"> 스타터 팩 이미 구매</label>
+    <label><input type="checkbox" data-k="bossLoss"> 방금 보스층 패배 (돌파 팩 노출)</label>
+    <label><input type="checkbox" data-k="slot4"> 4번째 슬롯 열림</label>
+    <label><input type="checkbox" data-k="adsRemoved"> 광고 제거 구매</label>
+    <label><input type="checkbox" data-k="weekly"> 주간 패스 보유</label>
+    <label><input type="checkbox" data-k="monthly"> 월간 패스 보유</label>
+    <label><input type="checkbox" data-k="freeClaimed"> 오늘 무료 받음</label>
+    <button class="reset" data-act="resetFirst">다이아 첫 구매 2배 되살리기</button>
+    <div class="sep">보기</div>
+    <label><input type="checkbox" data-k="guides"> 터치 영역·safe area 표시</label>
+  </div>
+</div>
+
+<script>
+const A = '../../assets/';
+const SHOP = A + 'ui/shop/';
+const IMG = { gold: A + 'ui/icons/gold.png', dia: A + 'ui/icons/diamond.png', lock: A + 'ui/icons/lock.png', badge: A + 'ui/menu/badge.png' };
+const COLOR = { red: '#b82a3c', blue: '#386cbc', purple: '#7a3cae', yellow: '#f2d264', green: '#3a8a3c' };
+const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// ---------- 목업 상태 (가짜) ----------
+const S = {
+  v: 2, tab: 'gold.items', rail: 'items', floor: 12, gold: 2400, dia: 120, mode: 'A',
+  starter: false, bossLoss: true, slot4: false, adsRemoved: false,
+  weekly: true, weeklyClaimed: false, weeklyDays: 6, monthly: false, monthlyClaimed: false, monthlyDays: 29,
+  freeClaimed: false, guides: false, sel: '', popup: '', qty: 1, scrollTo: '',
+  chapterBought: {}, firstBuy: [true, true, false, true, true, true],
+  owned: { hammer: 3, scythe_h: 3, scythe_v: 3, rainbow: 3, glove: 3, repair: 3, hourglass: 3, dye: 0, shuffle: 0, barrier: 0, defuse: 0, drum: 0, booster_line: 0, booster_bomb: 0, gold_coin: 0, revive: 1 },
+  lv: { red: 2, blue: 5, purple: 1, yellow: 1, green: 1, spike: 1, lava: 0, soul: 0, ult: 0 },
+};
+// URL로 상태 덮어쓰기 (스크린샷용): ?v=2&tab=gold.skills&floor=25&popup=hammer&shot=1
+const P = new URLSearchParams(location.search);
+for (const [k, val] of P) {
+  if (!(k in S)) continue;
+  const d = S[k];
+  S[k] = typeof d === 'number' ? Number(val) : typeof d === 'boolean' ? val === '1' || val === 'true' : val;
+}
+if (P.has('shot')) document.body.classList.add('shot');
+if (P.has('dbgOpen') === false) document.getElementById('dbg').classList.add('closed');
+const disp = { gold: S.gold, dia: S.dia };
+const T0 = Date.now();
+
+// 기준가 1 = 1층 120골드 × 1.035^(층−1). 실제는 config/items.json + 층 보상 (docs/items.md 4장)
+const base1 = () => 120 * Math.pow(1.035, S.floor - 1);
+const gp = m => Math.max(10, Math.round(m * base1() / 10) * 10);
+
+// ---------- 카탈로그 (docs/items.md 1·3·4장, docs/skills.md 1·2장) ----------
+const ITEMS = {
+  hammer: ['망치', 1, '잼·방해요소 1개 제거', '잼 1개 또는 방해요소 1개를 없앤다. 돌덩이는 1 피해, 나무상자는 파괴. 시한폭탄 잼을 치면 해제.', '스왑 2회', '제한 없음', 20],
+  dye: ['염료', 1, '잼 1개를 원하는 색으로', '고른 잼 1개를 원하는 색으로 바꾼다. 특수 잼은 모양 그대로 색만 바뀐다(기술 색 고르기).', '스왑 2회', '제한 없음', 20],
+  shuffle: ['섞기 부적', 1, '보드 잼을 다시 배치', '보드의 잼을 다시 섞는다. 방해요소 칸은 그대로. 둘 수 있는 수가 있는 보드로.', '스왑 6회', '2', 15],
+  scythe_h: ['가로 낫', 2, '고른 가로줄 전체 제거', '고른 가로줄을 전부 지운다. 방해요소는 각 1 피해, 특수 잼은 터진다.', '스왑 4회', '3', 35],
+  scythe_v: ['세로 낫', 2, '고른 세로줄 전체 제거', '고른 세로줄을 전부 지운다. 방해요소는 각 1 피해, 특수 잼은 터진다.', '스왑 4회', '3', 35],
+  glove: ['교환 장갑', 2, '이웃한 두 잼 강제 교환', '매치가 안 돼도 이웃한 두 잼을 바꾼다. 특수 잼 조합 만들기, 시한폭탄 빼기.', '스왑 4회', '3', 35],
+  defuse: ['해제 부적', 2, '시한폭탄 타이머 모두 +5', '보드의 모든 시한폭탄 타이머를 5 늘린다.', '스왑 4회', '2', 30, 21],
+  rainbow: ['무지개 결정', 4, '잼 1개를 무지개 잼으로', '고른 잼 1개를 무지개 잼으로 바꾼다(터뜨리지 않음). 상자·돌 칸, 특수 잼 칸은 불가.', '스왑 6회', '2', 60],
+  repair: ['수리 망치', 3, '성벽 HP 30% 회복', '성벽 HP 최대치의 30%를 회복한다.', '스왑 6회', '2', 50],
+  hourglass: ['모래시계', 3, '모든 적 5초 정지', '모든 적이 5초 멈춘다(보스 2.5초). 성벽 공격도 멈춤, 피해는 없음.', '스왑 6회', '2', 50],
+  barrier: ['결계', 3, '8초간 성벽 피해 없음', '8초 동안 성벽이 피해를 받지 않는다.', '스왑 6회', '2', 50],
+  drum: ['분노의 북', 3, '3스왑 동안 공격력 ×1.5', '다음 3번 스왑 동안 모든 탑 공격력 ×1.5.', '효과 뒤 스왑 6회', '2', 50],
+  booster_line: ['라인 부스터', 3, '층 시작 보드에 라인 잼 2개', '층 시작 화면에서 고르면 보드에 라인 잼 2개를 놓고 시작한다.', '-', '층당 1', 30],
+  booster_bomb: ['폭탄 부스터', 3, '층 시작 보드에 폭탄 잼 1개', '층 시작 화면에서 고르면 보드에 폭탄 잼 1개를 놓고 시작한다.', '-', '층당 1', 30],
+};
+const COLOR_SKILLS = [
+  ['red', '레드 범위', '범위', '맞은 적 주변에 피해', [40, 45, 50, 55, 60], v => v + '%'],
+  ['blue', '블루 감속', '감속', '이동속도 감속 2초', [30, 33, 36, 39, 42], v => v + '%'],
+  ['purple', '퍼플 독', '독', '피해 일부를 3초 독으로', [50, 55, 60, 65, 70], v => v + '%'],
+  ['yellow', '옐로우 경직', '경직', '맞은 적 잠깐 멈춤', [0.4, 0.45, 0.5, 0.55, 0.6], v => v.toFixed(2).replace(/0$/, '') + '초'],
+  ['green', '그린 표식', '표식', '받는 피해 증가 표식', [10, 11, 12, 13, 15], v => '+' + v + '%'],
+];
+// [id, 이름, 특수 잼, 모양 라벨, 설명, 배율, 보스층, 해금 골드 A/C, 해금 골드 B, 해금 다이아 C]
+const SPECIAL_SKILLS = [
+  ['spike', '가시', '라인 잼', '가시', '가장 앞 적을 꿰뚫고 밀기', [2.5, 2.7, 2.9, 3.1, 3.3], 0, 0, 0, 0],
+  ['lava', '용암탄', '폭탄 잼', '용암', '적이 몰린 곳에 큰 범위', [2.0, 2.2, 2.4, 2.6, 2.8], 10, 6, 10, 80],
+  ['soul', '영혼 불꽃', '박스 잼', '불꽃', 'HP 높은 적 2마리 추적', [1.5, 1.6, 1.7, 1.8, 2.0], 20, 8, 15, 120],
+  ['ult', '궁극기', '무지개 잼', '궁극', '고른 색 효과를 전장 전체에', [1.0, 1.1, 1.2, 1.3, 1.5], 30, 12, 25, 200],
+];
+const LV_COST = [0, 2, 3, 5, 8]; // Lv n → n+1 에 드는 기준가 배수
+const DIA_BUNDLES = [[60, 0, 1200, 1], [300, 30, 5900, 1], [600, 90, 12000, 3], [1600, 320, 29000, 3], [3400, 850, 59000, 5], [7000, 2100, 119000, 5]];
+const GOLD_EX = [['골드 소', 5, 20, 1], ['골드 중', 15, 50, 3], ['골드 대', 40, 120, 5]];
+
+// ---------- 아이콘 HTML ----------
+const itemIcon = (id, cnt) => `<span class="slot"><img class="it" src="${A}items/${id}.png" alt="">${cnt ? `<span class="cnt ol">${cnt}</span>` : ''}</span>`;
+const blockIcon = (bg, label, fg) => `<span class="slot"><span class="ph" style="background:${bg};${fg ? 'color:' + fg : ''}">${label}</span></span>`;
+const artIcon = name => `<span class="slot"><img class="it" src="${SHOP}${name}.png" alt=""></span>`;
+const skillIcon = id => `<span class="slot"><img class="it" src="${SHOP}skill_${id}.png" alt=""><span class="dots" style="top:38px;left:12px">${Object.values(COLOR).map(c => `<i style="background:${c}"></i>`).join('')}</span></span>`;
+const STACK_POS = { 1: [[22, 6]], 3: [[8, 12], [36, 12], [22, 0]], 5: [[0, 12], [22, 12], [44, 12], [11, 0], [33, 0]] };
+const stackIcon = (src, n) => `<span class="stack">${STACK_POS[n].map(([x, y]) => `<img src="${src}" style="left:${x}px;top:${y}px" alt="">`).join('')}</span>`;
+
+// ---------- 상품 만들기 ----------
+// 상품: {id, name, sub, desc, icon, wide, price:{cur:'gold'|'dia'|'krw', amt}, state, lockText, tag, layout, long, info, qty, buy(q), reward}
+function itemCard(id) {
+  const [name, mul, desc, long, cd, max, , lockFloor] = ITEMS[id];
+  const locked = lockFloor && S.floor < lockFloor;
+  return {
+    id: 'item.' + id, name, desc, icon: itemIcon(id), sub: `보유 ${S.owned[id]}`, subKey: id,
+    price: { cur: 'gold', amt: gp(mul) }, state: locked ? 'locked' : '', lockText: locked ? `${lockFloor}층 도달 시` : '',
+    lockMsg: `${name}은(는) ${lockFloor}층에 도달하면 열려요`,
+    long, info: [['쿨다운', cd], ['층당 최대', max], ['기준가', `일반 층 ${mul}개 분량`]], qty: true,
+    buy: q => { S.owned[id] += q; return `${name} ×${q} 구매`; },
+  };
+}
+function freeCard() {
+  return {
+    id: 'free', layout: 'row', name: '오늘의 무료 1개', desc: S.adsRemoved ? '광고 제거: 바로 받기' : '광고를 보면 염료 1개', icon: itemIcon('dye'), sub: '매일 0시 갱신',
+    price: { cur: 'free', label: S.adsRemoved ? '바로 받기' : '광고 보고 받기' }, state: S.freeClaimed ? 'sold' : '', soldText: '내일 다시', tag: ['무료', 'gold'],
+    long: '하루에 한 번 무료로 아이템 1개를 받는다. 광고 제거를 사면 광고 없이 받는다. (광고 자리)', info: [['오늘의 상품', '염료 1개']],
+    buy: () => { S.owned.dye++; S.freeClaimed = true; return '염료 1개 받음'; },
+  };
+}
+function secItems() {
+  return [freeCard(),
+    H('보드 조작', '기준가 1 = ' + fmt(gp(1)) + ' 골드'), ...['hammer', 'dye', 'shuffle', 'scythe_h', 'scythe_v', 'glove', 'defuse', 'rainbow'].map(itemCard),
+    H('성벽·시간', '적에게 피해 없음'), ...['repair', 'hourglass', 'barrier', 'drum'].map(itemCard),
+    H('층 시작', '층 시작 화면에서 고름'), ...['booster_line', 'booster_bomb'].map(itemCard)];
+}
+function levelCard(id, name, icon, lv, vals, f, effect, extra) {
+  const max = lv >= 5;
+  return {
+    id: 'skill.' + id, name, icon, sub: `Lv ${lv}/5`,
+    desc: `${effect}<br>${max ? `<em>${f(vals[4])} (최대)</em>` : `<em>${f(vals[lv - 1])} → ${f(vals[lv])}</em>`}${extra ? '<br>' + extra : ''}`,
+    price: { cur: 'gold', amt: max ? 0 : gp(LV_COST[lv]) }, state: max ? 'sold' : '', soldText: '최대 레벨',
+    long: `${effect}. 레벨마다 수치 하나만 오른다.`, info: vals.map((v, i) => [`Lv ${i + 1}`, f(v) + (i + 1 === lv ? '  ← 지금' : '')]).concat(extra ? [['함께', extra]] : []),
+    buy: () => { S.lv[id]++; return `${name} Lv ${S.lv[id]}`; },
+  };
+}
+function secSkills() {
+  const out = [H('색 효과', '그 색 탑의 모든 공격에 붙음 · 기본 해금')];
+  for (const [id, name, short, eff, vals, f] of COLOR_SKILLS)
+    out.push(levelCard(id, name, artIcon('skill_' + id), S.lv[id], vals, f, eff));
+  out.push(H('특수 잼 기술', '모양은 특수 잼, 효과는 잼 색', 'special'));
+  for (const [id, name, gem, label, eff, vals, boss, gA, gB, dC] of SPECIAL_SKILLS) {
+    const f = v => '×' + v.toFixed(1);
+    const extra = id === 'ult' ? '대폭발(무지개+무지개) ×2.0' : '';
+    if (S.lv[id] > 0) { out.push(levelCard(id, name, skillIcon(id), S.lv[id], vals, f, `${gem}: ${eff}`, extra)); continue; }
+    const cleared = S.floor > boss;
+    const unlock = (cur, amt) => ({
+      id: 'skill.' + id, name, icon: skillIcon(id), sub: '미해금', desc: `${gem}: ${eff}<br><em>해금 시 Lv 1 ${f(vals[0])}</em>${extra ? '<br>' + extra : ''}`,
+      price: { cur, amt, prefix: '해금' }, tag: cur === 'dia' && !cleared ? ['바로 해금', 'blue'] : null,
+      long: `${gem}이 터지면 ${eff}. 효과는 그 특수 잼의 색이 정한다.` + (cur === 'dia' && !cleared ? ` (${boss}층 보스를 잡으면 골드로도 해금 가능)` : ''),
+      info: [['해금 조건', boss ? `${boss}층 보스 처치` + (S.mode === 'B' ? ' (B안: 조건 없음)' : '') : '처음부터'], ['Lv 1', f(vals[0])], ['Lv 5', f(vals[4])]].concat(extra ? [['함께', extra]] : []),
+      buy: () => { S.lv[id] = 1; return `${name} 해금`; },
+    });
+    if (S.mode === 'B') out.push(unlock('gold', gp(gB)));
+    else if (cleared) out.push(unlock('gold', gp(gA)));
+    else if (S.mode === 'C') out.push(unlock('dia', dC));
+    else out.push({ ...unlock('gold', gp(gA)), sub: '잠김', state: 'locked', lockText: `${boss}층 보스 처치 시`, lockMsg: `${boss}층 보스를 처음 잡으면 해금할 수 있어요` });
+  }
+  return out;
+}
+function secTotem() {
+  return [H('토템', '장착형 영구 효과 · 곧 열림'), ...[1, 2, 3].map(i => ({
+    id: 'totem.' + i, name: '???', icon: artIcon('totem_unknown'), sub: '장착 슬롯 0/2', desc: '장착하면 영구 효과<br>(기획 전)',
+    price: {}, state: 'locked', lockText: '준비 중', tag: ['준비 중', 'gray'], lockMsg: '토템은 준비 중이에요',
+  }))];
+}
+function secGoldEx() {
+  return GOLD_EX.map(([name, floors, dia, n], i) => {
+    const amt = Math.round(base1() * floors / 10) * 10;
+    return {
+      id: 'goldex.' + i, name, wide: true, icon: stackIcon(IMG.gold, n), sub: `+${fmt(amt)}`, desc: `약 일반 층 ${floors}개 분량<br>최고 층이 오르면 같이 커짐`,
+      price: { cur: 'dia', amt: dia }, long: `다이아 ${dia}개로 골드 ${fmt(amt)}을 받는다. 양은 최고 도달 층의 일반 층 보상 ${floors}개 분량.`, info: [['받는 골드', fmt(amt)]],
+      buy: () => { addCur('gold', amt); return `골드 +${fmt(amt)}`; },
+    };
+  });
+}
+function pack(id, name, art, contents, krw, extra = {}) {
+  const ART = { starter: 'pack_starter', boss: 'pack_boss', slot4: 'pack_slot4', weekly: 'pack_weekly', monthly: 'pack_monthly', ads: 'pack_adfree' };
+  return { id: 'pack.' + id, name, icon: artIcon(ART[id] || 'pack_chapter'), bannerArt: { starter: 'banner_starter', boss: 'banner_boss' }[id], desc: contents, price: { cur: 'krw', amt: krw }, long: contents.replace(/<br>/g, ' · '), ...extra };
+}
+function secRec() {
+  const ch = Math.floor((S.floor - 1) / 10) + 1;
+  const hours = h => Math.max(0, h * 3600 - Math.floor((Date.now() - T0) / 1000));
+  const list = [];
+  if (S.floor >= 6 && !S.starter) list.push(pack('starter', '스타터 팩', ['var(--gold)', '스타터', 'var(--outline)'],
+    '다이아 300 · 망치 5<br>가로/세로 낫 각 3 · 수리 망치 3<br>부활 1', 1200,
+    { banner: true, timer: hours(72), tags: [['1회 한정', ''], ['가치 ×5', 'gold']], info: [['노출', '5층 클리어 후, 계정당 1회'], ['남은 시간', '72시간']],
+      buy: () => { S.starter = true; addCur('dia', 300); S.owned.hammer += 5; S.owned.scythe_h += 3; S.owned.scythe_v += 3; S.owned.repair += 3; S.owned.revive++; return '스타터 팩 구매 완료'; }, reward: '다이아 300, 망치 5, 가로/세로 낫 각 3, 수리 망치 3, 부활 1' }));
+  if (S.bossLoss) list.push(pack('boss', '보스 돌파 팩', ['var(--red)', '보스', 'var(--bone)'],
+    '부활 2 · 모래시계 3<br>결계 3 · 분노의 북 3', 5900,
+    { banner: !list.length, timer: hours(24), tags: [['보스당 1회', ''], ['가치 ×3', 'gold']], tag: list.length ? ['24시간', ''] : null, info: [['노출', '보스층 패배 직후, 보스당 1회'], ['남은 시간', '24시간']],
+      buy: () => { S.bossLoss = false; S.owned.revive += 2; S.owned.hourglass += 3; S.owned.barrier += 3; S.owned.drum += 3; return '보스 돌파 팩 구매 완료'; }, reward: '부활 2, 모래시계 3, 결계 3, 분노의 북 3' }));
+  if (S.floor <= 20 && !S.slot4) list.push(pack('slot4', '4번째 슬롯 팩', ['var(--bg3)', '슬롯', 'var(--bone)'],
+    '하단 4번째 슬롯 즉시 해금<br>+ 무지개 결정 3', 4900,
+    { tag: ['20층까지', 'blue'], info: [['노출', '20층 보스 전까지 (이후 무료로 열림)']], buy: () => { S.slot4 = true; S.owned.rainbow += 3; return '4번째 슬롯 열림'; }, reward: '4번째 슬롯, 무지개 결정 3' }));
+  list.push(passCard('weekly', '주간 패스', 5900, 100, 60, 7, ''));
+  list.push(passCard('monthly', '월간 패스', 11000, 300, 100, 30, ' + 무료 아이템 1'));
+  if (!S.chapterBought[ch]) list.push(pack('ch' + ch, `챕터 ${ch} 팩`, ['var(--grn-m)', '챕터', 'var(--bone)'],
+    `${ch * 10}층 보스 대비<br>결계 3 · 모래시계 2 · 부스터 2`, 3900,
+    { tag: ['챕터당 1회', ''], info: [['노출', `챕터 ${ch} 진입 시 1회`]], buy: () => { S.chapterBought[ch] = true; S.owned.barrier += 3; S.owned.hourglass += 2; S.owned.booster_bomb += 2; return `챕터 ${ch} 팩 구매 완료`; }, reward: '결계 3, 모래시계 2, 폭탄 부스터 2' }));
+  if (!S.adsRemoved) list.push(pack('ads', '광고 제거', ['var(--bg2)', '광고 X', 'var(--bone)'],
+    '무료 아이템 광고 없이<br>+ 다이아 200', 6500,
+    { tag: ['1회', ''], info: [['노출', '1회 구매']], buy: () => { S.adsRemoved = true; addCur('dia', 200); return '광고 제거 완료'; }, reward: '광고 제거, 다이아 200' }));
+  return list;
+}
+function passCard(id, name, krw, now, daily, days, plus) {
+  const own = S[id], claimed = S[id + 'Claimed'], left = S[id + 'Days'];
+  if (!own) return pack(id, name, ['var(--blue-m)', '패스', 'var(--bone)'], `즉시 ${now} + ${days}일간 매일 ${daily}${plus}<br>(총 ${now + daily * days})`, krw,
+    { tag: ['반복 구매', 'blue'], info: [['즉시', `다이아 ${now}`], ['매일', `다이아 ${daily}${plus}`], ['기간', `${days}일`]],
+      buy: () => { S[id] = true; S[id + 'Claimed'] = false; S[id + 'Days'] = days; addCur('dia', now); return `${name} 시작`; }, reward: `다이아 ${now}, 내일부터 ${days}일간 매일 ${daily}` });
+  return {
+    id: 'pass.' + id, name, icon: artIcon('pack_' + id), sub: `남은 ${left}일`, desc: `오늘 받을 것: 다이아 ${daily}${plus}`,
+    price: { cur: 'claim', label: `받기 +${daily}` }, state: claimed ? 'sold' : '', soldText: '내일 다시', tag: claimed ? null : ['받기', ''],
+    direct: true, buy: () => { S[id + 'Claimed'] = true; addCur('dia', daily); return `${name}: 다이아 +${daily}`; },
+  };
+}
+function secDia() {
+  return DIA_BUNDLES.map(([d, bonus, krw, n], i) => {
+    const first = S.firstBuy[i];
+    return {
+      id: 'dia.' + i, name: `다이아 ${fmt(d)}`, wide: true, icon: stackIcon(IMG.dia, n), sub: bonus ? `보너스 +${fmt(bonus)}` : '',
+      desc: first ? `첫 구매: <em>${fmt(d * 2 + bonus)}</em>` : `받는 양 ${fmt(d + bonus)}`, price: { cur: 'krw', amt: krw }, tag: first ? ['첫 구매 2배', ''] : null,
+      long: `다이아 ${fmt(d)}` + (bonus ? ` + 보너스 ${fmt(bonus)}` : '') + (first ? '. 첫 구매라 기본 다이아가 2배.' : '.'),
+      buy: () => { addCur('dia', d * (first ? 2 : 1) + bonus); S.firstBuy[i] = false; return `다이아 +${fmt(d * (first ? 2 : 1) + bonus)}`; },
+      reward: `다이아 ${fmt(d * (first ? 2 : 1) + bonus)}`,
+    };
+  });
+}
+function secDiaGoods() {
+  const one = (id, name, desc, price, long) => ({ id: 'dg.' + id, name, icon: itemIcon(id), sub: `보유 ${S.owned[id]}`, subKey: id, desc, price: { cur: 'dia', amt: price }, long,
+    buy: () => { S.owned[id]++; return `${name} 1개 구매`; } });
+  const bundle = (id, n, price) => {
+    const name = ITEMS[id][0];
+    return { id: `dg.${id}.${n}`, name: `${name} ×${n}`, icon: itemIcon(id, '×' + n), sub: `보유 ${S.owned[id]}`, subKey: id, desc: ITEMS[id][2], price: { cur: 'dia', amt: price },
+      long: ITEMS[id][3], info: [['묶음', `${n}개`], ['개당', `다이아 ${(price / n).toFixed(0)}`]], buy: () => { S.owned[id] += n; return `${name} ×${n} 구매`; } };
+  };
+  return [H('다이아 전용'),
+    one('gold_coin', '황금 주화', '이번 층 골드 ×2', 30, '이번 층에서 얻는 골드가 2배가 된다. 다이아로만 판매.'),
+    one('revive', '부활', '성벽 0 → 50%로 부활', 50, '성벽 HP가 0이 되면 50%로 부활하고 모든 적이 2초 멈춘다. 층당 1회. 패배 팝업에서 바로 사용.'),
+    { id: 'dg.slot4', name: '4번째 슬롯', icon: `<span class="slot locked"></span>`, sub: S.slot4 ? '열림' : '잠김', desc: '하단 아이템 슬롯 1칸<br>영구 추가', price: { cur: 'dia', amt: 100 },
+      state: S.slot4 ? 'sold' : '', soldText: '열림', long: '하단 슬롯 4번째 칸을 바로 연다. 20층 보스를 처음 잡아도 무료로 열린다.', buy: () => { S.slot4 = true; return '4번째 슬롯 열림'; } },
+    H('아이템 묶음', '다이아 고정가'),
+    ...[['hammer', 5], ['dye', 5], ['shuffle', 5], ['scythe_h', 5], ['scythe_v', 5], ['glove', 5], ['rainbow', 5], ['defuse', 5], ['repair', 5], ['hourglass', 5], ['barrier', 5], ['drum', 5]]
+      .map(([id, n]) => bundle(id, n, ITEMS[id][6])),
+    bundle('booster_line', 3, 30), bundle('booster_bomb', 3, 30)];
+}
+const H = (title, note = '', key = '') => ({ hdr: true, title, note, key });
+const LEGAL = { legal: true };
+
+// 탭 구성
+const V1 = {
+  gold: { label: '골드 상점', icon: IMG.gold, tabs: [['items', '아이템', secItems], ['skills', '젬 스킬', secSkills], ['totem', '토템', secTotem, true], ['gold', '골드', () => [H('골드 교환', '다이아 → 골드'), ...secGoldEx()]]] },
+  cash: { label: '캐시 상점', icon: IMG.dia, tabs: [['rec', '추천', () => [...secRec(), LEGAL]], ['dia', '다이아', () => [...secDia(), LEGAL]], ['diagoods', '다이아 상품', () => [...secDiaGoods(), LEGAL]]] },
+};
+const V2 = [
+  ['items', '아이템', SHOP + 'rail_items.png', secItems], ['skills', '젬 스킬', SHOP + 'rail_skills.png', secSkills], ['totem', '토템', SHOP + 'rail_totem.png', secTotem],
+  ['packs', '패키지', SHOP + 'rail_packs.png', () => [...secRec(), LEGAL]],
+  ['dia', '다이아', SHOP + 'rail_dia.png', () => [H('다이아 구매'), ...secDia(), ...secDiaGoods(), H('골드 교환', '다이아 → 골드', 'goldex'), ...secGoldEx(), LEGAL]],
+];
+
+// ---------- 그리기 ----------
+const $ = id => document.getElementById(id);
+const esc = s => String(s);
+let products = new Map();
+
+function priceHTML(p) {
+  const pr = p.price || {};
+  if (p.state === 'locked') return `<span class="price n n-btn b-disabled small"><img class="lk" src="${IMG.lock}" alt="">${p.lockText}</span>`;
+  if (p.state === 'sold') return `<span class="price n n-btn b-disabled">${p.soldText || '구매 완료'}</span>`;
+  if (pr.cur === 'free') return `<span class="price n n-btn b-primary">${pr.label}</span>`;
+  if (pr.cur === 'claim') return `<span class="price n n-btn b-primary"><img src="${IMG.dia}" alt="">${pr.label}</span>`;
+  if (pr.cur === 'krw') return `<span class="price n n-btn b-gold t22">₩${fmt(pr.amt)}</span>`;
+  const poor = (pr.cur === 'gold' ? S.gold : S.dia) < pr.amt;
+  const cls = poor ? 'b-disabled' : pr.cur === 'gold' ? 'b-gold' : 'b-primary';
+  return `<span class="price n n-btn ${cls}">${pr.prefix ? `<span class="pre">${pr.prefix}</span>` : ''}<img src="${IMG[pr.cur]}" alt=""><span class="t22 ${poor ? 'poor-num' : ''}">${fmt(pr.amt)}</span></span>`;
+}
+function cardHTML(p) {
+  if (p.hdr) return `<div class="hdr" ${p.key ? `id="h-${p.key}"` : ''}><b class="t22">${p.title}</b><i>${p.note}</i></div>`;
+  if (p.legal) return `<div class="legal"><button data-act="legal">구매 내역 복원</button>·<button data-act="legal">이용약관</button>·<button data-act="legal">환불 안내</button></div>`;
+  products.set(p.id, p);
+  const cls = ['card', 'n', 'n-card', p.layout || '', p.banner ? 'banner' : '', p.wide ? 'wideicon' : '', p.state === 'sold' ? 'sold' : '', S.sel === p.id ? 'sel' : ''].join(' ');
+  const tag = p.tag ? `<span class="tag ${p.tag[1]}">${p.tag[0]}</span>` : '';
+  if (p.banner) {
+    const t = p.timer, hh = String(Math.floor(t / 3600)).padStart(2, '0'), mm = String(Math.floor(t / 60) % 60).padStart(2, '0'), ss = String(t % 60).padStart(2, '0');
+    return `<button class="${cls}" data-act="card" data-id="${p.id}" aria-label="${p.name}">
+      <span class="art"><img src="${SHOP}${p.bannerArt}.png" alt="" style="width:120px;height:120px"></span>
+      <span class="name t22 ol" style="color:var(--gold-l)">${p.name}</span><span class="sub">구성</span><span class="desc">${p.desc}</span>
+      <span class="tags">${p.tags.map(([s, c]) => `<span class="tag ${c}">${s}</span>`).join('')}</span>
+      <span class="timer n n-pinset" data-timer="${p.timer}">남은 <span class="t22" style="color:var(--red-l)">${hh}:${mm}:${ss}</span></span>
+      ${priceHTML(p)}</button>`;
+  }
+  return `<button class="${cls}" data-act="card" data-id="${p.id}" aria-label="${p.name}">${tag}${p.icon}
+    <span class="name t22 ol">${p.name}</span><span class="sub" ${p.subKey ? `data-sub="${p.subKey}"` : ''}>${p.sub || ''}</span>
+    <span class="desc">${p.desc}</span>${priceHTML(p)}</button>`;
+}
+
+function sections() {
+  if (S.v === 1) { const [big, small] = S.tab.split('.'); return V1[big].tabs.find(t => t[0] === small)[2](); }
+  return V2.find(r => r[0] === S.rail)[3]();
+}
+
+function render(keepScroll = true) {
+  const dev = $('dev');
+  dev.className = 'device v' + S.v + (S.guides ? ' guides' : '');
+  document.querySelectorAll('.toolbar [data-act=variant]').forEach(b => b.classList.toggle('on', +b.dataset.v === S.v));
+  $('vdesc').innerHTML = S.v === 1
+    ? '<b>시안 1</b> 골드/캐시 큰 탭 → 작은 탭 → 2열 카드(244x164). 재화별로 상점이 갈려서 "무엇으로 사는지"가 먼저 보인다.'
+    : '<b>시안 2</b> 큰 탭 없이 왼쪽 레일 5칸 + 1열 넓은 카드(392x96). 카테고리가 한 번에 다 보이고 설명이 한 줄 더 들어간다.';
+  const [big, small] = S.tab.split('.');
+  if (S.v === 1) {
+    $('nav').innerHTML = `<div class="bigtabs">${Object.entries(V1).map(([k, t]) =>
+      `<button class="n n-tab t22 ${k === big ? 'on' : ''}" data-act="big" data-k="${k}"><img class="ic" src="${t.icon}" alt="">${t.label}${k === 'cash' && S.floor >= 6 && !S.starter ? `<img class="badge" src="${IMG.badge}" style="right:6px;top:-2px" alt="새 상품">` : ''}</button>`).join('')}</div>`;
+    $('small').style.display = '';
+    $('small').innerHTML = V1[big].tabs.map(([k, label, , lock]) =>
+      `<button class="n n-card ${k === small ? 'on sel' : ''} t22" data-act="small" data-k="${big}.${k}">${label}${lock ? `<img src="${IMG.lock}" alt="잠김">` : ''}</button>`).join('');
+  } else {
+    $('nav').innerHTML = `<div class="rail">${V2.map(([k, label, icon]) =>
+      `<button class="n n-card ${k === S.rail ? 'on sel' : ''}" data-act="rail" data-k="${k}">${icon === 'dots' ? `<span class="raildots">${Object.values(COLOR).map(c => `<i style="background:${c}"></i>`).join('')}</span>` : `<img src="${icon}" alt="">`}<span class="t22">${label}</span>${k === 'packs' && S.floor >= 6 && !S.starter ? `<img class="badge" src="${IMG.badge}" style="right:-6px;top:-6px" alt="새 상품">` : ''}</button>`).join('')}</div>`;
+    $('small').style.display = 'none';
+  }
+  const st = $('scroll').scrollTop;
+  products = new Map();
+  $('grid').innerHTML = sections().map(cardHTML).join('');
+  if (keepScroll) $('scroll').scrollTop = st;
+  if (S.scrollTo) { const h = $('h-' + S.scrollTo); if (h) $('scroll').scrollTop = h.offsetTop - $('scroll').offsetTop; S.scrollTo = ''; }
+  drawCur();
+  syncDbg();
+}
+function drawCur() { $('v-gold').textContent = fmt(disp.gold); $('v-dia').textContent = fmt(disp.dia); }
+
+// 재화 숫자 애니메이션 (가짜 구매)
+function addCur(cur, delta) { S[cur] += delta; tween(cur); }
+function tween(cur) {
+  const box = $('box-' + cur), from = disp[cur], to = S[cur], t0 = performance.now(), dur = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 500;
+  box.classList.remove('drop', 'gain'); box.classList.add(to < from ? 'drop' : 'gain');
+  const step = now => {
+    const k = dur ? Math.min(1, (now - t0) / dur) : 1;
+    disp[cur] = from + (to - from) * k; drawCur();
+    if (k < 1) requestAnimationFrame(step); else setTimeout(() => box.classList.remove('drop', 'gain'), 300);
+  };
+  requestAnimationFrame(step);
+}
+
+// ---------- 팝업 ----------
+function openPopup(p, step = 'confirm') {
+  S.sel = p.id; S.popup = p.id; S.qty = S.qty || 1;
+  const pr = p.price || {}, cur = pr.cur, total = (pr.amt || 0) * (p.qty ? S.qty : 1);
+  const poor = (cur === 'gold' || cur === 'dia') && (cur === 'gold' ? S.gold : S.dia) < total;
+  const headIcon = p.icon;
+  let body = `<button class="x" data-act="pclose" aria-label="닫기"><img src="${A}ui/upgrade/btn_close.png" alt=""></button>
+    <div class="head ${p.wide ? 'wideicon' : ''}">${headIcon}<span class="name t22 ol">${p.name}</span><span class="sub">${p.sub || ''}</span></div>
+    <p>${p.long || p.desc}</p>`;
+  if (p.info) body += `<dl class="info n n-pinset">${p.info.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  if (cur === 'krw') {
+    if (step === 'done') body += `<div class="store n n-pinset" style="color:var(--grn-l)"><span class="t22">구매 완료</span><br>${p.reward || ''}<br>(가짜 결제 성공 화면)</div>
+      <div class="acts"><button class="n n-btn b-primary t22" data-act="pclose">확인</button></div>`;
+    else body += `<div class="store n n-pinset">여기서 스토어 결제 창이 뜹니다<br>(Google Play / App Store 자리)</div>
+      <div class="total n n-pinset"><span>가격</span><span class="t22">₩${fmt(pr.amt)}</span></div>
+      <div class="acts"><button class="n n-btn b-secondary t22" data-act="pclose">취소</button><button class="n n-btn b-gold t22" data-act="pay">결제하기</button></div>`;
+  } else {
+    if (p.qty) body += `<div class="qty"><button class="n n-btn b-secondary t22" data-act="q" data-d="-1" aria-label="하나 줄이기">−</button>
+      <span class="q n n-inset t22">${S.qty}</span><button class="n n-btn b-secondary t22" data-act="q" data-d="1" aria-label="하나 늘리기">+</button>
+      <span style="flex:1"></span>${[1, 5, 10].map(n => `<button class="n n-btn ${S.qty === n ? 'b-primary' : 'b-secondary'} quick" data-act="qset" data-n="${n}">${n}개</button>`).join('')}</div>`;
+    body += `<div class="total n n-pinset"><span>총 가격</span><span><img src="${IMG[cur]}" alt=""><span class="t22 ${poor ? 'poor-num' : ''}">${fmt(total)}</span></span></div>
+      <div class="acts"><button class="n n-btn b-secondary t22" data-act="pclose">취소</button>
+      <button class="n n-btn ${poor ? 'b-disabled' : cur === 'gold' ? 'b-gold' : 'b-primary'} t22" data-act="buy">${pr.prefix || '구매'}</button></div>`;
+  }
+  $('pop').innerHTML = body;
+  $('veil').classList.add('open');
+  const h = $('pop').offsetHeight; $('pop').style.top = Math.max(100, Math.round((960 - h) / 2)) + 'px';
+}
+function closePopup() { $('veil').classList.remove('open'); S.popup = ''; S.qty = 1; render(); }
+
+let toastTimer;
+function toast(msg, action) {
+  const el = $('toast');
+  el.innerHTML = `<span style="padding-left:4px">${msg}</span>` + (action ? `<button class="n n-btn b-primary" data-act="goto" data-to="${action[1]}">${action[0]}</button>` : '');
+  el.classList.add('open'); clearTimeout(toastTimer); toastTimer = setTimeout(() => el.classList.remove('open'), 2800);
+}
+function poorToast(cur) {
+  if (cur === 'gold') toast('골드가 부족해요', ['골드 교환', 'goldex']);
+  else toast('다이아가 부족해요', ['다이아 충전', 'dia']);
+}
+function goTo(where) {
+  if (where === 'dia') { if (S.v === 1) S.tab = 'cash.dia'; else S.rail = 'dia'; }
+  else { if (S.v === 1) S.tab = 'gold.gold'; else { S.rail = 'dia'; S.scrollTo = 'goldex'; } }
+  $('scroll').scrollTop = 0; render(false);
+}
+function bumpOwned(key) {
+  if (!key) return;
+  document.querySelectorAll(`[data-sub="${key}"]`).forEach(e => { e.classList.add('bump'); setTimeout(() => e.classList.remove('bump'), 600); });
+}
+function doBuy(p) {
+  const pr = p.price, q = p.qty ? S.qty : 1, total = pr.amt * q;
+  if ((pr.cur === 'gold' ? S.gold : S.dia) < total) return poorToast(pr.cur);
+  addCur(pr.cur, -total);
+  const msg = p.buy(q);
+  closePopup(); bumpOwned(p.subKey); toast(msg);
+}
+
+// ---------- 입력 ----------
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'variant') { S.v = +b.dataset.v; render(false); }
+  else if (act === 'big') { S.tab = b.dataset.k === 'gold' ? 'gold.items' : 'cash.rec'; render(false); }
+  else if (act === 'small') { S.tab = b.dataset.k; render(false); }
+  else if (act === 'rail') { S.rail = b.dataset.k; render(false); }
+  else if (act === 'plus') goTo('dia');
+  else if (act === 'close') toast('메뉴로 돌아갑니다 (목업)');
+  else if (act === 'legal') toast(b.textContent + ' 페이지 자리');
+  else if (act === 'goto') { $('toast').classList.remove('open'); goTo(b.dataset.to); }
+  else if (act === 'dbg') $('dbg').classList.toggle('closed');
+  else if (act === 'resetFirst') { S.firstBuy = S.firstBuy.map(() => true); render(); }
+  else if (act === 'card') {
+    const p = products.get(b.dataset.id); if (!p) return;
+    if (p.state === 'locked') { S.sel = p.id; render(); return toast(p.lockMsg || p.lockText); }
+    if (p.state === 'sold') return toast(p.soldText === '내일 다시' ? '내일 다시 받을 수 있어요' : p.soldText === '최대 레벨' ? '이미 최대 레벨이에요' : '이미 구매했어요');
+    if (p.direct) { const m = p.buy(); render(); return toast(m); }
+    const pr = p.price;
+    if ((pr.cur === 'gold' || pr.cur === 'dia') && (pr.cur === 'gold' ? S.gold : S.dia) < pr.amt) { S.sel = p.id; render(); return poorToast(pr.cur); }
+    S.qty = 1; openPopup(p);
+  }
+  else if (act === 'pclose') closePopup();
+  else if (act === 'q') { S.qty = Math.max(1, Math.min(99, S.qty + +b.dataset.d)); openPopup(products.get(S.popup)); }
+  else if (act === 'qset') { S.qty = +b.dataset.n; openPopup(products.get(S.popup)); }
+  else if (act === 'buy') { const p = products.get(S.popup); if (p.price.cur === 'free') { const m = p.buy(); closePopup(); bumpOwned('dye'); toast(m); } else doBuy(p); }
+  else if (act === 'pay') { const p = products.get(S.popup); p.buy(1); openPopup(p, 'done'); }
+});
+// 무료 카드는 팝업에서 "받기"
+const _open = openPopup;
+openPopup = function (p, step) {
+  if (p.price && p.price.cur === 'free') {
+    S.sel = p.id; S.popup = p.id;
+    $('pop').innerHTML = `<button class="x" data-act="pclose" aria-label="닫기"><img src="${A}ui/upgrade/btn_close.png" alt=""></button>
+      <div class="head">${p.icon}<span class="name t22 ol">${p.name}</span><span class="sub">${p.sub}</span></div><p>${p.long}</p>
+      <dl class="info n n-pinset">${p.info.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+      ${S.adsRemoved ? '' : '<div class="store n n-pinset">광고 영상 자리 (15~30초)</div>'}
+      <div class="acts"><button class="n n-btn b-secondary t22" data-act="pclose">취소</button><button class="n n-btn b-primary t22" data-act="buy">받기</button></div>`;
+    $('veil').classList.add('open'); const h = $('pop').offsetHeight; $('pop').style.top = Math.round((960 - h) / 2) + 'px';
+    return;
+  }
+  _open(p, step);
+};
+
+// 디버그 패널
+function syncDbg() {
+  document.querySelectorAll('#dbg [data-k]').forEach(el => {
+    const k = el.dataset.k;
+    if (el.type === 'checkbox') el.checked = !!S[k];
+    else if (el.type === 'radio') el.checked = S[k] === el.value;
+    else if (document.activeElement !== el) el.value = S[k];
+  });
+  $('d-floor').textContent = S.floor + '층 · 기준가 ' + fmt(gp(1));
+}
+document.getElementById('dbg').addEventListener('input', e => {
+  const el = e.target, k = el.dataset.k; if (!k) return;
+  if (el.type === 'checkbox') S[k] = el.checked;
+  else if (el.type === 'radio') S[k] = el.value;
+  else { S[k] = Math.max(0, Number(el.value) || 0); if (k === 'gold' || k === 'dia') disp[k] = S[k]; }
+  if (k === 'weekly' || k === 'monthly') S[k + 'Claimed'] = false;
+  render();
+});
+
+// 배너 타이머만 1초마다 갱신 (전체 다시 그리기 없음)
+setInterval(() => {
+  document.querySelectorAll('[data-timer]').forEach(el => {
+    const t = Math.max(0, +el.dataset.timer - 1); el.dataset.timer = t;
+    el.querySelector('.t22').textContent = [Math.floor(t / 3600), Math.floor(t / 60) % 60, t % 60].map(x => String(x).padStart(2, '0')).join(':');
+  });
+}, 1000);
+
+render(false);
+if (S.popup) { const p = products.get(S.popup), q = S.qty; if (p) { S.qty = q; openPopup(p); } }
+
+// 자체 점검: ?selftest=1 → 클릭 흐름을 돌리고 결과를 <title>에 적는다 (목업 동작 확인용)
+if (P.has('selftest')) {
+  const click = sel => document.querySelector(sel).click(), fails = [];
+  const ok = (c, m) => { if (!c) fails.push(m); };
+  S.gold = disp.gold = 100000; S.dia = disp.dia = 1000; S.floor = 12; render(false);
+  const h0 = S.owned.hammer, g0 = S.gold;
+  click('[data-id="item.hammer"]'); click('[data-act=qset][data-n="5"]'); click('[data-act=buy]');
+  ok(S.owned.hammer === h0 + 5 && S.gold === g0 - gp(1) * 5, 'gold buy qty 5');
+  S.gold = 0; render(); click('[data-id="item.repair"]'); ok($('toast').textContent.includes('골드가 부족'), 'poor toast');
+  click('#toast [data-act=goto]'); ok(S.tab === 'gold.gold', 'toast goto gold tab');
+  S.tab = 'gold.items'; render(false); click('[data-id="item.defuse"]'); ok($('toast').textContent.includes('21층'), 'locked toast');
+  S.tab = 'cash.rec'; render(false); const d0 = S.dia;
+  click('[data-id="pack.starter"]'); click('[data-act=pay]'); ok(S.starter && S.dia === d0 + 300, 'krw pay');
+  click('[data-act=pclose]'); ok(!products.has('pack.starter'), 'one-time pack hidden');
+  const d1 = S.dia; click('[data-id="pass.weekly"]'); ok(S.dia === d1 + 60 && S.weeklyClaimed, 'pass claim');
+  S.tab = 'gold.skills'; S.gold = 100000; S.mode = 'A'; render(false);
+  ok(products.get('skill.soul').state === 'locked', 'mode A locks soul');
+  S.mode = 'B'; render(); ok(products.get('skill.soul').price.cur === 'gold' && !products.get('skill.soul').state, 'mode B gold unlock');
+  S.mode = 'C'; render(); ok(products.get('skill.soul').price.cur === 'dia', 'mode C dia unlock');
+  click('[data-id="skill.red"]'); const r0 = S.lv.red; click('[data-act=buy]'); ok(S.lv.red === r0 + 1, 'skill level up');
+  document.title = fails.length ? 'SELFTEST FAIL: ' + fails.join(', ') : 'SELFTEST OK';
+}
+</script>
+</body>
+</html>

@@ -1,33 +1,23 @@
-// 타이틀 -> 메인 메뉴 "문 열림" 전환(assets/title/door_transition_spec.md, 총 2.2초).
-// 네이티브 180x320 안에서 벌어지는 부분(문 안쪽 금빛, 문짝 회전, 빛살)은 오프스크린
-// 캔버스에 1배로 그린 뒤 한 번에 확대해 붙인다 - 디더 패턴이 배경과 같은 픽셀 격자에
-// 맞고, 매 프레임 fillRect 수천 번도 피할 수 있다. 마지막 원형 폭발만 화면 px로 그린다.
+// 타이틀 -> 메인 메뉴 "문 열림" 전환(assets/title/door_transition_spec.md, 총 1.6초).
+// 문 안쪽 금빛과 문짝 회전은 오프스크린 캔버스에 네이티브 180x320 1배로 그린 뒤 한 번에
+// 확대해 붙인다 - 디더 패턴이 배경과 같은 픽셀 격자에 맞고, 매 프레임 fillRect 수천 번도
+// 피할 수 있다. 문이 다 열리면 메인 메뉴로 페이드 아웃한다(빛 퍼짐 연출 없음).
 // 시간 상수는 전부 전환 시작 후 ms.
 import { loadImage } from './assetLoader.js';
 
-export const DOOR_TRANSITION_MS = 2200;
+export const DOOR_TRANSITION_MS = 1600;
 
 const NATIVE_W = 180;
 const NATIVE_H = 320;
 // 문 아치: (70,132)-(110,236), 윗부분 반지름 20 (spec "구현 메모").
 const DOOR = { x: 70, y: 132, w: 40, h: 104, cx: 90, cy: 190, archR: 20 };
-const BASIS_H = 960; // 폭발 반지름/디더 폭이 기준으로 삼는 화면 높이(540x960).
 
 const T = {
   ui: [0, 300], // 로고/부제/터치 글자 페이드아웃
   glow: [0, 350], // 문 안쪽 금빛
   leaves: [350, 1100], // 문짝 회전
-  rays: [500, 1100], // 문 밖 빛살
-  burst: [950, 1450], // 원형 빛 폭발
-  menu: [1250, 2200], // 메인 메뉴 크로스페이드
+  menu: [1100, 1600], // 메인 메뉴 페이드
 };
-// 효과음 자리(파일은 나중에 - 없는 키는 AudioManager가 그냥 무시한다).
-const CUES = [
-  [0, 'door_scrape'],
-  [350, 'door_open'],
-  [950, 'light_rise'],
-];
-
 const GLOW = ['#7a5212', '#c28a20', '#f2d264'];
 // 금빛이 차오르는 3단계: [색, 시작, 끝, 최대 덮는 비율].
 const GLOW_STAGES = [
@@ -43,10 +33,8 @@ const BACKLIGHT = [
   ['#0d0a10', 0.85],
 ];
 const EDGE_COLORS = ['#e8dcc0', '#f2d264']; // 자유 끝 세로줄(픽셀마다 번갈아)
-const RAY_COLORS = ['#3a2808', '#7a5212', '#c28a20'];
 const LEAF_MIN_SCALE = 0.65; // 자유 끝 세로 배율(최대 35% 줄어듦)
 const MAX_ANGLE = (80 * Math.PI) / 180;
-const BURST_CAP = 0.55; // 눈부심 방지 - 덮는 비율 상한
 
 const clamp01 = (v) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const phase = (t, [a, b]) => clamp01((t - a) / (b - a));
@@ -85,16 +73,6 @@ function ditherRect(ctx, color, coverage, cell, x, y, w, h) {
   ctx.fillRect(x, y, w, h);
 }
 
-function ditherCircle(ctx, color, coverage, cell, cx, cy, r) {
-  if (r <= 0) return;
-  const pattern = ditherPattern(ctx, color, coverage, cell);
-  if (!pattern) return;
-  ctx.fillStyle = pattern;
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fill();
-}
-
 function ready(state) {
   return !!(state && state.loaded && !state.failed);
 }
@@ -122,14 +100,12 @@ export class DoorTransition {
   }
 
   // 타이틀 배경 위에 겹쳐 그린다(배경은 호출부가 이미 그린 상태).
-  draw(ctx, offsetX, offsetY, scale, elapsed, height) {
+  draw(ctx, offsetX, offsetY, scale, elapsed) {
     const g = this._nativeCtx();
     g.clearRect(0, 0, NATIVE_W, NATIVE_H);
     g.imageSmoothingEnabled = false;
     this._drawDoor(g, elapsed);
-    this._drawRays(g, elapsed);
     ctx.drawImage(this._canvas, 0, 0, NATIVE_W, NATIVE_H, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
-    this._drawBurst(ctx, offsetX, offsetY, scale, elapsed, height);
   }
 
   _archPath(g) {
@@ -203,51 +179,6 @@ export class DoorTransition {
           g.fillRect(dx, y, 1, 1);
         }
       }
-    }
-  }
-
-  // 문 밖으로 퍼지는 빛살 - 가로 60, 세로 50(네이티브)까지 자라는 타원 3겹.
-  _drawRays(g, elapsed) {
-    const p = phase(elapsed, T.rays);
-    if (p <= 0) return;
-    g.save();
-    for (let i = 0; i < RAY_COLORS.length; i++) {
-      const k = 1 - i / RAY_COLORS.length; // 바깥 겹일수록 크다
-      const pattern = ditherPattern(g, RAY_COLORS[i], (0.5 - i * 0.05) * p, 1);
-      if (!pattern) continue;
-      g.fillStyle = pattern;
-      g.beginPath();
-      g.ellipse(DOOR.cx, DOOR.cy, 60 * p * k, 50 * p * k, 0, 0, Math.PI * 2);
-      g.fill();
-    }
-    g.restore();
-  }
-
-  // 문 중심에서 터져 나가는 금빛 원. 화면 px 기준이고(기준 높이 960),
-  // 덮는 비율은 BURST_CAP까지만 - 장면이 디더 사이로 계속 비친다.
-  _drawBurst(ctx, offsetX, offsetY, scale, elapsed, height) {
-    const p = phase(elapsed, T.burst);
-    if (p <= 0) return;
-    const unit = (height || BASIS_H) / BASIS_H;
-    const r = Math.pow(p, 0.8) * 1150 * unit;
-    const edge = 160 * unit;
-    const cx = offsetX + DOOR.cx * scale;
-    const cy = offsetY + DOOR.cy * scale;
-    const core = r - edge;
-
-    const steps = 6;
-    for (let i = 0; i < steps; i++) {
-      const t = (i + 1) / steps;
-      ditherCircle(ctx, GLOW[0], BURST_CAP * t, 3, cx, cy, r - edge * (1 - t));
-    }
-    ditherCircle(ctx, GLOW[1], BURST_CAP, 3, cx, cy, Math.min(core, r * 0.8));
-    ditherCircle(ctx, GLOW[2], BURST_CAP, 3, cx, cy, Math.min(core, r * 0.45));
-  }
-
-  // 아직 재생하지 않은 효과음 훅을 elapsed까지 흘려보낸다.
-  fireCues(audio, prevElapsed, elapsed) {
-    for (const [at, key] of CUES) {
-      if (prevElapsed <= at && elapsed > at) audio.play(key);
     }
   }
 }

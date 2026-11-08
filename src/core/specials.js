@@ -41,7 +41,25 @@ export function decideSpecialForGroup(group) {
 // 생성 칸: 폭탄은 항상 겹치는 교차 칸. 라인/컬러/박스는 플레이어가 스왑으로 움직인 칸이
 // 그룹에 포함돼 있으면 그 칸, 아니면(연쇄 매치) 박스는 2x2 블록의 첫 칸, 그 외는 그룹의
 // 가운데 칸.
-export function pickSpawnCell(group, kind, swapCells) {
+// isOccupied(cell)이 true인 칸(이미 특수 잼이 있는 칸)은 피한다 - 그 칸에 새 잼을 덮어쓰면
+// 기존 특수 잼이 발동하지 못하고 사라진다. 원래 고른 칸에서 가장 가까운 빈 그룹 칸으로 옮긴다.
+export function pickSpawnCell(group, kind, swapCells, isOccupied = () => false) {
+  const preferred = preferredSpawnCell(group, kind, swapCells);
+  if (!isOccupied(preferred)) return preferred;
+  let best = null;
+  let bestDist = Infinity;
+  for (const cell of group.cells) {
+    if (isOccupied(cell)) continue;
+    const dist = manhattanDistance(cell, preferred);
+    if (dist < bestDist) {
+      best = cell;
+      bestDist = dist;
+    }
+  }
+  return best ?? preferred; // 그룹 전체가 특수 잼인 극단적 경우만 기존처럼 덮어쓴다.
+}
+
+function preferredSpawnCell(group, kind, swapCells) {
   if (kind === SPECIAL_KIND.BOMB) {
     return group.crossingCell ?? middleCell(group);
   }

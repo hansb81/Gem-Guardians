@@ -1,0 +1,111 @@
+{
+ "version": 1,
+ "scale": 2,
+ "note": "native 1x; draw at integer 2x (badges also 3x/4x ok), imageSmoothingEnabled=false",
+ "files": {
+  "emblem_rank": {
+   "w": 24,
+   "h": 24
+  },
+  "icon_edit": {
+   "w": 12,
+   "h": 12
+  },
+  "icon_timer": {
+   "w": 12,
+   "h": 12
+  },
+  "medal_1": {
+   "w": 14,
+   "h": 14
+  },
+  "medal_2": {
+   "w": 14,
+   "h": 14
+  },
+  "medal_3": {
+   "w": 14,
+   "h": 14
+  },
+  "podium_1": {
+   "w": 16,
+   "h": 16,
+   "slice": 5
+  },
+  "podium_2": {
+   "w": 16,
+   "h": 16,
+   "slice": 5
+  },
+  "podium_3": {
+   "w": 16,
+   "h": 16,
+   "slice": 5
+  },
+  "ribbon": {
+   "w": 40,
+   "h": 20,
+   "slice3h": {
+    "left": 14,
+    "right": 14
+   }
+  },
+  "tier_p1": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_p10": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_p30": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_p5": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_p50": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_part": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_r1": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_r10": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_r2": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_r3": {
+   "w": 16,
+   "h": 16
+  },
+  "tier_r50": {
+   "w": 16,
+   "h": 16
+  }
+ },
+ "tiers": {
+  "r1": "tier_r1",
+  "r2": "tier_r2",
+  "r3": "tier_r3",
+  "r10": "tier_r10",
+  "r50": "tier_r50",
+  "p1": "tier_p1",
+  "p5": "tier_p5",
+  "p10": "tier_p10",
+  "p30": "tier_p30",
+  "p50": "tier_p50",
+  "part": "tier_part"
+ }
+}

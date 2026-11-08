@@ -2,7 +2,8 @@
   "settings": {
     "screenShake": true,
     "intensity": 1,
-    "maxParticles": 240,
+    "maxParticles": 320,
+    "boardParticlesOverBattle": true,
     "hitstop": true,
     "hitstopMs": 50,
     "haptics": true,

@@ -1,6 +1,6 @@
-# Gem Guardians 퍼즐 효과음 (v1)
+# Gem Guardians 효과음 (v2: 퍼즐 + UI)
 
-- 29개, 44.1kHz 모노. `ogg/`(기본) + `mp3/`(ogg 못 여는 기기용). 원본 wav는 저장소에 넣지 않아도 됨.
+- 34개 (퍼즐 29 + UI 5), 44.1kHz 모노. `ogg/`(기본) + `mp3/`(ogg 못 여는 기기용). 원본 wav는 저장소에 넣지 않아도 됨.
 - 모두 코드로 합성 (tools/build_sfx.py). 외부 소스 없음, 상업적 이용 자유.
 - 음량은 미리 맞춰 둠. manifest.json `volume`은 기본 배율(1.0).
 - `gem_pop`은 연쇄 단계별 8개 (`gem_pop_1`~`gem_pop_8`, 단조 5음계로 점점 높아짐). 9단계 이상은 8 재사용.
@@ -32,6 +32,11 @@
 | timebomb_tick | 시한폭탄 남은 수 감소 (매 이동) |
 | timebomb_warn | 시한폭탄 남은 수 1 |
 | timebomb_explode | 시한폭탄 0 -> 성벽 피해 |
+| ui_click | 일반 버튼 누를 때 (확인, 열기, 탭 이동 등) |
+| ui_cancel | 취소/닫기/뒤로 버튼 |
+| ui_game_enter | 플레이 버튼 -> 인게임 진입 (전환 시작 순간). 약 1.5초, 전환 연출 1~1.5초 권장 |
+| ui_game_exit | 인게임 -> 메인 메뉴로 나갈 때 (전환 시작 순간). 약 1.3초, 전환 연출 1~1.3초 권장 |
+| ui_door_open | 타이틀 터치 -> 문 열림 전환 시작 순간(0ms). 0~280ms 짧게 차오르는 소리 -> 280ms 묵직하고 둔탁한 충돌음(문 봉인이 풀림) -> 문이 열리는 동안 낮은 울림, 1000ms 작은 쿵. 문 열림 약 1.1초 기준 |
 
 ## 타이밍 (이펙트 manifest와 맞춤)
 - line: `line_fire`는 발동 순간, 각 칸 pop 소리는 그 칸 pop 이펙트와 같은 지연(stepMs × 거리)에 `gem_pop_n`.
@@ -39,3 +44,9 @@
 - box: `box_open`은 발동 순간, 번개가 꽂히는 순간마다 `box_zap`.
 - color: `color_charge` 시작 -> color_origin이 터지는 프레임에 `color_burst` -> wisp가 도착할 때마다 `color_hit`.
 - 특수 보석끼리 조합은 아직 전용 소리가 없음. 두 소리를 같이 재생.
+
+## UI 메모
+- ui_click/ui_cancel 은 버튼을 누른 순간(pointerdown이 아니라 실제 동작하는 click) 재생.
+- ui_door_open 은 약 1.6초(꼬리 포함), 문이 1.1초 동안 열리는 연출 기준. 메인 메뉴 BGM은 문이 다 열리는 1.1초쯤 페이드인 시작.
+- 지금 인게임 진입/메뉴 복귀가 거의 즉시라면, 소리 길이에 맞춰 1~1.5초 전환 연출(페이드 또는 문/빛 와이프)을 넣는 걸 권장.
+- ui_game_enter/exit 재생 중 화면이 바뀌어도 끊지 말 것 (씬 전환과 무관하게 AudioManager에서 재생).

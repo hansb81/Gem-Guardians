@@ -1,0 +1,110 @@
+{
+  "version": 2,
+  "drawScale": 2,
+  "imageSmoothing": false,
+  "_doc": "아이템 아이콘. ui/items/slot_*.png(22x22) 안쪽 (4,4)에 14x14로 그린다. id = config/items.json 키. group: hotbar=하단 슬롯, preFloor=층 시작 화면, onFail=패배 팝업",
+  "slotInner": {
+    "x": 4,
+    "y": 4,
+    "w": 14,
+    "h": 14
+  },
+  "icons": {
+    "hammer": {
+      "src": "items/hammer.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "scythe_h": {
+      "src": "items/scythe_h.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "scythe_v": {
+      "src": "items/scythe_v.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "rainbow": {
+      "src": "items/rainbow.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "glove": {
+      "src": "items/glove.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "repair": {
+      "src": "items/repair.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "hourglass": {
+      "src": "items/hourglass.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "dye": {
+      "src": "items/dye.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "shuffle": {
+      "src": "items/shuffle.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "barrier": {
+      "src": "items/barrier.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "defuse": {
+      "src": "items/defuse.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "drum": {
+      "src": "items/drum.png",
+      "w": 14,
+      "h": 14,
+      "group": "hotbar"
+    },
+    "booster_line": {
+      "src": "items/booster_line.png",
+      "w": 14,
+      "h": 14,
+      "group": "preFloor"
+    },
+    "booster_bomb": {
+      "src": "items/booster_bomb.png",
+      "w": 14,
+      "h": 14,
+      "group": "preFloor"
+    },
+    "gold_coin": {
+      "src": "items/gold_coin.png",
+      "w": 14,
+      "h": 14,
+      "group": "preFloor"
+    },
+    "revive": {
+      "src": "items/revive.png",
+      "w": 14,
+      "h": 14,
+      "group": "onFail"
+    }
+  }
+}

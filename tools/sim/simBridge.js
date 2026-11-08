@@ -7,12 +7,16 @@
 // specialActivate/comboActivate 이펙트의 affected 칸 목록을 별도 Set에 태깅해두고, 그 칸이
 // 실제로 clearing으로 바뀌는 순간(수백ms~2초 뒤, maxDetonationMs 한도 내) 소비한다.
 import { GEM_TYPES } from '../../src/config/gems.js';
+import { PuzzleBattleBridge } from '../../src/game/puzzleBattleBridge.js';
 
 const keyOf = (row, col) => `${row},${col}`;
 
 export class SimBridge {
   constructor(battleState) {
     this.battleState = battleState;
+    // 특수 잼 발동 -> 전투 기술(docs/skills.md 2장)은 게임 브리지의 판정을 그대로 쓴다(어떤 잼이
+    // 기술을 쏘는지 - 변환 잼 제외, 조합 규칙 - 를 여기서 다시 짜지 않기 위해).
+    this._caster = new PuzzleBattleBridge(battleState);
     this._prevClearingKeys = new Set();
     this._specialTagged = new Set();
     this.stats = {
@@ -30,6 +34,7 @@ export class SimBridge {
 
   setTarget(battleState) {
     this.battleState = battleState;
+    this._caster.setTarget(battleState);
   }
 
   update(gameState) {
@@ -45,6 +50,8 @@ export class SimBridge {
         this.stats.specialsCreated++;
       } else if (effect.type === 'specialActivate' || effect.type === 'comboActivate') {
         for (const cell of effect.affected) this._specialTagged.add(keyOf(cell.row, cell.col));
+        if (effect.type === 'specialActivate') this._caster._castSpecialActivate(effect);
+        else this._caster._castCombo(effect);
       } else if (effect.type === 'obstacleDestroyed' && effect.id === 'timeBomb' && effect.cause === 'gemCleared') {
         this.stats.bombsDefused++;
       }

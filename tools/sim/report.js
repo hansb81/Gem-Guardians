@@ -12,7 +12,8 @@ export function writeCsv(path, rows) {
     writeFileSync(path, '', 'utf8');
     return;
   }
-  const headers = Object.keys(rows[0]);
+  // 모든 행의 키 합집합 - 한 CSV에 모양이 다른 행(T4 요약/보스/해금)이 섞여 있어 첫 행만 보면 칸이 빠진다.
+  const headers = [...new Set(rows.flatMap((r) => Object.keys(r)))];
   const lines = [headers.join(',')];
   for (const row of rows) lines.push(headers.map((h) => escCsv(row[h])).join(','));
   writeFileSync(path, lines.join('\n') + '\n', 'utf8');

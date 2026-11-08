@@ -286,6 +286,29 @@ test('boardCap을 넘는 초기 배치는 cap만큼만 생성된다', () => {
   assert.equal(count, 2);
 });
 
+test('continueToFloor: 남은 방해요소는 두고 새 층 initial 부족분만 특수 잼 없는 칸에 채운다', () => {
+  const board = new Board({ rows: 6, cols: 6, seed: 7 });
+  const state = new GameState({
+    board,
+    obstaclesConfig: obstaclesConfig({ crate: CRATE, stone: STONE }),
+    floorObstacles: { crate: { initial: 3 }, stone: { initial: 1 } },
+  });
+  const before = board.occupants.map((o) => o && { ...o });
+  // 특수 잼 칸은 덮지 않아야 한다 - 빈 칸 하나만 빼고 전부 특수 잼으로 만들어 남은 1칸에만 들어가게.
+  const free = [];
+  board.occupants.forEach((o, i) => { if (!o) free.push(i); });
+  const keepFree = free.pop();
+  for (const i of free) board.specials[i] = { kind: 'line' };
+  state.continueToFloor({ crate: { initial: 2 }, stone: { initial: 4 } });
+
+  const count = (type) => board.occupants.filter((o) => o?.type === type).length;
+  assert.equal(count('crate'), 3, '이미 initial 이상이면 추가하지 않는다');
+  assert.equal(count('stone'), 2, '부족분(3) 중 빈 일반 잼 칸이 1개뿐이라 1개만');
+  assert.equal(board.occupants[keepFree]?.type, 'stone');
+  before.forEach((o, i) => { if (o) assert.deepEqual(board.occupants[i], o, '남은 방해요소는 그대로'); });
+  for (const i of free) assert.equal(board.occupants[i], null);
+});
+
 test('재배치를 3번 연속 해도 가능한 수가 없으면 hp가 가장 낮은 occupant가 제거된다', () => {
   // 가능한 free 잼 칸을 1개만 남기고 나머지 35칸을 모두 occupant로 채운다 - free 칸이
   // 1개뿐이면 어떤 색을 넣어도 "스왑 가능한 두 칸"이 존재할 수 없으므로 재배치가 항상 실패한다.

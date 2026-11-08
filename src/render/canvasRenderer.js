@@ -10,13 +10,20 @@ import { ParticlePool } from './effects/particlePool.js';
 import { BattleRenderer } from './battleRenderer.js';
 import { haptics } from '../platform/haptics.js';
 import { audio } from '../audio/AudioManager.js';
-import { drawNine, drawFixedImage, drawText, getUi, getUiMeta, snap, uiReady } from './uiKit.js';
+import { drawDamage, drawNine, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
 import { t } from '../config/i18n.js';
 import { getFontString } from '../config/fonts.js';
 import { boltPath, drawPixelBolt } from './effects/pixelBolt.js';
+import { ItemBarRenderer, drawItemIconFallback } from './itemBarRenderer.js';
+import { InventoryTab } from './inventoryTab.js';
+import { layoutPrepPopup, drawPrepPopup } from './ui/prepPopup.js';
+import { layoutRankingPopup, drawRankingPopup } from './ui/rankingPopup.js';
+import { DETONATION_CONFIG } from '../config/detonation.js';
 
 const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
+const BOARD_FLOAT_MS = 600; // 보드 위 데미지 폰트 숫자(해제 부적 +5) 수명
+const BOMB_BOUNCE_MS = 250; // 해제 부적 후 시한폭탄 숫자 튕김
 // 특수 잼 조합(comboActivate)은 전용 소리가 아직 없다 - 섞인 두 종류의 소리를 같이 낸다
 // (assets/sfx/README.md "특수 보석끼리 조합은 ... 두 소리를 같이 재생").
 const COMBO_SFX = { line: 'line_fire', bomb: 'bomb_explode', box: 'box_open', color: 'color_burst' };
@@ -69,6 +76,9 @@ export class CanvasRenderer {
 
     this._particles = new ParticlePool(DEFAULT_MAX_PARTICLES);
     this._battleRenderer = new BattleRenderer();
+    // 젬 기술 이펙트가 같은 파티클 풀과 화면 흔들림을 쓴다(풀은 setAssets에서 바뀔 수 있어 거기서도 다시 꽂음).
+    this._battleRenderer.particles = this._particles;
+    this._battleRenderer.shake = (amount, ms) => this._triggerShake(amount, ms);
     // gameState.effects 항목(객체 참조) 단위로 "이미 한 번 처리했는지"를 기억한다. WeakSet이라
     // 그 effect 객체가 gameState.effects에서 빠져 더 이상 참조되지 않으면 자동으로 사라진다
     // (별도 정리 코드 불필요).
@@ -140,6 +150,17 @@ export class CanvasRenderer {
     // 이미 냈는지"만 들고 있다가, 다음 프레임에 그 effect가 gameState.effects에서 더 이상
     // 안 보이면(= durationMs를 넘어 제거됨) 그 순간 shuffleSettle을 낸다.
     this._shuffleAudioMarks = new Map();
+
+    // 하단 아이템 바/조준(docs/items.md). itemAssets = { icons: Map<id, imgState>, hit: imgState }.
+    this.itemBar = new ItemBarRenderer();
+    this.itemAssets = null;
+    this._itemFx = []; // 망치 번쩍 / 낫 세그먼트 - { kind, cells, ageMs }
+    this._boardFloats = []; // 보드 위 데미지 폰트 숫자(해제 부적 "+5") - { row, col, text, variant, ageMs }
+    this._bombBounce = new Map(); // "row,col" -> ageMs - 시한폭탄 타이머 숫자 튕김(해제 부적)
+  }
+
+  setItemAssets(itemAssets) {
+    this.itemAssets = itemAssets;
   }
 
   // assetLoader.loadAssets()의 결과를 주입한다. 호출 전에는 this.assets가 null이라
@@ -149,6 +170,7 @@ export class CanvasRenderer {
     const maxParticles = assets?.effectsConfig?.settings?.maxParticles ?? DEFAULT_MAX_PARTICLES;
     if (maxParticles !== this._particles.particles.length) {
       this._particles = new ParticlePool(maxParticles);
+      this._battleRenderer.particles = this._particles;
     }
   }
 
@@ -182,6 +204,12 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  // 상점 scene(shopScreen.js) - 메인 메뉴처럼 ctx/css 크기만 공유하고 그리기는 ShopScreen이 직접 한다.
+  drawShop(shopScreen, now) {
+    const { ctx, cssWidth: width, cssHeight: height } = this;
+    shopScreen.draw(ctx, width, height, now, this.assets);
+  }
+
   // 화면 전환용 검은 오버레이(alpha 0~1) - 어떤 scene을 그린 뒤든 그 위에 덮는다.
   drawFadeOverlay(alpha) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
@@ -190,7 +218,8 @@ export class CanvasRenderer {
     ctx.fillRect(0, 0, width, height);
   }
 
-  render(gameState, animator, battleState, hintCell = null, playerState = null, paused = false, battleHud = null, clearReward = null, upgradeTowerIndex = null, upgradeTab = 'levelUp') {
+  // itemUi = { items(ItemController), config(items.json), equipped, counts, aim } | null(아이템 기능 없음).
+  render(gameState, animator, battleState, hintCell = null, playerState = null, paused = false, battleHud = null, clearReward = null, prepOpen = false, itemUi = null) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     if (width === 0 || height === 0) return;
 
@@ -241,9 +270,19 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(this._shakeX, this._shakeY);
 
-    this._drawCurrencyBar(layout.currencyBar, playerState);
+    this._drawCurrencyBar(layout.currencyBar, playerState, itemUi?.goldMul ?? 1);
     this._drawBattlePanel(layout.battle);
-    if (battleState) this._battleRenderer.draw(ctx, layout.battle, battleState, now, this.assets, battleHud, paused);
+    if (battleState) {
+      this._battleRenderer.draw(ctx, layout.battle, battleState, now, this.assets, battleHud, paused, this.itemAssets?.icons);
+      // 같은 풀을 전투 영역으로 잘라 한 번 더 그린다(보드 쪽은 _drawBoard가 보드로 잘라 그림).
+      // settings.boardParticlesOverBattle=false면 퍼즐 파편은 빼고 전투 파티클만.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(layout.battle.x, layout.battle.y, layout.battle.width, layout.battle.height);
+      ctx.clip();
+      this._particles.draw(ctx, this.assets?.effectsConfig?.settings?.boardParticlesOverBattle === false);
+      ctx.restore();
+    }
     this.lastLayout.pauseButton = battleLayout?.pauseButton ?? null;
     this.lastLayout.battle = battleLayout ? { ...layout.battle, towerArea: battleLayout.towerArea } : null;
     this._drawBoard(
@@ -258,16 +297,30 @@ export class CanvasRenderer {
       gameState.effects.find((e) => e.type === 'shuffle')
     );
     this._drawScoreBar(layout.scoreBar, gameState);
+    this._advanceAndDrawItemFx(layout.board, gameState.board, dtMs);
+    if (itemUi?.items) this.itemBar.drawBoardOverlay(ctx, layout.board, layout.scoreBar, itemUi, itemUi.config.items, now);
+    this._advanceAndDrawBoardFloats(layout.board, dtMs);
+    // 염료 색 고르기 - 칸을 고른 뒤 그 옆에 5색 팔레트(main.js가 lastLayout.dyePalette로 탭 판정).
+    const dyeAim = itemUi?.aim?.first && itemUi.config.items[itemUi.aim.id]?.action === 'recolor' ? itemUi.aim : null;
+    this.lastLayout.dyePalette = dyeAim
+      ? this.itemBar.drawDyePalette(ctx, this.assets, layout.board, dyeAim.first, GEM_TYPES.length, (value, x, y, s) => this._drawGem({ value, special: null, row: -1, col: -1 }, x, y, s, now))
+      : null;
     this._advanceAndDrawPuzzleBeams(ctx, layout.board, battleLayout, battleState, dtMs);
     // 시한폭탄 폭발 후 성벽으로 날아가는 볼트/벽 히트 - 보드 클립 밖(전투 영역)까지 이동하므로
     // _drawBoard 밖(퍼즐->탑 빔과 같은 레이어)에서 그린다.
     this._advanceAndDrawObstacleBombFlights(ctx, layout.board, battleLayout, dtMs);
-    this._drawActionBar(layout.actionBar);
+    if (itemUi?.items) {
+      this._drawPanelIron(layout.actionBar);
+      this.lastLayout.itemSlots = this.itemBar.drawBar(ctx, layout.actionBar, this.assets, this.itemAssets?.icons, itemUi, now);
+    } else {
+      this._drawActionBar(layout.actionBar);
+      this.lastLayout.itemSlots = null;
+    }
 
     ctx.restore();
 
     // 팝업(일시정지/승리/패배/탑 강화)은 화면 흔들림 영향을 받지 않도록 shake translate 밖에서 그린다.
-    this._drawPopup(width, height, battleState, paused, clearReward, upgradeTowerIndex, upgradeTab, battleHud);
+    this._drawPopup(width, height, battleState, paused, clearReward, prepOpen, itemUi);
   }
 
   // 전투 영역 화면 좌표가 탑 위면 그 인덱스, 아니면 null. main.js가 pointerdown에서 보드
@@ -632,7 +685,10 @@ export class CanvasRenderer {
     const half = tileSize / 2;
     const w = glyphW + (text.length - 1) * 4;
     const ox = cx - half * s + (centerX - Math.floor(w / 2)) * s;
-    const oy = cy - half * s + (centerY - Math.floor(glyphH / 2)) * s;
+    // 해제 부적 직후 한 번 튕김(위로 최대 3px x s, BOMB_BOUNCE_MS 동안 sin).
+    const bounceAge = this._bombBounce.get(`${row},${col}`);
+    const bounce = bounceAge != null ? Math.round(Math.sin(Math.min(1, bounceAge / BOMB_BOUNCE_MS) * Math.PI) * 3 * s) : 0;
+    const oy = cy - half * s + (centerY - Math.floor(glyphH / 2)) * s - bounce;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     [...text].forEach((ch, i) => {
@@ -1177,8 +1233,10 @@ export class CanvasRenderer {
   // 변환형 조합: core는 변환 직후(등장 순서 * DETONATION_CONFIG.transformStepMs = 40ms)에
   // 바로 specialActivate를 낸다 - 순서와 간격은 core 그대로 두고, 리드인+캐리어(불씨/번개)
   // 연출이 끝날 때까지 그 발동의 "그리기"만 통째로 늦춘다(보드 데이터는 그대로).
-  _deferComboChain(cells, delayMs) {
-    this._comboChainDelay = { cells: new Set(cells.map((c) => `${c.row},${c.col}`)), delayMs };
+  // revealAtMs: 칸("r,c") -> 조합 시작부터 불씨/번개가 도착하는 시각. 그 전까지는 변환된 특수 잼을
+  // 그리지 않는다(도착하는 순간 그림만 바뀐다).
+  _deferComboChain(cells, delayMs, revealAtMs) {
+    this._comboChainDelay = { cells: new Set(cells.map((c) => `${c.row},${c.col}`)), delayMs, revealAtMs };
   }
 
   // flightMs를 바꾼 뒤(컬러+컬러의 무지개 물결) 수명과 소리 일정을 다시 계산한다.
@@ -1199,7 +1257,7 @@ export class CanvasRenderer {
   }
 
   // 특수 잼 조합(comboActivate) - manifest.combo + art/effects/combos/README.md의 10종.
-  // 공통 리드인(두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 combo_merge_{색}) 다음에,
+  // 공통 리드인(두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 바로 사라짐) 다음에,
   // 조합별 연출을 #1~#5 발동 fx의 조합으로 만든다(_spawnDelayedFx가 같은 _spawnSpecialFx
   // 경로를 쓰고 재생만 늦춘다 - 조합 전용 드로잉 엔진을 따로 만들지 않는다).
   _spawnComboFx(effect, gameState) {
@@ -1233,10 +1291,9 @@ export class CanvasRenderer {
       fromCol: a.col,
       gemA,
       gemB,
-      mergeColorId,
       swapMs,
       ageMs: 0,
-      totalLifeMs: swapMs + this._effectAnimDurationMs(`combo_merge_${mergeColorId}`, 220),
+      totalLifeMs: swapMs,
       targets: [],
       audioCues: [],
     });
@@ -1280,7 +1337,8 @@ export class CanvasRenderer {
       }
 
       case 'bomb_bomb': {
-        // 큰 폭탄 1개를 4x4 중심(칸 사이)에. 주변 칸 pop은 평소 폭탄과 같은 bomb.hitMs.
+        // 보통 폭탄 4개를 2x2로 동시에(각 3x3이 겹쳐 4x4를 덮는다). core가 4x4를 보드 안으로
+        // 밀어넣으므로 affected는 늘 4x4다. 주변 칸 pop은 평소 폭탄과 같은 bomb.hitMs.
         let minRow = Infinity;
         let maxRow = -Infinity;
         let minCol = Infinity;
@@ -1292,11 +1350,16 @@ export class CanvasRenderer {
           maxCol = Math.max(maxCol, cell.col);
         }
         const made = this._spawnDelayedFx({ kind: 'bomb', direction: null, position: ref, affected, cascadeIndex }, board, swapMs);
+        const r0 = Math.min(minRow + 1, maxRow);
+        const c0 = Math.min(minCol + 1, maxCol);
         for (const fx of made) {
-          fx.animKey = `bomb_big_${mergeColorId}`;
-          fx.drawRow = (minRow + maxRow) / 2;
-          fx.drawCol = (minCol + maxCol) / 2;
-          fx.totalLifeMs = Math.max(fx.totalLifeMs, this._effectAnimDurationMs(fx.animKey, 500));
+          fx.colorId = mergeColorId;
+          fx.centers = [
+            { row: r0, col: c0 },
+            { row: r0, col: c0 + 1 },
+            { row: r0 + 1, col: c0 },
+            { row: r0 + 1, col: c0 + 1 },
+          ];
         }
         break;
       }
@@ -1333,18 +1396,21 @@ export class CanvasRenderer {
       case 'line_color':
       case 'bomb_color':
       case 'box_color': {
-        // 무지개 불씨가 같은 색 잼마다 날아가 transform_{색}으로 변신시킨다.
+        // 무지개 불씨가 같은 색 잼마다 날아가 닿는 순간 특수 잼 그림으로 바뀐다(번쩍임 없음).
         if (transformCells.length === 0) break;
         const [fx] = this._spawnDelayedFx({ kind: 'color', direction: null, position: ref, color: null, affected: [ref, ...transformCells], cascadeIndex }, board, swapMs);
         if (!fx) break;
         let lastArriveMs = 0;
+        const revealAtMs = new Map();
         for (const target of fx.targets) {
-          target.transformKey = `transform_${target.colorId}`;
-          lastArriveMs = Math.max(lastArriveMs, fx.waveStartMs + target.flightMs);
+          target.transform = true;
+          const arriveMs = fx.waveStartMs + target.flightMs;
+          revealAtMs.set(`${target.row},${target.col}`, swapMs + arriveMs);
+          lastArriveMs = Math.max(lastArriveMs, arriveMs);
         }
         const chainAtMs = swapMs + lastArriveMs + chainGapMs;
         if (effect.comboKind !== 'box_color') {
-          this._deferComboChain(transformCells, chainAtMs);
+          this._deferComboChain(transformCells, chainAtMs, revealAtMs);
           break;
         }
         // 박스+컬러: 변환된 박스는 터지지 않고, 하나씩 번개 2갈래를 쏜다. core는 ref에서
@@ -1374,14 +1440,16 @@ export class CanvasRenderer {
         if (!fx) break;
         fx.colorId = boxColorId; // 번개/origin 색은 박스 잼 색(ref에 라인 잼이 있을 수도 있다).
         let lastHitMs = 0;
+        const revealAtMs = new Map();
         fx.targets.forEach((target, i) => {
-          target.transformKey = `transform_${target.colorId}`;
+          target.transform = true;
           target.startMs = fx.cfg.startMs + i * boxLineStepMs;
           target.hitMs = fx.cfg.hitMs + i * boxLineStepMs;
+          revealAtMs.set(`${target.row},${target.col}`, swapMs + target.hitMs);
           lastHitMs = Math.max(lastHitMs, target.hitMs);
         });
         fx.totalLifeMs += Math.max(0, fx.targets.length - 1) * boxLineStepMs;
-        this._deferComboChain(transformCells, swapMs + lastHitMs + boxChainGapMs);
+        this._deferComboChain(transformCells, swapMs + lastHitMs + boxChainGapMs, revealAtMs);
         break;
       }
 
@@ -1390,17 +1458,14 @@ export class CanvasRenderer {
     }
   }
 
-  // 조합 리드인 - 두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 combo_merge_{색} 십자 번쩍.
+  // 조합 리드인 - 두 특수 잼이 swapMs 동안 ref 칸으로 미끄러진 뒤 바로 사라진다.
   _drawComboLeadFx(rect, fx, nowMs) {
-    if (fx.ageMs < fx.swapMs) {
-      const t = fx.swapMs > 0 ? fx.ageMs / fx.swapMs : 1;
-      this._drawFrozenGemAt(rect, fx.row, fx.col, fx.gemB.colorId, nowMs, fx.gemB.special);
-      const row = fx.fromRow + (fx.row - fx.fromRow) * t;
-      const col = fx.fromCol + (fx.col - fx.fromCol) * t;
-      this._drawFrozenGemAt(rect, row, col, fx.gemA.colorId, nowMs, fx.gemA.special);
-      return;
-    }
-    this._drawEffectSprite(rect, `combo_merge_${fx.mergeColorId}`, fx.ageMs - fx.swapMs, fx.row, fx.col);
+    if (fx.ageMs >= fx.swapMs) return;
+    const t = fx.swapMs > 0 ? fx.ageMs / fx.swapMs : 1;
+    this._drawFrozenGemAt(rect, fx.row, fx.col, fx.gemB.colorId, nowMs, fx.gemB.special);
+    const row = fx.fromRow + (fx.row - fx.fromRow) * t;
+    const col = fx.fromCol + (fx.col - fx.fromCol) * t;
+    this._drawFrozenGemAt(rect, row, col, fx.gemA.colorId, nowMs, fx.gemA.special);
   }
 
   // ageMs 기준으로 한 프레임을 cx,cy(화면 픽셀, 칸 중심 기준 아님 - 이미 중심 좌표로 받는다)에
@@ -1514,13 +1579,15 @@ export class CanvasRenderer {
       if (fx.ageMs < target.fireAtMs) continue;
       this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - target.fireAtMs, target.row, target.col);
     }
-    // 폭탄+폭탄 조합은 animKey=bomb_big_{색}, 그리는 위치는 4x4 중심(칸 사이)으로 바뀐다.
-    this._drawEffectSprite(rect, fx.animKey ?? `bomb_${fx.colorId}`, fx.ageMs, fx.drawRow ?? fx.row, fx.drawCol ?? fx.col);
+    // 폭탄+폭탄 조합은 centers(2x2 네 칸)마다 보통 폭탄을 동시에 그린다.
+    const key = `bomb_${fx.colorId}`;
+    if (!fx.centers) this._drawEffectSprite(rect, key, fx.ageMs, fx.row, fx.col);
+    else for (const c of fx.centers) this._drawEffectSprite(rect, key, fx.ageMs, c.row, c.col);
   }
 
   // 박스 발동(README #4) - 잼 -> pop/box_origin -> 픽셀 번개 -> box_soul -> box_hit 순.
   // 조합에서는 대상마다 startMs/hitMs(갈래별 간격)와 boltColorId(두 박스 색 번갈아)가 다를 수
-  // 있고, transformKey가 붙은 대상은 터지지 않고 그 자리에서 특수 잼으로 변신한다(manifest.combo).
+  // 있고, transform이 붙은 대상은 터지지 않는다(특수 잼 그림은 연쇄 fx의 originGem이 그린다).
   _drawBoxFx(rect, fx, nowMs) {
     const { cfg } = fx;
     const hitOf = (target) => target.hitMs ?? cfg.hitMs;
@@ -1528,7 +1595,7 @@ export class CanvasRenderer {
       if (fx.ageMs < hitOf(target)) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
     }
     for (const target of fx.targets) {
-      if (fx.ageMs < hitOf(target) || target.transformKey) continue;
+      if (fx.ageMs < hitOf(target) || target.transform) continue;
       this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - hitOf(target), target.row, target.col);
     }
     this._drawEffectSprite(rect, `box_origin_${fx.colorId}`, fx.ageMs, fx.row, fx.col);
@@ -1539,15 +1606,14 @@ export class CanvasRenderer {
       if (head) this._drawEffectSpriteAtPx(rect, `box_soul_${target.boltColorId ?? fx.colorId}`, fx.ageMs, head.x, head.y);
     }
     for (const target of fx.targets) {
-      if (fx.ageMs < hitOf(target)) continue;
-      const key = target.transformKey ?? `box_hit_${fx.colorId}`;
-      this._drawEffectSprite(rect, key, fx.ageMs - hitOf(target), target.row, target.col);
+      if (fx.ageMs < hitOf(target) || target.transform) continue;
+      this._drawEffectSprite(rect, `box_hit_${fx.colorId}`, fx.ageMs - hitOf(target), target.row, target.col);
     }
   }
 
   // 컬러 발동(README #5) - 잼 -> pop -> color_origin -> color_wisp(비행) -> color_mark 순.
   // 조합에서는 extraOrigin(컬러+컬러의 두 번째 소용돌이), noWisp(컬러+컬러는 불씨 없이
-  // 물결만), transformKey(불씨가 꽂힌 잼이 터지는 대신 특수 잼으로 변신)가 붙는다.
+  // 물결만), transform(불씨가 꽂힌 잼이 터지는 대신 특수 잼으로 변신)이 붙는다.
   _drawColorFx(rect, fx, nowMs) {
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
@@ -1555,7 +1621,7 @@ export class CanvasRenderer {
     }
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
-      if (fx.ageMs < arriveAtMs || target.transformKey) continue;
+      if (fx.ageMs < arriveAtMs || target.transform) continue;
       this._drawEffectSprite(rect, `pop_${target.colorId}`, fx.ageMs - arriveAtMs, target.row, target.col);
     }
     this._drawEffectSprite(rect, 'color_origin', fx.ageMs, fx.row, fx.col);
@@ -1575,9 +1641,8 @@ export class CanvasRenderer {
     }
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
-      if (fx.ageMs < arriveAtMs) continue;
-      const key = target.transformKey ?? `color_mark_${target.colorId}`;
-      this._drawEffectSprite(rect, key, fx.ageMs - arriveAtMs, target.row, target.col);
+      if (fx.ageMs < arriveAtMs || target.transform) continue;
+      this._drawEffectSprite(rect, `color_mark_${target.colorId}`, fx.ageMs - arriveAtMs, target.row, target.col);
     }
   }
 
@@ -1585,7 +1650,116 @@ export class CanvasRenderer {
   // 프레임 GameState.settleHold에 넣어, 연출이 끝나기 전에 중력/리필이 돌지 않게 한다.
   // 일반 매치 pop(_simplePops, 270ms)은 core의 clear(180ms)+fall보다 짧아 세지 않는다.
   isSpecialFxBusy() {
-    return this._specialFx.length > 0;
+    return this._specialFx.length > 0 || this._itemFx.some((fx) => fx.kind === 'scythe');
+  }
+
+  // 아이템 사용 연출 시작(main.js가 use()/예약 실행 성공 직후 부른다). 잼 제거 pop·무지개 생성·
+  // 장갑 스왑·수리/모래시계는 core/battle 이벤트로 기존 연출이 그대로 나오므로 여기선 망치·낫만.
+  playItemFx(cfg, target, board) {
+    if (cfg.action === 'recolor') {
+      // 염료: 기존 pop 파편을 새 색으로 짧게.
+      const rect = this.lastLayout?.board;
+      if (rect) this._spawnBurst(rect, target.row, target.col, { count: 8, speed: 110, life: 240, size: 3 }, 1, GEM_TYPES[target.color]?.color ?? '#ffffff');
+      return;
+    }
+    if (cfg.action !== 'destroy') return;
+    if (cfg.target === 'cell') {
+      this._itemFx.push({ kind: 'hammer', cells: [target], ageMs: 0 });
+      const rect = this.lastLayout?.board;
+      if (rect) this._spawnBurst(rect, target.row, target.col, { count: 10, speed: 120, life: 380, size: 3 }, 1, '#d8d0c0');
+      this._triggerShake(2, 160);
+      return;
+    }
+    // 낫: 시작 칸(왼쪽/위쪽 끝)부터 lineStepMs 간격으로 line 세그먼트. 색은 그 칸에서 지워지는
+    // 잼 색(방해요소 칸은 앞 칸 색을 이어 쓴다).
+    const n = cfg.target === 'row' ? board.cols : board.rows;
+    const cells = [];
+    let colorId = GEM_TYPES[0].id;
+    for (let i = 0; i < n; i++) {
+      const row = cfg.target === 'row' ? target.row : i;
+      const col = cfg.target === 'row' ? i : target.col;
+      const idx = board.index(row, col);
+      colorId = GEM_TYPES[board.cellStates[idx]?.value ?? board.grid[idx]]?.id ?? colorId;
+      cells.push({ row, col, colorId, seg: i % 2 === 0 ? 'seg0' : 'seg1' });
+    }
+    this._itemFx.push({ kind: 'scythe', axis: cfg.target === 'row' ? 'h' : 'v', cells, ageMs: 0 });
+  }
+
+  // 보드 위 데미지 폰트 숫자(README 추천 움직임: 0.6초 떠오르며 마지막 0.2초 사라짐) + 시한폭탄 숫자 튕김 수명.
+  _advanceAndDrawBoardFloats(rect, dtMs) {
+    for (const [key, age] of this._bombBounce) {
+      if (age + dtMs >= BOMB_BOUNCE_MS) this._bombBounce.delete(key);
+      else this._bombBounce.set(key, age + dtMs);
+    }
+    if (this._boardFloats.length === 0) return;
+    const { ctx } = this;
+    const fontMeta = this.assets?.uiFont;
+    const next = [];
+    for (const f of this._boardFloats) {
+      f.ageMs += dtMs;
+      if (f.ageMs >= BOARD_FLOAT_MS) continue;
+      next.push(f);
+      const t = f.ageMs / BOARD_FLOAT_MS;
+      const x = rect.x + (f.col + 0.5) * rect.cellSize;
+      const y = rect.y + (f.row + 0.3) * rect.cellSize - 18 * t;
+      const img = getUiFont(this.assets, f.variant);
+      ctx.save();
+      ctx.globalAlpha = t > 0.67 ? Math.max(0, 1 - (t - 0.67) / 0.33) : 1;
+      if (fontMeta?.chars && uiReady(img)) {
+        ctx.imageSmoothingEnabled = false;
+        drawDamage(ctx, img.img, fontMeta, f.text, x, Math.round(y - fontMeta.cellH), 2);
+      } else {
+        ctx.fillStyle = '#f2d264';
+        ctx.font = getFontString(12, true);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        drawText(ctx, f.text, x, y);
+      }
+      ctx.restore();
+    }
+    this._boardFloats = next;
+  }
+
+  _advanceAndDrawItemFx(rect, board, dtMs) {
+    if (this._itemFx.length === 0) return;
+    const next = [];
+    for (const fx of this._itemFx) {
+      fx.ageMs += dtMs;
+      let alive = false;
+      if (fx.kind === 'hammer') {
+        alive = this._drawItemHit(rect, fx.cells[0], fx.ageMs);
+      } else {
+        fx.cells.forEach((c, i) => {
+          const age = fx.ageMs - i * DETONATION_CONFIG.lineStepMs;
+          if (age < 0 || this._drawEffectSprite(rect, `line_${fx.axis}_${c.seg}_${c.colorId}`, age, c.row, c.col)) alive = true;
+        });
+      }
+      if (alive) next.push(fx);
+    }
+    this._itemFx = next;
+  }
+
+  // skills/sheets/hit.png(16x16 x3, 50/60/80ms, 흰 마스크) - 없으면 흰 사각 번쩍 1프레임 대체.
+  _drawItemHit(rect, cell, ageMs) {
+    const { ctx } = this;
+    const frameMs = [50, 60, 80];
+    let frame = 0;
+    let acc = 0;
+    while (frame < frameMs.length && ageMs >= acc + frameMs[frame]) acc += frameMs[frame++];
+    if (frame >= frameMs.length) return false;
+    const size = rect.cellSize;
+    const x = rect.x + cell.col * size;
+    const y = rect.y + cell.row * size;
+    const hit = this.itemAssets?.hit;
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    if (uiReady(hit)) ctx.drawImage(hit.img, frame * 16, 0, 16, 16, x, y, size, size);
+    else if (frame === 0) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(x + size * 0.2, y + size * 0.2, size * 0.6, size * 0.6);
+    }
+    ctx.restore();
+    return true;
   }
 
   // this._simplePops(일반 매치 pop) + this._specialFx(line/bomb/box/color) 진행/그리기.
@@ -1608,7 +1782,9 @@ export class CanvasRenderer {
       // 이미 지워버린 자리에 구멍이 보이지 않게 한다(README 점4와 같은 "그리기만 지연").
       if (fx.ageMs < 0) {
         for (const target of fx.targets) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
-        if (fx.originGem) this._drawFrozenGemAt(rect, fx.row, fx.col, fx.originGem.colorId, nowMs, fx.originGem.special);
+        if (fx.originGem && fx.ageMs >= (fx.originRevealAge ?? -Infinity)) {
+          this._drawFrozenGemAt(rect, fx.row, fx.col, fx.originGem.colorId, nowMs, fx.originGem.special);
+        }
         next.push(fx);
         continue;
       }
@@ -1758,6 +1934,10 @@ export class CanvasRenderer {
       if (effect.type === 'obstacleDamaged' || effect.type === 'obstacleDestroyed' || effect.type === 'obstacleExpire') {
         this._spawnObstacleFx(effect);
       }
+      if (effect.type === 'timeBombTimerAdded') {
+        this._boardFloats.push({ row: effect.cell.row, col: effect.cell.col, text: `+${effect.add}`, variant: 'yellow', ageMs: 0 });
+        this._bombBounce.set(`${effect.cell.row},${effect.cell.col}`, 0);
+      }
       // 잼 터짐 이펙트(assets/effects) - line/bomb/box(일반)/color 발동마다 스프라이트
       // 재생 일정을 만든다(설정 유무와 무관하게 항상 시도 - obstacleFx와 같은 이유).
       if (effect.type === 'specialActivate') {
@@ -1768,7 +1948,10 @@ export class CanvasRenderer {
         if (chain?.cells.has(key)) {
           chain.cells.delete(key);
           if (chain.cells.size === 0) this._comboChainDelay = null;
-          this._spawnDelayedFx(effect, gameState.board, chain.delayMs, { freezeOrigin: true });
+          const revealMs = chain.revealAtMs?.get(key);
+          for (const fx of this._spawnDelayedFx(effect, gameState.board, chain.delayMs, { freezeOrigin: true })) {
+            if (revealMs != null) fx.originRevealAge = revealMs - chain.delayMs;
+          }
         } else {
           this._spawnSpecialFx(effect, gameState.board);
         }
@@ -2012,7 +2195,7 @@ export class CanvasRenderer {
 
   // 인덱스 기반 각도 분배(원형으로 고르게 퍼지는 파편) - Math.random 대신 사용. 화면 절대
   // 좌표를 직접 받으므로 보드(퍼즐)/전투 패널 어느 쪽 이벤트에도 똑같이 쓸 수 있다.
-  _spawnBurstAt(x, y, params, scaleMul, color) {
+  _spawnBurstAt(x, y, params, scaleMul, color, battle = false) {
     const count = Math.max(0, Math.round(params.count * scaleMul));
     const speed = params.speed * scaleMul;
     for (let i = 0; i < count; i++) {
@@ -2026,6 +2209,7 @@ export class CanvasRenderer {
         color,
         size: params.size,
         shape: 'rect',
+        battle,
       });
     }
   }
@@ -2076,6 +2260,25 @@ export class CanvasRenderer {
       if (this._seenEffects.has(event)) continue;
       this._seenEffects.add(event);
 
+      // 수리 망치: 성벽(전투 길 왼쪽 경계)을 따라 금색 작은 사각 파티클이 위로.
+      if (event.type === 'wallHealed') {
+        const { track } = battleLayout;
+        for (let i = 0; i < 14; i++) {
+          this._particles.spawn({
+            x: track.x - 4 + ((i * 5) % 7) - 3,
+            y: track.y + track.height * ((i + 0.5) / 14),
+            vx: 0,
+            vy: -40 - (i % 3) * 15,
+            life: 600,
+            color: '#f2d264',
+            size: 2,
+            shape: 'rect',
+            battle: true,
+          });
+        }
+        continue;
+      }
+
       const eventCfg = events[event.type];
       if (!eventCfg) continue;
 
@@ -2084,7 +2287,7 @@ export class CanvasRenderer {
 
       const scale = this._cascadeScale(event.cascadeIndex, cascadeCfg);
       if (eventCfg.particles) {
-        this._spawnBurstAt(pos.x, pos.y, eventCfg.particles, intensity * scale, pos.color);
+        this._spawnBurstAt(pos.x, pos.y, eventCfg.particles, intensity * scale, pos.color, true);
       }
       if (eventCfg.shake && settings.screenShake) {
         this._triggerShake(eventCfg.shake.amount * intensity * scale, eventCfg.shake.life);
@@ -2197,7 +2400,7 @@ export class CanvasRenderer {
 
   // 최상단 재화 바 - 골드/다이아(아이콘+숫자) + 우측 "+"(상점) 버튼 자리. playerState는 main.js가
   // 넘겨주는 단일 소스 - 저장/상점이 생기면 이 객체 값만 바뀌면 된다.
-  _drawCurrencyBar(rect, playerState) {
+  _drawCurrencyBar(rect, playerState, goldMul = 1) {
     const { ctx } = this;
     this._drawPanelIron(rect);
     ctx.save();
@@ -2209,6 +2412,25 @@ export class CanvasRenderer {
 
     let x = rect.x + 10;
     x = this._drawCurrencyPill(x, midY, iconSize, fontSize, 'icons/gold.png', HUD_CONFIG.currency.gold, playerState?.gold ?? 0, 'circle');
+    if (goldMul > 1) {
+      // 황금 주화(docs/items.md C2) - 켜진 층 동안 "x2"(데미지 폰트 yellow).
+      const fontMeta = this.assets?.uiFont;
+      const img = getUiFont(this.assets, 'yellow');
+      const text = `x${goldMul}`;
+      if (fontMeta?.chars && uiReady(img)) {
+        ctx.imageSmoothingEnabled = false;
+        let w = 1;
+        for (const c of text) w += fontMeta.widths[c] - 1;
+        drawDamage(ctx, img.img, fontMeta, text, x + 4 + w, Math.round(midY - fontMeta.cellH), 2);
+        x += w * 2 + 8;
+      } else {
+        ctx.fillStyle = '#f2d264';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        drawText(ctx, text, x + 4, midY);
+        x += ctx.measureText(text).width + 8;
+      }
+    }
     x += 14;
     this._drawCurrencyPill(x, midY, iconSize, fontSize, 'icons/diamond.png', HUD_CONFIG.currency.diamond, playerState?.diamonds ?? 0, 'diamond');
 
@@ -2346,7 +2568,7 @@ export class CanvasRenderer {
     ctx.fillStyle = '#e8e8e8';
     drawText(ctx, scoreText, scoreTextX, midY);
 
-    // dim(#8a8296)은 바 배경(#15181f) 위에서 거의 안 보였다 - primary + 조금 크게.
+    // 옛 dim(#8a8296)은 바 배경(#15181f) 위에서 거의 안 보였다 - primary + 조금 크게.
     ctx.fillStyle = HUD_CONFIG.text.primary;
     ctx.font = getFontString(scoreFont * 0.72, true);
     drawText(ctx, t('hud.cascade', { count: gameState.cascadeCount }), rect.x + rect.width * 0.4, midY);
@@ -2417,23 +2639,20 @@ export class CanvasRenderer {
     ctx.fillRect(barX, barY, barWidth * ratio, barHeight);
   }
 
-  // 일시정지/승리/패배/탑 강화 팝업 - 하나만 동시에 뜰 수 있다(우선순위: 일시정지 > 전투 결과 > 탑 강화).
+  // 일시정지/승리/패배/탑 강화 팝업 - 하나만 동시에 뜰 수 있다(우선순위: 일시정지 > 탑 강화 > 전투 결과).
+  // 탑 강화가 결과보다 앞인 이유: 클리어 팝업 "다음 층"이 강화 팝업을 띄운다(전투 중엔 강화 팝업이
+  // 열려 있는 동안 전투가 멈추므로 결과 팝업과 겹칠 일이 없다).
   // 탑 강화는 레이아웃이 완전히 달라(탭+5줄 목록) 별도 메서드(_drawTowerUpgradePopup)로 그린다.
   // 그 외(일시정지/승리/패배)는 버튼 사각형을 lastLayout.popup.buttons에 저장해 main.js가 클릭 판정에 쓴다.
-  _drawPopup(width, height, battleState, paused, clearReward, upgradeTowerIndex, upgradeTab, battleHud) {
+  _drawPopup(width, height, battleState, paused, clearReward, prepOpen, itemUi = null) {
     let kind = null;
     if (paused) kind = 'pause';
+    else if (prepOpen) kind = null; // 정비 팝업(drawPrepPopup)이 main.js에서 따로 위에 그려진다.
     else if (battleState?.status === 'cleared') kind = 'win';
     else if (battleState?.status === 'failed') kind = 'lose';
-    else if (upgradeTowerIndex != null && battleHud) kind = 'towerUpgrade';
 
     if (!kind) {
       this.lastLayout.popup = null;
-      return;
-    }
-
-    if (kind === 'towerUpgrade') {
-      this._drawTowerUpgradePopup(width, height, battleState, battleHud, upgradeTowerIndex, upgradeTab);
       return;
     }
 
@@ -2460,7 +2679,8 @@ export class CanvasRenderer {
     const BUTTONS = {
       pause: [['resume', t('popup.button.resume')], ['restart', t('popup.button.restart')], ['exit', t('popup.button.exit')]],
       win: [['next', t('popup.button.next')]],
-      lose: [['restart', t('popup.button.restart')]],
+      // 부활(docs/items.md C3)은 보유·층당 1회일 때만 버튼이 보인다(main.js canRevive).
+      lose: itemUi?.canRevive ? [['revive', t('popup.button.revive')], ['restart', t('popup.button.restart')]] : [['restart', t('popup.button.restart')]],
     };
 
     ctx.save();
@@ -2508,10 +2728,11 @@ export class CanvasRenderer {
     buttons.forEach(([action, label], i) => {
       const bx = cardX + 12 + i * (btnWidth + btnGap);
       const isPrimary = i === 0;
+      const isGold = action === 'revive'; // 부활은 btn_gold + 깃털 아이콘(docs/items.md C3).
 
-      // buttons/btn_primary·btn_secondary(9-slice) - 팝업 버튼(README). 이미지가 없으면
+      // buttons/btn_primary·btn_secondary·btn_gold(9-slice) - 팝업 버튼(README). 이미지가 없으면
       // 기존 색 사각형으로 폴백한다.
-      const btnPath = isPrimary ? 'buttons/btn_primary.png' : 'buttons/btn_secondary.png';
+      const btnPath = isGold ? 'buttons/btn_gold.png' : isPrimary ? 'buttons/btn_primary.png' : 'buttons/btn_secondary.png';
       const btnState = getUi(this.assets, btnPath);
       const btnMeta = getUiMeta(this.assets, btnPath);
       let textColor = isPrimary ? '#ffffff' : HUD_CONFIG.text.primary;
@@ -2520,15 +2741,26 @@ export class CanvasRenderer {
         drawNine(ctx, btnState.img, btnMeta.slice, bx, btnY, snap(btnWidth), snap(btnHeight));
         textColor = btnMeta.textColor ?? textColor;
       } else {
-        ctx.fillStyle = isPrimary ? cfg.primary : cfg.ghost;
+        ctx.fillStyle = isGold ? '#c28a20' : isPrimary ? cfg.primary : cfg.ghost;
         ctx.fillRect(bx, btnY, btnWidth, btnHeight);
         ctx.strokeStyle = cfg.cardBorder;
         ctx.lineWidth = 2;
         ctx.strokeRect(bx + 1, btnY + 1, btnWidth - 2, btnHeight - 2);
       }
+      let labelX = bx + btnWidth / 2;
+      if (isGold) {
+        const iconSize = 14 * 2;
+        const icon = this.itemAssets?.icons?.get('revive');
+        const ix = Math.round(bx + 8);
+        const iy = Math.round(btnY + btnHeight / 2 - iconSize / 2);
+        ctx.imageSmoothingEnabled = false;
+        if (uiReady(icon)) ctx.drawImage(icon.img, ix, iy, iconSize, iconSize);
+        else drawItemIconFallback(ctx, 'revive', ix, iy, iconSize);
+        labelX += iconSize / 2;
+      }
       ctx.fillStyle = textColor;
       ctx.font = getFontString(Math.max(11, btnHeight * 0.32), true);
-      drawText(ctx, label, bx + btnWidth / 2, btnY + btnHeight / 2);
+      drawText(ctx, label, labelX, btnY + btnHeight / 2);
       rects[action] = { x: bx, y: btnY, width: btnWidth, height: btnHeight };
     });
 
@@ -2583,324 +2815,54 @@ export class CanvasRenderer {
     return rects;
   }
 
-  // 타워 강화 팝업(assets/ui/README.md "타워 강화 팝업") - 탭(레벨업/인벤토리) + 장착된 타워
-  // 5개 목록. 탭 한 줄의 터치는 main.js가 처리하고(게임이 pause처럼 멈춘 동안), 이 메서드는
-  // 그 판정에 쓸 버튼 사각형을 lastLayout.popup에 저장하기만 한다(레벨업/MAX 로직 자체는
-  // BattleController/playerState에 있다 - 그리기와 분리).
-  _drawTowerUpgradePopup(width, height, battleState, battleHud, selectedIndex, tab) {
-    const { ctx } = this;
-    const cfg = HUD_CONFIG.popup;
-    const cardWidth = Math.min(width * 0.86, 340);
-    const cardHeight = Math.min(height * 0.84, 480);
-    const cardX = (width - cardWidth) / 2;
-    const cardY = (height - cardHeight) / 2;
-
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = cfg.overlayColor;
-    ctx.fillRect(0, 0, width, height);
-
-    const popupPath = 'popups/popup_win.png';
-    const popupState = getUi(this.assets, popupPath);
-    const popupMeta = getUiMeta(this.assets, popupPath);
-    if (uiReady(popupState) && popupMeta?.slice) {
-      drawNine(ctx, popupState.img, popupMeta.slice, cardX, cardY, snap(cardWidth), snap(cardHeight));
-    } else {
-      ctx.fillStyle = cfg.cardBg;
-      ctx.fillRect(cardX, cardY, cardWidth, cardHeight);
-      ctx.strokeStyle = cfg.cardBorder;
-      ctx.lineWidth = 3;
-      ctx.strokeRect(cardX + 1.5, cardY + 1.5, cardWidth - 3, cardHeight - 3);
-    }
-
-    drawFixedImage(ctx, this.assets, 'upgrade/emblem_upgrade.png', cardX + cardWidth / 2, cardY, 2);
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = cfg.upgradeColor;
-    ctx.font = getFontString(Math.max(15, cardHeight * 0.05), true);
-    drawText(ctx, t('popup.towerUpgrade.title'), cardX + cardWidth / 2, cardY + 24);
-
-    // 닫기 X(upgrade/btn_close, 16x16 고정) - 카드 오른쪽 위 모서리.
-    const closeSize = 32; // 16 원본 x 2배
-    const closeCx = cardX + cardWidth - 20;
-    const closeCy = cardY + 20;
-    if (!drawFixedImage(ctx, this.assets, 'upgrade/btn_close.png', closeCx, closeCy, 2)) {
-      ctx.fillStyle = cfg.loseColor;
-      ctx.beginPath();
-      ctx.arc(closeCx, closeCy, closeSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = getFontString(closeSize * 0.5, true);
-      drawText(ctx, 'X', closeCx, closeCy);
-    }
-    const closeButton = { x: closeCx - closeSize / 2, y: closeCy - closeSize / 2, width: closeSize, height: closeSize };
-
-    // 탭 2개(레벨업/인벤토리) - 켜진 탭은 tab_on(아래가 본문과 3px(원본) 겹치게), 나머지는 tab_off.
-    const tabY = cardY + 40;
-    const tabHeight = 28;
-    const tabGap = 6;
-    const tabWidth = (cardWidth - 24 - tabGap) / 2;
-    const tabRects = {
-      levelUp: { x: cardX + 12, y: tabY, width: tabWidth, height: tabHeight },
-      inventory: { x: cardX + 12 + tabWidth + tabGap, y: tabY, width: tabWidth, height: tabHeight },
-    };
-    for (const [key, label] of [['levelUp', t('popup.towerUpgrade.tabLevelUp')], ['inventory', t('popup.towerUpgrade.tabInventory')]]) {
-      const r = tabRects[key];
-      const active = tab === key;
-      const path = active ? 'upgrade/tab_on.png' : 'upgrade/tab_off.png';
-      const state = getUi(this.assets, path);
-      const meta = getUiMeta(this.assets, path);
-      if (uiReady(state) && meta?.slice) {
-        drawNine(ctx, state.img, meta.slice, r.x, r.y, snap(r.width), snap(r.height));
-      } else {
-        ctx.fillStyle = active ? cfg.ghost : cfg.cardBg;
-        ctx.fillRect(r.x, r.y, r.width, r.height);
-      }
-      ctx.fillStyle = active ? HUD_CONFIG.text.primary : HUD_CONFIG.text.dim;
-      ctx.font = getFontString(Math.max(11, tabHeight * 0.4), true);
-      drawText(ctx, label, r.x + r.width / 2, r.y + r.height / 2);
-    }
-
-    // 탭 본문(upgrade/tab_body) - 켜진 탭이 윗변을 3px(원본, 화면 6px) 덮게 그려서 이어지게 한다.
-    const overlap = 6;
-    const bodyX = cardX + 12;
-    const bodyY = tabY + tabHeight - overlap;
-    const bodyWidth = cardWidth - 24;
-    const bodyHeight = cardY + cardHeight - 16 - bodyY;
-    const bodyPath = 'upgrade/tab_body.png';
-    const bodyState = getUi(this.assets, bodyPath);
-    const bodyMeta = getUiMeta(this.assets, bodyPath);
-    if (uiReady(bodyState) && bodyMeta?.slice) {
-      drawNine(ctx, bodyState.img, bodyMeta.slice, bodyX, bodyY, snap(bodyWidth), snap(bodyHeight));
-    } else {
-      ctx.fillStyle = '#15121c';
-      ctx.fillRect(bodyX, bodyY, bodyWidth, bodyHeight);
-    }
-
-    const pad = 8;
-    const contentRect = { x: bodyX + pad, y: bodyY + pad, width: bodyWidth - pad * 2, height: bodyHeight - pad * 2 };
-
-    const rows = tab === 'levelUp' ? this._drawTowerUpgradeLevelTab(contentRect, battleState, battleHud, selectedIndex) : null;
-    if (tab === 'inventory') this._drawTowerUpgradeInventoryTab(contentRect, battleState);
-
-    ctx.restore();
-    this.lastLayout.popup = { kind: 'towerUpgrade', tab, closeButton, tabs: tabRects, rows, towerIndex: selectedIndex };
+  get inventoryTab() {
+    this._inventoryTab ??= new InventoryTab();
+    return this._inventoryTab;
   }
 
-  // 레벨업 탭 - 장착된 타워 5개를 한 줄씩(레벨/공격력/강화·MAX 버튼) + 아래에 보유 골드.
-  // 각 줄의 강화/MAX 버튼 사각형과 가능 여부를 돌려줘 main.js가 클릭 판정에 쓴다.
-  _drawTowerUpgradeLevelTab(rect, battleState, battleHud, selectedIndex) {
-    const { ctx } = this;
-    const cfg = HUD_CONFIG.popup;
-    const towers = battleState?.towers ?? [];
-    const footerHeight = 30;
-    const rowGap = 3;
-    const rowsHeight = rect.height - footerHeight - 6;
-    const rowHeight = (rowsHeight - rowGap * 4) / 5;
-    const pad = 6;
-    const rows = [];
-
-    for (let i = 0; i < 5; i++) {
-      const tower = towers[i];
-      const rowY = rect.y + i * (rowHeight + rowGap);
-      const level = battleHud.towerLevels?.[i] ?? 1;
-      const cost = battleHud.towerCosts?.[i] ?? 0;
-      const atk = battleHud.towerAttacks?.[i] ?? 0;
-      const nextAtk = battleHud.towerNextAttacks?.[i] ?? atk;
-      const maxed = level >= (battleHud.maxLevel ?? Infinity);
-      const affordable = !maxed && battleHud.gold >= cost;
-
-      // upgrade/card·card_selected(9-slice) - 터치해서 연 타워 줄만 card_selected(금테).
-      const cardPath = i === selectedIndex ? 'upgrade/card_selected.png' : 'upgrade/card.png';
-      const cardState = getUi(this.assets, cardPath);
-      const cardMeta = getUiMeta(this.assets, cardPath);
-      if (uiReady(cardState) && cardMeta?.slice) {
-        drawNine(ctx, cardState.img, cardMeta.slice, rect.x, rowY, snap(rect.width), snap(rowHeight));
-      } else {
-        ctx.fillStyle = i === selectedIndex ? '#2a2342' : '#1f1b2b';
-        ctx.fillRect(rect.x, rowY, rect.width, rowHeight);
-      }
-
-      const iconSize = Math.min(rowHeight * 0.72, 40);
-      const iconCx = rect.x + pad + iconSize / 2;
-      const iconCy = rowY + rowHeight / 2;
-      if (tower) this._battleRenderer.drawTowerIcon(ctx, this.assets, tower.color, iconCx, iconCy, iconSize);
-
-      const textX = rect.x + pad + iconSize + 8;
-      const line1Y = rowY + rowHeight * 0.32;
-      const line2Y = rowY + rowHeight * 0.68;
-
-      // panels/box_floor(9-slice) - 레벨 배지(README: "레벨 배지는 panels/box_floor").
-      // "Lv.N" 글자에 외곽선이 붙으면서 예전 32x16 배지에선 글자가 배지 테두리와 겹쳐
-      // 읽기 어려워졌다 - 배지를 키워 그 안에서 여유 있게 보이게 한다.
-      const badgeW = 40;
-      const badgeH = 22;
-      const badgeX = textX;
-      const badgeY = line1Y - badgeH / 2;
-      const badgePath = 'panels/box_floor.png';
-      const badgeState = getUi(this.assets, badgePath);
-      const badgeMeta = getUiMeta(this.assets, badgePath);
-      if (uiReady(badgeState) && badgeMeta?.slice) {
-        drawNine(ctx, badgeState.img, badgeMeta.slice, badgeX, badgeY, badgeW, badgeH);
-      } else {
-        ctx.fillStyle = HUD_CONFIG.panel.raised;
-        ctx.fillRect(badgeX, badgeY, badgeW, badgeH);
-      }
-      ctx.fillStyle = HUD_CONFIG.text.primary;
-      ctx.font = getFontString(Math.max(9, badgeH * 0.56), true);
-      ctx.textAlign = 'center';
-      drawText(ctx, `Lv.${level}`, badgeX + badgeW / 2, line1Y);
-
-      // 강화(buttons/btn_gold) / MAX(buttons/btn_primary) 버튼 위치 - 이름/공격력 텍스트가
-      // 길어도(예: "저주 오벨리스크") 버튼 위로 넘치지 않도록 먼저 구해 클립 폭을 정한다.
-      const btnHeight = Math.min(26, rowHeight * 0.42);
-      const maxBtnWidth = 40;
-      const upgradeBtnWidth = 68;
-      const btnGap = 6;
-      const btnY = rowY + (rowHeight - btnHeight) / 2;
-      const maxBtnX = rect.x + rect.width - pad - maxBtnWidth;
-      const upgradeBtnX = maxBtnX - btnGap - upgradeBtnWidth;
-
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(textX, rowY, upgradeBtnX - textX - 6, rowHeight);
-      ctx.clip();
-
-      ctx.textAlign = 'left';
-      ctx.font = getFontString(Math.max(10, rowHeight * 0.19), true);
-      ctx.fillStyle = HUD_CONFIG.text.primary;
-      drawText(ctx, tower?.name ?? '', badgeX + badgeW + 6, line1Y);
-
-      ctx.font = getFontString(Math.max(9, rowHeight * 0.2));
-      ctx.fillStyle = HUD_CONFIG.text.dim;
-      drawText(ctx, t('popup.towerUpgrade.attack', { current: Math.round(atk), next: Math.round(nextAtk) }), textX, line2Y);
-      ctx.restore();
-
-      const upgradePath = affordable ? 'buttons/btn_gold.png' : 'upgrade/btn_disabled.png';
-      const upgradeMeta = getUiMeta(this.assets, upgradePath);
-      const upgradeState = getUi(this.assets, upgradePath);
-      if (uiReady(upgradeState) && upgradeMeta?.slice) {
-        drawNine(ctx, upgradeState.img, upgradeMeta.slice, upgradeBtnX, btnY, upgradeBtnWidth, btnHeight);
-      } else {
-        ctx.fillStyle = affordable ? cfg.upgradeColor : cfg.disabled;
-        ctx.fillRect(upgradeBtnX, btnY, upgradeBtnWidth, btnHeight);
-      }
-      if (maxed) {
-        ctx.fillStyle = upgradeMeta?.textColor ?? HUD_CONFIG.text.dim;
-        ctx.font = getFontString(Math.max(10, btnHeight * 0.5), true);
-        drawText(ctx, t('popup.towerUpgrade.max'), upgradeBtnX + upgradeBtnWidth / 2, btnY + btnHeight / 2);
-      } else {
-        const coinCx = upgradeBtnX + 14;
-        const coinDrawn = drawFixedImage(ctx, this.assets, 'upgrade/coin_small.png', coinCx, btnY + btnHeight / 2, 1.5);
-        ctx.fillStyle = affordable ? (upgradeMeta?.textColor ?? HUD_CONFIG.text.primary) : cfg.loseColor;
-        ctx.font = getFontString(Math.max(10, btnHeight * 0.44), true);
-        ctx.textAlign = 'left';
-        drawText(ctx, String(cost), (coinDrawn ? coinCx + 8 : upgradeBtnX + 6), btnY + btnHeight / 2);
-      }
-
-      const maxPath = affordable ? 'buttons/btn_primary.png' : 'upgrade/btn_disabled.png';
-      const maxMeta = getUiMeta(this.assets, maxPath);
-      const maxState = getUi(this.assets, maxPath);
-      if (uiReady(maxState) && maxMeta?.slice) {
-        drawNine(ctx, maxState.img, maxMeta.slice, maxBtnX, btnY, maxBtnWidth, btnHeight);
-      } else {
-        ctx.fillStyle = affordable ? cfg.primary : cfg.disabled;
-        ctx.fillRect(maxBtnX, btnY, maxBtnWidth, btnHeight);
-      }
-      ctx.fillStyle = maxMeta?.textColor ?? '#ffffff';
-      ctx.font = getFontString(Math.max(9, btnHeight * 0.4), true);
-      ctx.textAlign = 'center';
-      drawText(ctx, t('popup.towerUpgrade.max'), maxBtnX + maxBtnWidth / 2, btnY + btnHeight / 2);
-
-      rows.push({
-        upgradeButton: { x: upgradeBtnX, y: btnY, width: upgradeBtnWidth, height: btnHeight },
-        maxButton: { x: maxBtnX, y: btnY, width: maxBtnWidth, height: btnHeight },
-        affordable,
-        maxed,
-      });
-    }
-
-    // 보유 골드(icons/gold + panels/panel_inset) - README: "아래에 보유 골드".
-    const footerY = rect.y + rowsHeight + 6;
-    const footerMidY = footerY + footerHeight / 2;
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    const goldIconDrawn = drawFixedImage(ctx, this.assets, 'icons/gold.png', rect.x + 16, footerMidY, 2);
-    ctx.font = getFontString(Math.max(11, footerHeight * 0.44), true);
-    ctx.fillStyle = HUD_CONFIG.text.primary;
-    drawText(ctx, String(battleHud.gold ?? 0), rect.x + (goldIconDrawn ? 34 : 4), footerMidY);
-
-    ctx.textAlign = 'right';
-    ctx.font = getFontString(Math.max(9, footerHeight * 0.32));
-    ctx.fillStyle = HUD_CONFIG.text.dim;
-    drawText(ctx, t('popup.towerUpgrade.holdHint'), rect.x + rect.width, footerMidY);
-
-    return rows;
+  // ItemBarRenderer 칸·숫자 그리기를 지금 ctx/에셋에 묶어 넘긴다(인벤토리 탭·획득 팝업 공용).
+  _slotDrawers() {
+    const { ctx, assets } = this;
+    const icons = this.itemAssets?.icons;
+    return {
+      drawSlot: (x, y, id, opts, k = 2) => this.itemBar.drawSlot(ctx, assets, icons, id, Math.round(x), Math.round(y), k, opts),
+      drawNumber: (text, right, bottom) => this.itemBar._drawNumber(ctx, assets, text, right, bottom, 2, 'bottomRight'),
+    };
   }
 
-  // 인벤토리 탭 - 타워별 장착 칸 2개 + 보유 아이템 7x4 칸만 그린다(빈 칸, 동작 없음).
-  _drawTowerUpgradeInventoryTab(rect, battleState) {
-    const { ctx } = this;
-    const towers = battleState?.towers ?? [];
-    const slotPath = 'items/slot_normal.png';
-    const slotState = getUi(this.assets, slotPath);
-    const slotMeta = getUiMeta(this.assets, slotPath);
+  // 정비 팝업(src/render/ui/prepPopup.js) - 전투 화면·메인 메뉴 어느 scene 위에든 덮는다. view에 석상·보관함 그리기를
+  // 묶어 넘기고, 판정에 쓸 layout을 prepLayout에 남긴다(main.js hitPrepPopup).
+  drawPrepPopup(state, itemUi) {
+    const { ctx, cssWidth: width, cssHeight: height } = this;
+    if (width === 0 || height === 0) return;
+    const layout = layoutPrepPopup(width, height, state.context, state.tab);
+    this._prepItemUi = itemUi;
+    state.view.drawStatue ??= (c, color, cx, cy, size) => this._battleRenderer.drawTowerIcon(c, this.assets, color, cx, cy, size);
+    state.view.drawVault ??= (rect) =>
+      this._prepItemUi?.config && this._prepItemUi.inventory ? this.inventoryTab.draw(this.ctx, rect, this.assets, this._prepItemUi, this._slotDrawers(), performance.now()) : null;
+    drawPrepPopup(ctx, this.assets, state, layout);
+    this.prepLayout = layout;
+  }
 
-    const drawSlot = (x, y, size) => {
-      if (uiReady(slotState) && slotMeta) {
-        ctx.drawImage(slotState.img, 0, 0, slotState.img.width, slotState.img.height, x, y, size, size);
-      } else {
-        ctx.fillStyle = '#20232e';
-        ctx.strokeStyle = '#4a5265';
-        ctx.lineWidth = 1;
-        ctx.fillRect(x, y, size, size);
-        ctx.strokeRect(x + 0.5, y + 0.5, size - 1, size - 1);
-      }
+  // 랭킹 팝업(src/render/ui/rankingPopup.js) - 메인 메뉴 위. ui = src/game/rankingUi.js(그릴 값 + 판정용 layout 보관).
+  drawRankingPopup(ui, nowMs) {
+    const { ctx, cssWidth: width, cssHeight: height } = this;
+    if (width === 0 || height === 0 || !ui.isOpen) return;
+    const icons = this.itemAssets?.icons;
+    this._rankItemIcon ??= (id) => {
+      const st = this.itemAssets?.icons?.get(id);
+      return st && st.loaded && !st.failed ? st.img : null;
     };
+    const st = ui.view(nowMs, icons ? this._rankItemIcon : null);
+    const layout = layoutRankingPopup(width, height, st);
+    drawRankingPopup(ctx, this.assets, st, layout);
+    ui.afterDraw(layout);
+  }
 
-    // 타워 5개 - 아이콘 + 장착 칸 2개(세로).
-    const equipHeight = rect.height * 0.3;
-    const colWidth = rect.width / 5;
-    const iconSize = Math.min(colWidth * 0.6, equipHeight * 0.4);
-    const equipSlotSize = Math.min(colWidth * 0.68, equipHeight * 0.26);
-    for (let i = 0; i < 5; i++) {
-      const cx = rect.x + colWidth * (i + 0.5);
-      const iconCy = rect.y + iconSize / 2 + 2;
-      const tower = towers[i];
-      if (tower) this._battleRenderer.drawTowerIcon(ctx, this.assets, tower.color, cx, iconCy, iconSize);
-      for (let s = 0; s < 2; s++) {
-        const sy = rect.y + iconSize + 8 + s * (equipSlotSize + 4);
-        drawSlot(cx - equipSlotSize / 2, sy, equipSlotSize);
-      }
-    }
-
-    // 보유 아이템 라벨 + "추후 업데이트".
-    const labelY = rect.y + equipHeight + 4;
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = HUD_CONFIG.text.primary;
-    ctx.font = getFontString(Math.max(10, rect.height * 0.045), true);
-    drawText(ctx, t('popup.towerUpgrade.inventoryTitle'), rect.x, labelY);
-    ctx.textAlign = 'right';
-    ctx.fillStyle = HUD_CONFIG.text.dim;
-    ctx.font = getFontString(Math.max(9, rect.height * 0.035));
-    drawText(ctx, t('popup.towerUpgrade.comingSoon'), rect.x + rect.width, labelY);
-
-    // 보유 아이템 7x4 빈 칸.
-    const gridY = labelY + 10;
-    const gridHeight = rect.y + rect.height - gridY;
-    const cols = 7;
-    const gridRows = 4;
-    const gap = 3;
-    const cellSize = Math.max(8, Math.min((rect.width - gap * (cols - 1)) / cols, (gridHeight - gap * (gridRows - 1)) / gridRows));
-    const gridWidth = cellSize * cols + gap * (cols - 1);
-    const gridX = rect.x + (rect.width - gridWidth) / 2;
-    for (let r = 0; r < gridRows; r++) {
-      for (let c = 0; c < cols; c++) {
-        drawSlot(gridX + c * (cellSize + gap), gridY + r * (cellSize + gap), cellSize);
-      }
-    }
+  // 공통 획득 팝업 - 어떤 scene을 그린 뒤든 맨 위에(main.js loop).
+  drawRewardPopup(rewardPopup) {
+    if (!rewardPopup.active || this.cssWidth === 0) return;
+    rewardPopup.draw(this.ctx, this.cssWidth, this.cssHeight, this.assets, this._slotDrawers());
   }
 
   // 콤보 마일스톤("Great!" 등)/브레이크 peak 문구 - render()가 매 프레임 _advanceComboBanners로

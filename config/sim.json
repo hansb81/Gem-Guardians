@@ -184,6 +184,27 @@
         0.75,
         0.95
       ]
+    },
+    "items": {
+      "_doc": "T6 아이템 봇(boss 정책) 기준: 보스 재도전 감소 회수, 아이템 골드 비율 상한, 100층 시간 단축 상한",
+      "bossRetriesSaved": [0.5, 1.5],
+      "goldShareMax": 0.2,
+      "timeSavedMax": 0.15
+    },
+    "luck": {
+      "_doc": "T7 운의 폭(보스층, 시드 31~60). 기준 Lv: normal = expTowerLevel, slow = T4 even 진입 평균 레벨. winRate[player][열] = 승률 범위(열: 0 기준, 2 기준+2, 4 기준+4, items 기준 Lv + boss 정책 아이템). +2/+4는 공격력 +10%/+22%뿐이라 운을 다 이기지 못한다(v10). floorOverride = 특정 층만 다른 기준(10층은 첫 보스). luckyFloorBelow = +4에서도 이 승률 미만이면 '운이 너무 큰 층'. timeSpreadMax = 이긴 판 클리어 시간 P90/P10 상한. 벗어나도 표시만.",
+      "winRate": {
+        "normal": { "0": [0.6, 0.75], "2": [0.75, 1], "4": [0.85, 1], "items": [0.85, 1] },
+        "slow": { "0": [0.4, 0.7], "4": [0.75, 1] }
+      },
+      "floorOverride": { "normal": { "10": { "0": [0.75, 0.85] } } },
+      "luckyFloorBelow": { "normal": 0.85, "slow": 0.75 },
+      "timeSpreadMax": 1.8
+    },
+    "skillEquiv": {
+      "_doc": "T2s: 기술 하나가 혼자 이 등가 전력 이상이면 과함. 레드 범위는 따로 2.0",
+      "singleMax": 1.6,
+      "redSplashMax": 2.0
     }
   }
 }

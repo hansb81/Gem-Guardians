@@ -9,13 +9,18 @@ async function fetchJson(path) {
 
 export async function loadBalanceData() {
   try {
-    const [balance, enemies, obstacles, floorsData] = await Promise.all([
+    const [balance, enemies, obstacles, floorsData, items, shop, ranking] = await Promise.all([
       fetchJson('config/balance.json'),
       fetchJson('config/enemies.json'),
       fetchJson('config/obstacles.json'),
       fetchJson('config/floors.json'),
+      fetchJson('config/items.json'),
+      // 상점(config/shop.json)은 없어도 게임은 돈다 - 상점 화면만 빈다.
+      fetchJson('config/shop.json').catch(() => null),
+      // 랭킹(config/ranking.json)도 없으면 원석 랭킹만 안 열린다.
+      fetchJson('config/ranking.json').catch(() => null),
     ]);
-    return { balance, enemies, obstacles, floorsData };
+    return { balance, enemies, obstacles, floorsData, items, shop, ranking };
   } catch {
     return null;
   }

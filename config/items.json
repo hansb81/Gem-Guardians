@@ -1,0 +1,31 @@
+{
+  "_doc": "장착 아이템 1차 7개 + 2차 9개(docs/items.md). group: hotbar(하단 슬롯 장착) | preFloor(층 시작 전 예약, 슬롯 없음) | onFail(패배 팝업). cooldownMoves = 유효 스왑 N회, perFloor = 층당 최대 사용(null = 제한 없음). 골드 가격 = round(goldBase x 최고 도달 층 이하 가장 가까운 순수 일반층(보스·엘리트 제외)의 실제 보상(처치 골드 + 재클리어 보너스))(src/core/economy/economy.js itemPrice). goldBase null = 골드 구매 불가(다이아 전용, diamond). unlockFloor = 최고 도달 층이 이 값 미만이면 목록·지급·보상 풀에서 제외. starterCount = 첫 지급 개수(없으면 starter.count).",
+  "slots": { "base": 3, "max": 4, "unlock4BossFirstClear": 20 },
+  "targetingBattleTimeScale": 0.1,
+  "reserveSec": 1.5,
+  "_barrierDoc": "blockFlashSec = 결계가 적 공격을 막을 때 wallBlocked 이벤트(렌더 번쩍임)를 같은 적에 대해 다시 내기까지의 최소 간격(초).",
+  "_reserveDoc": "낫·망치(action destroy)·섞기(shuffle) 대상이 바쁘면 이 시간(초)까지 대기했다가 한가해지면 실행, 넘으면 취소(소모 없음).",
+  "starter": { "count": 3, "equipped": ["scythe_h", "hammer", "repair"] },
+  "bossFirstClearReward": { "count": 2 },
+  "items": {
+    "hammer":    { "group": "hotbar", "kind": "board",  "target": "cell", "action": "destroy",       "cooldownMoves": 2, "perFloor": null, "goldBase": 0.15 },
+    "scythe_h":  { "group": "hotbar", "kind": "board",  "target": "row",  "action": "destroy",       "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
+    "scythe_v":  { "group": "hotbar", "kind": "board",  "target": "col",  "action": "destroy",       "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
+    "rainbow":   { "group": "hotbar", "kind": "board",  "target": "cell", "action": "transform",     "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.6 },
+    "glove":     { "group": "hotbar", "kind": "board",  "target": "pair", "action": "freeSwap",      "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
+    "repair":    { "group": "hotbar", "kind": "battle", "action": "wallHeal",      "pct": 0.40,      "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.30 },
+    "hourglass": { "group": "hotbar", "kind": "battle", "action": "freezeEnemies", "duration": 5.0, "bossMul": 1.0, "cooldownMoves": 6, "perFloor": 2, "goldBase": 0.30 },
+
+    "dye":       { "group": "hotbar", "kind": "board",  "target": "cell", "action": "recolor",       "cooldownMoves": 2, "perFloor": null, "goldBase": 0.15 },
+    "shuffle":   { "group": "hotbar", "kind": "board",  "target": "none", "action": "shuffle",       "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.15 },
+    "barrier":   { "group": "hotbar", "kind": "battle", "action": "wallShield",    "duration": 8.0, "blockFlashSec": 0.5,  "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.45 },
+    "defuse":    { "group": "hotbar", "kind": "board",  "target": "none", "action": "timeBombTimer", "add": 5,         "cooldownMoves": 4, "perFloor": 2,    "goldBase": 0.3, "unlockFloor": 21 },
+    "drum":      { "group": "hotbar", "kind": "battle", "action": "atkBuff",       "mul": 1.5, "moves": 3, "cooldownMoves": 6, "perFloor": 2, "goldBase": 0.45 },
+
+    "booster_line": { "group": "preFloor", "action": "starterSpecials", "special": "line", "count": 2, "goldBase": 0.45, "starterCount": 2 },
+    "booster_bomb": { "group": "preFloor", "action": "starterSpecials", "special": "bomb", "count": 1, "goldBase": 0.45, "starterCount": 2 },
+    "gold_coin":    { "group": "preFloor", "action": "goldMul", "mul": 2, "goldBase": null, "diamond": 30, "starterCount": 1 },
+
+    "revive":    { "group": "onFail", "kind": "battle", "action": "revive", "pct": 0.5, "freezeSec": 2.0, "bossMul": 0.5, "perFloor": 1, "goldBase": null, "diamond": 50, "starterCount": 1 }
+  }
+}

@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { AudioManager, pickFile } from '../src/audio/AudioManager.js';
+import { AudioManager, pickFile, bgmForScene } from '../src/audio/AudioManager.js';
+import { getFloor } from '../src/core/balance/floorGen.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'assets', 'sfx', 'manifest.json'), 'utf8'));
@@ -89,4 +90,82 @@ test('볼륨은 0~1로 자르고 storage에 저장한다(기본 sfx 0.8 / bgm 0.
   assert.equal(restored.sfxVolume, 0.3);
   assert.equal(restored.bgmVolume, 0.9);
   assert.equal(restored.muted, true);
+});
+
+// ---- BGM: 가짜 AudioContext/fetch로 재생 시작 시점만 본다(소리는 안 난다). ----
+const bgmManifest = JSON.parse(readFileSync(join(__dirname, '..', 'assets', 'audio', 'bgm', 'manifest.json'), 'utf8'));
+const flush = () => new Promise((r) => setTimeout(r, 0));
+
+function fakeAudio(state) {
+  const param = () => ({ value: 1, cancelScheduledValues() {}, setValueAtTime(v) { this.value = v; }, linearRampToValueAtTime(v) { this.value = v; } });
+  const node = () => ({ connect: (n) => n, disconnect() {} });
+  class FakeCtx {
+    constructor() {
+      this.state = state;
+      this.currentTime = 0;
+      this.sampleRate = 44100;
+      this.destination = node();
+      this.loops = []; // 시작된 BGM 소스(loop=true)
+    }
+    createGain() { return { ...node(), gain: param() }; }
+    createBuffer() { return {}; }
+    createBufferSource() {
+      const ctx = this;
+      return { ...node(), start() { if (this.loop) ctx.loops.push(this); }, stop() { this.stopped = true; } };
+    }
+    async decodeAudioData() { return { duration: 99 }; }
+    async resume() { this.state = 'running'; }
+    async suspend() { this.state = 'suspended'; }
+  }
+  globalThis.AudioContext = FakeCtx;
+  globalThis.fetch = async () => ({ ok: true, arrayBuffer: async () => new ArrayBuffer(0) });
+  const audio = new AudioManager();
+  audio.setBgmManifest(bgmManifest);
+  return audio;
+}
+
+test('playBgm: 같은 key를 다시 부르면 무시하고, 다른 곡이면 크로스페이드로 바꾼다', async () => {
+  stubStorage();
+  const audio = fakeAudio('running');
+  assert.equal(audio.playBgm('bgm_title', { fadeInMs: 1500 }), true);
+  await flush();
+  const ctx = audio._ctx;
+  assert.equal(ctx.loops.length, 1);
+  assert.equal(ctx.loops[0].loopEnd, bgmManifest.tracks.bgm_title.loopEndSec);
+  assert.equal(audio.playBgm('bgm_title'), false);
+  await flush();
+  assert.equal(ctx.loops.length, 1);
+
+  audio.playBgm('bgm_menu', { crossfadeMs: 1800 });
+  await flush();
+  assert.equal(ctx.loops.length, 2);
+  assert.equal(ctx.loops[0].stopped, true); // 이전 곡은 페이드아웃 끝에 멈춘다.
+  delete globalThis.AudioContext;
+});
+
+test('playBgm: suspended면 예약만 하고, unlock()의 resume 직후 마지막 예약 곡으로 시작한다', async () => {
+  stubStorage();
+  const audio = fakeAudio('suspended');
+  audio.playBgm('bgm_title', { fadeInMs: 1500 });
+  audio.playBgm('bgm_menu', { crossfadeMs: 1800 }); // 첫 터치 전 타이틀 -> 메뉴: 예약만 바뀐다.
+  await flush();
+  const ctx = audio._ctx;
+  assert.equal(ctx.loops.length, 0);
+  audio.unlock();
+  await flush();
+  assert.equal(ctx.loops.length, 1);
+  assert.equal(ctx.loops[0].loopEnd, bgmManifest.tracks.bgm_menu.loopEndSec);
+  delete globalThis.AudioContext;
+});
+
+test('bgmForScene: 타이틀/메뉴, 10·20층은 보스 곡, 나머지 층은 일반 곡', () => {
+  const load = (name) => JSON.parse(readFileSync(join(__dirname, '..', 'config', name), 'utf8'));
+  const [B, E, O, F] = ['balance.json', 'enemies.json', 'obstacles.json', 'floors.json'].map(load);
+  const floor = (f) => getFloor(B, E, O, F, f);
+  assert.equal(bgmForScene('title'), 'bgm_title');
+  assert.equal(bgmForScene('menu', floor(10)), 'bgm_menu');
+  assert.equal(bgmForScene('game', floor(10)), 'bgm_boss');
+  assert.equal(bgmForScene('game', floor(20)), 'bgm_boss');
+  for (const f of [1, 9, 11, 19, 21]) assert.equal(bgmForScene('game', floor(f)), 'bgm_battle', `floor ${f}`);
+  assert.equal(bgmForScene('shop'), null); // 메뉴 안 화면은 지금 곡을 잇는다.
 });

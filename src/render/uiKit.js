@@ -1,6 +1,17 @@
 // assets/ui/README.md의 drawNine/drawDamage를 그대로 구현한 공용 헬퍼.
 // CanvasRenderer/BattleRenderer가 공유한다 - 이미지 로드 실패 시 호출부가 폴백 도형을
 // 그리도록, 여기서는 이미지가 준비됐는지(uiReady)만 판단하고 그리기 자체는 실패하지 않는다.
+import { audio } from '../audio/AudioManager.js';
+
+const BUTTON_SOUND = { click: 'ui_click', cancel: 'ui_cancel', none: null };
+
+// 모든 캔버스 버튼의 공용 판정: rect 안이면 버튼음을 내고 true. sound: 'click'(기본) |
+// 'cancel'(취소/닫기/뒤로/팝업 X) | 'none'(전환음 등 자체 소리가 있는 버튼).
+export function pressButton(x, y, rect, sound = 'click') {
+  if (!rect || x < rect.x || x >= rect.x + rect.width || y < rect.y || y >= rect.y + rect.height) return false;
+  if (BUTTON_SOUND[sound]) audio.play(BUTTON_SOUND[sound]);
+  return true;
+}
 
 export function uiReady(state) {
   return !!(state && state.loaded && !state.failed);

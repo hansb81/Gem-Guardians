@@ -54,16 +54,19 @@ function computeSpriteTrim(img) {
 
 // 성공/실패 모두 "처리됨"으로 resolve한다(실패해도 진행률이 멈추지 않도록).
 // export: titleScreen.js도 같은 패턴으로 개별 이미지를 로드한다.
-export function loadImage(src) {
+// trim: 픽셀 전체를 스캔해서 비싸다(전체 에셋에 돌리면 로딩 8초) - 여백을 쓰는 적 스프라이트만 켠다.
+export function loadImage(src, trim = false) {
   return new Promise((resolve) => {
     const img = new Image();
     const state = { img, loaded: false, failed: false, topTrim: 0, leftTrim: 0, rightTrim: 0 };
     img.onload = () => {
       state.loaded = true;
-      const trim = computeSpriteTrim(img);
-      state.topTrim = trim.top;
-      state.leftTrim = trim.left;
-      state.rightTrim = trim.right;
+      if (trim) {
+        const t = computeSpriteTrim(img);
+        state.topTrim = t.top;
+        state.leftTrim = t.left;
+        state.rightTrim = t.right;
+      }
       resolve(state);
     };
     img.onerror = () => {
@@ -76,10 +79,38 @@ export function loadImage(src) {
 
 const GEM_VARIANTS = ['normal', 'line_h', 'line_v', 'bomb', 'box'];
 
+const hexToRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+
+// assets/skills/README.md "틴트 규칙" - 회색 마스크 4색을 ramp로 바꾼 캔버스(로드 시 1회).
+export function tintSheet(img, maskColors, ramp) {
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth;
+  c.height = img.naturalHeight;
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0);
+  const id = ctx.getImageData(0, 0, c.width, c.height);
+  const d = id.data;
+  const from = maskColors.map(hexToRgb);
+  const to = ramp.map(hexToRgb);
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i + 3] === 0) continue;
+    for (let k = 0; k < from.length; k++) {
+      if (d[i] === from[k][0] && d[i + 1] === from[k][1] && d[i + 2] === from[k][2]) {
+        d[i] = to[k][0];
+        d[i + 1] = to[k][1];
+        d[i + 2] = to[k][2];
+        break;
+      }
+    }
+  }
+  ctx.putImageData(id, 0, 0);
+  return c;
+}
+
 // onProgress(loadedCount, totalCount)를 받아 로드 진행률을 알려준다.
 // 반환값: CanvasRenderer.setAssets()에 그대로 꽂아 쓸 수 있는 형태.
 export async function loadAssets(onProgress) {
-  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest] = await Promise.all([
+  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest] = await Promise.all([
     fetchJson('assets/manifest.json'),
     fetchJson('assets/gems/manifest.json'),
     fetchJson('src/config/effects.json'),
@@ -94,6 +125,9 @@ export async function loadAssets(onProgress) {
     fetchJson('assets/backgrounds/manifest.json'),
     fetchJson('config/enemies.json'),
     fetchJson('assets/summon/manifest.json'),
+    fetchJson('assets/skills/manifest.json'),
+    fetchJson('assets/ui/shop/manifest.json'),
+    fetchJson('assets/ui/ranking/manifest.json'),
   ]);
 
   const jobs = [];
@@ -161,6 +195,20 @@ export async function loadAssets(onProgress) {
     uiManifest.assets[path] = meta;
     jobs.push({ bucket: 'ui', key: path, src: `assets/ui/${path}` });
   }
+  // 상점 아이콘(assets/ui/shop) - manifest.icons[name].src = "ui/shop/x.png" -> 키 "shop/x.png"(같은 uiImages).
+  for (const meta of Object.values(shopUiManifest.icons ?? {})) {
+    const path = meta.src.replace(/^ui\//, '');
+    uiManifest.assets[path] = meta;
+    jobs.push({ bucket: 'ui', key: path, src: `assets/${meta.src}` });
+  }
+  // 랭킹 팝업(assets/ui/ranking) - files[name] -> 키 "ranking/<name>.png". podium은 slice 5(사방),
+  // ribbon은 가로 3-slice(좌·우만) -> drawNine용 [l, t, r, b]로 바꿔 둔다.
+  for (const [name, meta] of Object.entries(rankingUiManifest.files ?? {})) {
+    const path = `ranking/${name}.png`;
+    const slice = meta.slice3h ? [meta.slice3h.left, 0, meta.slice3h.right, 0] : meta.slice ? [meta.slice, meta.slice, meta.slice, meta.slice] : undefined;
+    uiManifest.assets[path] = { ...meta, slice };
+    jobs.push({ bucket: 'ui', key: path, src: `assets/ui/${path}` });
+  }
   for (const [variant, relPath] of Object.entries(uiFont.variants ?? {})) {
     jobs.push({ bucket: 'uiFont', key: variant, src: `assets/ui/${relPath}` });
   }
@@ -204,6 +252,11 @@ export async function loadAssets(onProgress) {
     jobs.push({ bucket: 'summonAnim', key, src: `assets/summon/${anim.sheet}`, anim });
   }
 
+  // 젬 기술 v3 전투 이펙트(assets/skills). mask 시트(hit, gem_mini)는 아래 로드 콜백에서 5색 틴트.
+  for (const [key, anim] of Object.entries(skillManifest.anims ?? {})) {
+    jobs.push({ bucket: 'skillAnim', key, src: `assets/skills/${anim.sheet}`, anim });
+  }
+
   const gemImages = new Map();
   const gemAnims = new Map();
   const enemySprites = new Map(); // monster id -> 프레임 state[](순서대로, 로드 완료 순서가 아니라 anim.frames 순서).
@@ -218,6 +271,7 @@ export async function loadAssets(onProgress) {
   const bgSheets = new Map();
   const bgPlinths = new Map();
   const summonAnims = new Map();
+  const skillAnims = new Map();
   let gemColorImage = null;
 
   const total = jobs.length;
@@ -232,7 +286,7 @@ export async function loadAssets(onProgress) {
         onProgress?.(loaded, total);
         return;
       }
-      const state = await loadImage(job.src);
+      const state = await loadImage(job.src, job.bucket === 'enemyFrame');
       loaded += 1;
       onProgress?.(loaded, total);
       if (job.bucket === 'gem') gemImages.set(job.key, state);
@@ -297,7 +351,15 @@ export async function loadAssets(onProgress) {
         });
       } else if (job.bucket === 'bgSheet') bgSheets.set(job.key, state);
       else if (job.bucket === 'bgPlinth') bgPlinths.set(job.key, state);
-      else if (job.bucket === 'summonAnim') {
+      else if (job.bucket === 'skillAnim') {
+        const entry = { ...job.anim, state, tinted: null };
+        const tint = skillManifest.tint;
+        if (job.anim.mask && state.loaded && tint) {
+          entry.tinted = {};
+          for (const [color, ramp] of Object.entries(tint.ramps)) entry.tinted[color] = tintSheet(state.img, tint.maskColors, ramp);
+        }
+        skillAnims.set(job.key, entry);
+      } else if (job.bucket === 'summonAnim') {
         summonAnims.set(job.key, { state, frameW: job.anim.frameW, frameH: job.anim.frameH, frames: job.anim.frames });
       }
     })
@@ -339,6 +401,9 @@ export async function loadAssets(onProgress) {
     // 렌더는 그 경우 연출 없이 statue_idle로 바로 그린다.
     summonManifest,
     summonAnims,
+    // 젬 기술 이펙트(assets/skills/manifest.json) - battleRenderer의 SkillFx가 skills/colorEffects 규칙을 읽는다.
+    skillManifest,
+    skillAnims,
     // manifest.tileSize/bodySize/drawScale은 잼과 같은 규격(assets/obstacles/README.md) -
     // manifest 로드 실패 시에도 fallback 도형만 그리면 되므로 기본값을 그대로 둔다.
     obstacleTileSize: obstacleManifest.tileSize ?? 48,
@@ -346,4 +411,15 @@ export async function loadAssets(onProgress) {
     obstacleDrawScale: obstacleManifest.drawScale ?? 2,
     effectsConfig,
   };
+}
+
+// 하단 아이템 아이콘(assets/items/manifest.json의 icons[id].src, 14x14 - id = config/items.json 키)과
+// 망치 명중 번쩍(skills/sheets/hit.png). 실패한 항목은 failed 상태로 남고 렌더가 코드 도형으로 대체한다.
+export async function loadItemAssets(ids) {
+  const itemManifest = await fetchJson('assets/items/manifest.json');
+  const [hit, ...states] = await Promise.all([
+    loadImage('assets/skills/sheets/hit.png'),
+    ...ids.map((id) => loadImage(`assets/${itemManifest.icons?.[id]?.src ?? `items/${id}.png`}`)),
+  ]);
+  return { hit, icons: new Map(ids.map((id, i) => [id, states[i]])) };
 }

@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 랭킹 목업</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../../assets/fonts/Galmuri11.woff2') format('woff2'); }
+  :root {
+    /* assets/gems/palette.hex 25색 + characters.hex 보조 글자색(#a59cb2)만 */
+    --outline:#0d0a10; --bg1:#221c2b; --bg2:#3b3347; --bg3:#655a74; --bone:#e8dcc0; --dim:#a59cb2;
+    /* 동 = characters.hex 피부 2색 (금보다 붉고 탁함) */
+    --bronze:#d4a88c; --bronze-d:#8a5a4a;
+    --blue-d:#0c1838; --blue-m:#1c3a76; --blue:#386cbc; --blue-l:#8cc4ee;
+    --pur-d:#220e38; --pur-m:#48206e; --pur:#7a3cae; --pur-l:#c48ce6;
+    --red-d:#3a0814; --red-m:#741426; --red:#b82a3c; --red-l:#ec6a6a;
+    --brn-d:#3a2808; --brn-m:#7a5212; --gold:#c28a20; --gold-l:#f2d264;
+    --grn-d:#0c2814; --grn-m:#1c5228; --grn:#3a8a3c; --grn-l:#9cd872;
+    /* 반투명 대신 2px 체크무늬 디더 (상점 목업과 같음) */
+    --dither: conic-gradient(var(--outline) 25%, transparent 0 50%, var(--outline) 0 75%, transparent 0);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--outline); color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 11px; line-height: 14px; -webkit-font-smoothing: none; }
+  body { padding: 16px; }
+  img { image-rendering: pixelated; display: block; }
+  button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; text-align: left; }
+  button:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--blue-l); outline-offset: 2px; }
+  .t22 { font-size: 22px; line-height: 22px; }
+  .ol { text-shadow: 1px 0 var(--outline), -1px 0 var(--outline), 0 1px var(--outline), 0 -1px var(--outline); }
+  .ol2 { text-shadow: 2px 0 var(--outline), -2px 0 var(--outline), 0 2px var(--outline), 0 -2px var(--outline); }
+  .dim { color: var(--dim); }
+  .gl { color: var(--gold-l); }
+
+  /* ---------- 검토용 페이지 크롬 (게임 UI 아님) ---------- */
+  .toolbar { width: 540px; margin: 0 auto 10px; background: var(--bg1); border: 2px solid var(--bg2); padding: 10px; line-height: 18px; }
+  .toolbar h1 { font-size: 11px; color: var(--gold-l); }
+  .toolbar .vt { display: flex; gap: 6px; margin: 6px 0; }
+  .toolbar .vt button { padding: 8px 12px; border: 2px solid var(--bg3); background: var(--bg2); min-height: 36px; }
+  .toolbar .vt button.on { background: var(--pur); border-color: var(--gold-l); }
+  .dbg { position: fixed; right: 12px; bottom: 12px; width: 280px; background: var(--bg1); border: 2px solid var(--gold); z-index: 1000; line-height: 18px; }
+  .dbg > button { width: 100%; padding: 8px 10px; color: var(--gold-l); background: var(--bg2); }
+  .dbg .body { padding: 8px 10px; display: grid; gap: 6px; max-height: 75vh; overflow: auto; }
+  .dbg.closed .body { display: none; }
+  .dbg label { display: flex; align-items: center; gap: 6px; }
+  .dbg input[type=number], .dbg input[type=datetime-local] { font: inherit; background: var(--outline); color: var(--bone); border: 1px solid var(--bg3); padding: 2px 4px; }
+  .dbg input[type=number] { width: 90px; }
+  .dbg input[type=range] { flex: 1; }
+  .dbg .sep { color: var(--bg3); border-top: 1px solid var(--bg2); padding-top: 4px; }
+  .dbg .btns { display: flex; flex-wrap: wrap; gap: 4px; }
+  .dbg .btns button { padding: 4px 6px; border: 1px solid var(--bg3); background: var(--bg2); }
+  .dbg .clock { color: var(--blue-l); }
+  body.shot { padding: 0; }
+  body.shot .toolbar, body.shot .dbg { display: none; }
+  body.shot .device { border: 0; margin: 0; }
+
+  /* ---------- 디바이스 540x960 = 180x320 x3 ---------- */
+  .device { position: relative; width: 540px; height: 960px; margin: 0 auto; overflow: hidden; background: var(--bg1); border: 3px solid var(--bg2); box-sizing: content-box; }
+  .abs { position: absolute; }
+  .tempnote { position: absolute; right: 6px; bottom: 4px; color: var(--bg3); z-index: 90; pointer-events: none; }
+
+  /* ---------- 9-slice (원본 slice px → 화면 2배 border) ---------- */
+  .n { border-style: solid; border-color: transparent; border-image-repeat: stretch; image-rendering: pixelated; }
+  .n-plate { border-width: 16px; border-image-source: url('../../assets/ui/menu/plate.png'); border-image-slice: 8 fill; }
+  .n-inset { border-width: 8px; border-image-source: url('../../assets/ui/menu/inset.png'); border-image-slice: 4 fill; }
+  .n-pinset { border-width: 8px; border-image-source: url('../../assets/ui/panels/panel_inset.png'); border-image-slice: 4 fill; }
+  .n-iron { border-width: 16px; border-image-source: url('../../assets/ui/panels/panel_iron.png'); border-image-slice: 8 fill; }
+  .n-popup { border-width: 32px; border-image-source: url('../../assets/ui/menu/popup_menu.png'); border-image-slice: 16 fill; }
+  .n-body { border-width: 8px; border-image-source: url('../../assets/ui/upgrade/tab_body.png'); border-image-slice: 4 fill; }
+  .n-card { border-width: 8px; border-image-source: url('../../assets/ui/upgrade/card.png'); border-image-slice: 4 fill; }
+  .n-card.sel { border-image-source: url('../../assets/ui/upgrade/card_selected.png'); }
+  .n-tab { border-width: 12px 12px 6px 12px; border-image-slice: 6 6 3 6 fill; border-image-source: url('../../assets/ui/upgrade/tab_off.png'); }
+  .n-tab.on { border-image-source: url('../../assets/ui/upgrade/tab_on.png'); }
+  .n-play { border-width: 16px 28px 20px 28px; border-image-slice: 8 14 10 14 fill; border-image-source: url('../../assets/ui/menu/btn_play.png'); }
+  .n-btn { border-width: 8px 8px 10px 8px; border-image-slice: 4 4 5 4 fill; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--bone); text-align: center; }
+  .b-gold { border-image-source: url('../../assets/ui/buttons/btn_gold.png'); color: var(--outline); }
+  .b-primary { border-image-source: url('../../assets/ui/buttons/btn_primary.png'); }
+  .b-secondary { border-image-source: url('../../assets/ui/buttons/btn_secondary.png'); }
+  .b-disabled { border-image-source: url('../../assets/ui/upgrade/btn_disabled.png'); color: var(--bg3); cursor: default; }
+  .b-gold:active { border-image-source: url('../../assets/ui/buttons/btn_gold_pressed.png'); padding-top: 2px; }
+  .b-primary:active { border-image-source: url('../../assets/ui/buttons/btn_primary_pressed.png'); padding-top: 2px; }
+  .b-secondary:active { border-image-source: url('../../assets/ui/buttons/btn_secondary_pressed.png'); padding-top: 2px; }
+
+  /* 없는 그림 자리 = 팔레트 단색 사각형 + 짧은 라벨 */
+  .ph { display: inline-grid; place-items: center; flex: none; color: var(--outline); text-align: center; line-height: 11px; border: 2px solid var(--outline); white-space: nowrap; overflow: hidden; }
+
+  /* ---------- 화면 1: 메인 메뉴 (정지 화면) ---------- */
+  .menu-bg { position: absolute; left: 0; top: 0; width: 540px; height: 960px; }
+  .iconbtn { position: absolute; width: 48px; height: 48px; }
+  .iconbtn img { width: 48px; height: 48px; }
+  .badge { position: absolute; width: 16px; height: 16px; pointer-events: none; }
+  .bar .ic { position: absolute; top: 12px; width: 32px; height: 32px; }
+  .bar .box { position: absolute; top: 14px; height: 28px; display: flex; align-items: center; justify-content: flex-end; }
+  .bar .box span { position: relative; top: -1px; }
+  .bar .box.gain span { color: var(--grn-l); }
+  .play { position: absolute; left: 90px; top: 760px; width: 360px; height: 64px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+  .play img { width: 20px; height: 24px; }
+  .plate { position: absolute; display: grid; place-items: center; }
+  .plate span { position: relative; top: -1px; }
+  .crystal { position: absolute; left: 204px; top: 270px; width: 132px; height: 234px; }
+  .crystal.flash { outline: 4px solid var(--gold-l); outline-offset: -4px; }
+  .crystal.flash2 { outline: 4px solid var(--bone); outline-offset: -4px; }
+
+  /* ---------- 랭킹 팝업 틀 (보관함 정비 팝업과 같은 자리) ---------- */
+  .veil { position: absolute; inset: 0; background: var(--dither); background-size: 4px 4px; z-index: 40; }
+  .sheet { position: absolute; left: 12px; top: 96px; width: 516px; height: 816px; }
+  .emblem { position: absolute; left: 246px; top: 72px; width: 48px; height: 48px; }
+  .x { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; }
+  .x img { width: 32px; height: 32px; }
+  .x:active img { content: url('../../assets/ui/upgrade/btn_close_pressed.png'); }
+  .title { position: absolute; left: 86px; width: 368px; top: 136px; text-align: center; color: var(--gold-l); }
+  .tabs { position: absolute; left: 38px; top: 176px; width: 464px; height: 44px; display: flex; gap: 6px; z-index: 2; }
+  .tabs button { flex: 1; height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--bg3); }
+  .tabs button.on { color: var(--gold-l); height: 50px; }
+  .tabs img { width: 24px; height: 24px; }
+  .rbody { position: absolute; left: 38px; top: 220px; width: 464px; height: 666px; display: flex; flex-direction: column; gap: 6px; padding: 4px 0 0; }
+  .hdr { display: flex; flex-direction: column; gap: 4px; flex: none; }
+  .list { flex: 1; overflow-y: auto; scrollbar-width: none; position: relative; display: flex; flex-direction: column; gap: 4px; padding: 0 0 4px; }
+  .list::-webkit-scrollbar { display: none; }
+  .listfoot { min-height: 44px; display: grid; place-items: center; color: var(--dim); flex: none; }
+
+  /* 한 줄 */
+  .row { position: relative; height: 56px; display: flex; align-items: center; gap: 6px; padding: 0 2px; flex: none; }
+  .row .rk { width: 52px; flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .row .rk .ph { width: 28px; height: 28px; }
+  .row .stt { width: 32px; height: 40px; flex: none; }
+  .row .nm { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .vals { flex: none; text-align: right; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .row .vals .v { color: var(--gold-l); }
+  .row.me-in { scroll-margin: 40px; }
+  .row.blink { animation: blink .25s steps(1) 4; }
+  @keyframes blink { 50% { outline: 4px solid var(--bone); outline-offset: -4px; } }
+  /* 1~3위 줄 테두리 자리(금·은·동) - 9-slice 그림 대신 단색 */
+  .fr-1 { outline: 4px solid var(--gold-l); outline-offset: -4px; }
+  /* 은 = #e8dcc0 / #655a74 (+ 그림 단계에서 #8cc4ee 반사광 한두 점) */
+  .fr-2 { outline: 4px solid var(--bone); outline-offset: -4px; box-shadow: inset 0 0 0 6px var(--bg3); }
+  .fr-3 { outline: 4px solid var(--bronze); outline-offset: -4px; box-shadow: inset 0 0 0 6px var(--bronze-d); }
+  .metag { position: absolute; left: -2px; top: -6px; padding: 0 3px; background: var(--gold); color: var(--outline); border: 2px solid var(--outline); line-height: 12px; z-index: 1; }
+
+  /* 보상 구간 구분 줄 */
+  .divider { height: 28px; flex: none; display: flex; align-items: center; gap: 6px; color: var(--gold-l); white-space: nowrap; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 2px; background: var(--brn-m); }
+
+  /* 내 줄 (맨 아래 고정) */
+  .mine { flex: none; cursor: pointer; }
+  .mine .edit { width: 44px; height: 44px; flex: none; display: grid; place-items: center; margin-right: -4px; }
+  .mine .edit .ph { width: 24px; height: 24px; background: var(--bg3); color: var(--bone); }
+  .mine .go { height: 44px; padding: 0 12px; white-space: nowrap; }
+
+  /* 시안 1: 단상 */
+  .podium { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; align-items: end; height: 196px; flex: none; padding: 0 2px; }
+  .pcol { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; position: relative; cursor: pointer; }
+  .pcol .ph.medal { width: 28px; height: 28px; }
+  .pcol .stt { width: 32px; height: 40px; }
+  .pcol .pn { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pcol .pv { color: var(--gold-l); }
+  .pcol .step { width: 100%; display: grid; place-items: center; background: var(--bg2); border: 4px solid; }
+  .pcol .metag { left: 4px; top: 0; }
+
+  /* 시안 2: 머리글 내 정보 크게 */
+  .mebig { position: relative; height: 112px; display: flex; gap: 10px; align-items: center; padding: 0 4px; flex: none; cursor: pointer; }
+  .mebig .sbox { width: 56px; height: 64px; display: grid; place-items: center; flex: none; }
+  .mebig .sbox img { width: 32px; height: 40px; }
+  .mebig .info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .mebig .info .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mebig .side { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+  .mebig .edit { position: absolute; right: 2px; top: -4px; width: 44px; height: 44px; display: grid; place-items: center; }
+  .mebig .edit .ph { width: 24px; height: 24px; background: var(--bg3); color: var(--bone); }
+
+  /* 경쟁 탭 머리글 */
+  .last { height: 44px; display: flex; align-items: center; justify-content: space-between; padding: 0 8px; flex: none; }
+  .season { height: 32px; display: flex; align-items: center; gap: 6px; padding: 0 4px; flex: none; }
+  .season .ph { width: 24px; height: 24px; background: var(--blue-l); }
+  .season .tm { margin-left: auto; color: var(--gold-l); }
+  .tierrow { height: 64px; display: flex; align-items: center; gap: 8px; padding: 0 2px; flex: none; }
+  .tierrow .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+  .tierrow .n-btn { height: 44px; width: 112px; flex: none; }
+  .settle { flex: none; background: var(--red-m); border: 2px solid var(--outline); outline: 2px solid var(--red-l); outline-offset: -4px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .lockcover { position: absolute; left: 0; right: 0; bottom: 0; background: var(--dither); background-size: 4px 4px; display: grid; place-items: center; z-index: 5; }
+  .lockband { width: 420px; padding: 4px 6px; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+  .lockband img { width: 24px; height: 24px; }
+
+  /* ---------- 작은 팝업 ---------- */
+  .veil2 { position: absolute; inset: 0; background: var(--dither); background-size: 4px 4px; z-index: 70; }
+  .pop { position: absolute; left: 40px; width: 460px; }
+  .pop .ptitle { text-align: center; color: var(--gold-l); margin: -8px 0 12px; }
+  .pop .x { right: -24px; top: -24px; }
+  .pop p { line-height: 18px; }
+  .trow { height: 44px; display: flex; align-items: center; gap: 8px; padding: 0 4px; }
+  .trow .ph { width: 32px; height: 32px; }
+  .trow .crit { width: 120px; flex: none; }
+  .trow .rw { flex: 1; display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; white-space: nowrap; justify-content: flex-end; }
+  .rw img { width: 32px; height: 32px; }
+  .rw img.it { width: 28px; height: 28px; }
+  .trow.mytier { outline: 4px solid var(--gold-l); outline-offset: -2px; background: var(--brn-d); }
+  .hrow { height: 48px; display: flex; align-items: center; gap: 8px; padding: 0 4px; border-bottom: 2px solid var(--bg2); }
+  .hrow .ph { width: 32px; height: 32px; }
+  .nickin { width: 100%; height: 44px; font: inherit; font-size: 22px; background: transparent; border: 0; color: var(--bone); outline: none; }
+  .nbox { height: 60px; display: flex; align-items: center; padding: 0 6px; }
+  .picks { display: flex; gap: 8px; justify-content: space-between; margin: 8px 0 16px; }
+  .picks button { width: 72px; height: 80px; display: grid; place-items: center; }
+  .picks img { width: 32px; height: 40px; }
+  .acts { display: flex; gap: 10px; }
+  .acts .n-btn { flex: 1; height: 52px; }
+  .res { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .res .ribbon { width: 260px; height: 40px; background: var(--red-m); color: var(--bone); margin-top: -12px; }
+  .res .bigph { width: 64px; height: 64px; }
+  .res .rw { gap: 12px; justify-content: center; margin: 4px 0 8px; }
+  .rw > span { display: flex; align-items: center; gap: 4px; }
+  .toast { position: absolute; left: 60px; right: 60px; bottom: 150px; z-index: 80; padding: 2px 4px; text-align: center; display: none; }
+  .toast.open { display: block; }
+
+  /* 가이드: 44px 터치 영역 확인 */
+  .device.guides button, .device.guides [tabindex] { outline: 1px dashed var(--blue-l); outline-offset: -1px; }
+  @media (prefers-reduced-motion: reduce) { .row.blink { animation: none; } }
+</style>
+</head>
+<body>
+<div class="toolbar">
+  <h1>랭킹 목업 · 540x960 (180x320 x3) · 메뉴 봉인 원석 → 랭킹 팝업 · docs/ranking.md v1</h1>
+  <div class="vt" id="vt"></div>
+  <div id="vdesc"></div>
+</div>
+
+<div class="device" id="dev" role="application" aria-label="랭킹 목업"></div>
+
+<div class="dbg" id="dbg">
+  <button data-act="dbg">디버그 패널 ▾ (목업 전용)</button>
+  <div class="body">
+    <div class="btns" id="jump"></div>
+    <label>내 최고 층 <input type="range" min="1" max="150" data-k="floor"><span id="d-floor"></span></label>
+    <label>내 이번 주 점수 <input type="number" min="0" step="10" data-k="pts"></label>
+    <label>참가자 수(가짜) <input type="number" min="20" max="5000" step="10" data-k="N"></label>
+    <div class="sep">경쟁 탭 상태</div>
+    <label><input type="radio" name="cs" value="1" data-k="cs"> 1 평소</label>
+    <label><input type="radio" name="cs" value="2" data-k="cs"> 2 종료 10분 전 정산 대기</label>
+    <label><input type="radio" name="cs" value="3" data-k="cs"> 3 경쟁 모드 잠김</label>
+    <label><input type="radio" name="cs" value="4" data-k="cs"> 4 이번 주 아직 안 함</label>
+    <div class="sep">흐름</div>
+    <div class="btns">
+      <button data-act="dbgResult">지난 시즌 결과 팝업 띄우기</button>
+      <button data-act="dbgNick">닉네임 초기화</button>
+    </div>
+    <div class="sep">현재 시각 (KST) <span class="clock" id="d-clock"></span></div>
+    <label><input type="datetime-local" step="1" data-k="clock"></label>
+    <div class="btns">
+      <button data-act="clkEnd10">종료 10분 전</button>
+      <button data-act="clkEnd5s">종료 5초 전</button>
+      <button data-act="clkReal">실제 시각</button>
+    </div>
+    <div class="sep">보기</div>
+    <label><input type="checkbox" data-k="guides"> 터치 영역 표시</label>
+  </div>
+</div>
+
+<script>
+const A = '../../assets/';
+const IMG = {
+  gold: A + 'ui/icons/gold.png', dia: A + 'ui/icons/diamond.png', lock: A + 'ui/icons/lock.png', badge: A + 'ui/menu/badge.png',
+  close: A + 'ui/upgrade/btn_close.png', emblem: A + 'ui/popups/emblem_win.png', rainbow: A + 'items/rainbow.png', revive: A + 'items/revive.png',
+};
+const STATUES = ['red', 'blue', 'yellow', 'green', 'purple'];
+const STATUE_KO = { red: '레드', blue: '블루', yellow: '옐로우', green: '그린', purple: '퍼플' };
+const statueImg = (c, cls = 'stt') => `<img class="${cls}" src="${A}statues/${c}.png" alt="${STATUE_KO[c]} 석상">`;
+const fmt = n => Math.round(n).toLocaleString('en-US');
+const DAY = 86400e3, KST = 9 * 3600e3;
+
+// ---------- 목업 상태 ----------
+const S = {
+  v: 1, scene: 'menu', tab: 'normal', popup: '', cs: 1, floor: 16, pts: 4200, N: 1000,
+  nick: 'PixelKnight', statue: 'blue', pending: true, gold: 2400, dia: 120, guides: false, now: '',
+};
+// URL로 상태 덮어쓰기 (스크린샷용): ?v=2&scene=rank&tab=comp&popup=rewards&now=2026-11-06T10:39:55&shot=1
+const P = new URLSearchParams(location.search);
+for (const [k, val] of P) {
+  if (!(k in S)) continue;
+  const d = S[k];
+  S[k] = typeof d === 'number' ? Number(val) : typeof d === 'boolean' ? val === '1' || val === 'true' : val;
+}
+if (P.has('shot')) document.body.classList.add('shot');
+if (!P.has('dbgOpen')) document.getElementById('dbg').classList.add('closed');
+// 시계: 목업 시각 = 기준 시각 + 흐른 실제 시간. now 파라미터는 KST 벽시계 문자열.
+let clockBase = S.now ? Date.parse(S.now + '+09:00') : Date.now(), clockAt = Date.now();
+const now = () => clockBase + (Date.now() - clockAt);
+const setClock = ms => { clockBase = ms; clockAt = Date.now(); };
+const disp = { gold: S.gold, dia: S.dia };
+const flash = { crystal: 0 };
+
+// ---------- 시즌 (월요일 00:00 KST, KST = UTC+9 고정) ----------
+function seasonAt(ms) {
+  const d = new Date(ms + KST);
+  const mid = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+  const start = mid - ((d.getUTCDay() + 6) % 7) * DAY - KST; // 이번 주 월요일 00:00 KST (UTC ms)
+  const th = new Date(start + KST + 3 * DAY); // ISO 주차는 그 주 목요일의 해
+  const y = th.getUTCFullYear();
+  const week = 1 + Math.floor((th - Date.UTC(y, 0, 1)) / DAY / 7);
+  return { id: `${y}-W${String(week).padStart(2, '0')}`, week, start, end: start + 7 * DAY };
+}
+const prevSeason = s => seasonAt(s.start - 1);
+function remain(ms) {
+  const r = Math.max(0, Math.floor(ms / 1000));
+  const d = Math.floor(r / 86400), h = Math.floor(r / 3600) % 24, m = Math.floor(r / 60) % 60, s = r % 60;
+  const p = n => String(n).padStart(2, '0');
+  return (d ? d + '일 ' : '') + `${p(h)}:${p(m)}:${p(s)}`;
+}
+const kstDate = ms => { const d = new Date(ms + KST); return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`; };
+const kstInput = ms => new Date(ms + KST).toISOString().slice(0, 19);
+
+// ---------- 씨앗 RNG + 가짜 명단 ----------
+function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+function hash(s) { let h = 2166136261; for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619); return h >>> 0; }
+const KO1 = ['푸른', '붉은', '작은', '용감한', '달빛', '새벽', '은빛', '검은', '황금', '고요한', '번개', '숲속', '졸린', '전설의'];
+const KO2 = ['수호자', '기사', '마법사', '늑대', '곰', '여우', '용', '방패', '별', '원석', '탑지기', '고양이', '석상'];
+const EN1 = ['Gem', 'Rune', 'Iron', 'Moon', 'Star', 'Frost', 'Ember', 'Nova', 'Pixel', 'Lucky', 'Dark', 'Sky', 'Ruby'];
+const EN2 = ['Guard', 'Fox', 'Mage', 'Blade', 'Wolf', 'Lord', 'Cat', 'Bear', 'Owl', 'Rex'];
+const pick = (r, a) => a[Math.floor(r() * a.length)];
+function fakeNick(r) {
+  let s = r() < 0.55 ? pick(r, KO1) + pick(r, KO2) : pick(r, EN1) + pick(r, EN2);
+  if (r() < 0.35) s += Math.floor(r() * 99 + 1);
+  return s.slice(0, 10);
+}
+// 경쟁 점수 → 그 판 층 (가짜, 판 점수 공식의 대략적인 역)
+const ptsFloor = p => Math.max(1, Math.round(Math.sqrt(p) / 3.3));
+const NORMAL_EPOCH = Date.UTC(2026, 10, 8); // 일반 모드는 시즌이 없으니 고정 씨앗·고정 기준일
+const boards = new Map();
+// 같은 (모드, 시즌, 인원)이면 항상 같은 명단. 값은 파레토 분포(긴 꼬리: 대부분 낮고 위로 갈수록 드묾).
+function fakeBoard(mode, seasonId, N) {
+  const key = mode + seasonId + N;
+  if (boards.has(key)) return boards.get(key);
+  const r = rng(hash(mode + ':' + seasonId));
+  const s = mode === 'comp' ? seasonAt(Date.parse(seasonId.slice(0, 4) + '-01-04T00:00:00Z') + (Number(seasonId.slice(6)) - 1) * 7 * DAY) : null;
+  const out = [];
+  for (let i = 0; i < N; i++) {
+    const nickname = fakeNick(r), statue = pick(r, STATUES);
+    if (mode === 'normal') out.push({ nickname, statue, value: Math.min(150, Math.floor(8 * Math.pow(1 - r(), -1 / 2.2))), at: NORMAL_EPOCH - Math.floor(r() * 200 * DAY) });
+    else { const value = Math.min(38000, Math.round(1800 * Math.pow(1 - r(), -1 / 2.2) / 10) * 10); out.push({ nickname, statue, value, sub: ptsFloor(value), at: s.start + Math.floor(r() * 6.9 * DAY) }); }
+  }
+  boards.set(key, out);
+  return out;
+}
+// 순위표 = 가짜 + 나. 정렬: 값 큰 순, 같으면 먼저 낸 사람.
+function ranked(mode, seasonId, me) {
+  const all = fakeBoard(mode, seasonId, S.N).slice();
+  if (me) all.push(me);
+  all.sort((a, b) => b.value - a.value || a.at - b.at);
+  all.forEach((e, i) => (e.rank = i + 1));
+  return all;
+}
+const pctOf = (rank, total) => Math.max(1, Math.ceil(rank / total * 100));
+
+// ---------- 보상 구간 (기획서 5-3 그대로, 숫자 임시) ----------
+const goldReward = () => 3 * Math.round(120 * Math.pow(1.035, S.floor - 1) / 10) * 10; // 최고 층 일반 층 3개 분량 (가짜 공식)
+const TIERS = [
+  { id: 'r1', label: '1위', rank: 1, rw: [['dia', 500], ['rainbow', 5]], badge: 'var(--gold-l)', b: '1위', extra: '주간 수호왕 칭호 + 금 왕관 테두리' },
+  { id: 'r2', label: '2위', rank: 2, rw: [['dia', 400], ['rainbow', 3]], badge: 'var(--bone)', b: '2위', extra: '은 왕관 테두리' },
+  { id: 'r3', label: '3위', rank: 3, rw: [['dia', 300], ['rainbow', 2]], badge: 'var(--bronze)', b: '3위', extra: '동 왕관 테두리' },
+  { id: 'r10', label: '4~10위', rank: 10, rw: [['dia', 200], ['revive', 1]], badge: 'var(--gold)', b: '10', extra: '금 테두리' },
+  { id: 'r50', label: '11~50위', rank: 50, rw: [['dia', 150]], badge: 'var(--pur-l)', b: '50' },
+  { id: 'p1', label: '상위 1%', pct: 1, rw: [['dia', 120]], badge: 'var(--blue-l)', b: '1%' },
+  { id: 'p5', label: '상위 5%', pct: 5, rw: [['dia', 80]], badge: 'var(--blue)', b: '5%' },
+  { id: 'p10', label: '상위 10%', pct: 10, rw: [['dia', 60]], badge: 'var(--grn-l)', b: '10%' },
+  { id: 'p30', label: '상위 30%', pct: 30, rw: [['dia', 40]], badge: 'var(--grn)', b: '30%' },
+  { id: 'p50', label: '상위 50%', pct: 50, rw: [['dia', 25]], badge: 'var(--bg3)', b: '50%' },
+  { id: 'part', label: '참여', pct: 100, crit: '1판 이상', rw: [['dia', 10], ['gold', 0]], badge: 'var(--bg2)', b: '참여' },
+];
+// 순위 구간과 비율 구간이 겹치면 더 좋은 쪽 하나만 = 표 위쪽부터 처음 맞는 것.
+const tierOf = (rank, total) => TIERS.find(t => t.rank ? rank <= t.rank : rank <= Math.ceil(total * t.pct / 100));
+const rwName = { dia: '다이아', rainbow: '무지개', revive: '부활', gold: '골드' };
+const rwAmt = ([k, n]) => k === 'gold' ? goldReward() : n;
+const rwText = t => t.rw.map(r => `${rwName[r[0]]} ${fmt(rwAmt(r))}`).join(' + ');
+const rwIcons = (t, big) => t.rw.map(r => `<span>${r[0] === 'dia' || r[0] === 'gold' ? `<img src="${IMG[r[0]]}" alt="${rwName[r[0]]}">` : `<img class="it" src="${IMG[r[0]]}" alt="${rwName[r[0]]}">`}<span class="${big ? 't22 ' : ''}ol">${fmt(rwAmt(r))}</span></span>`).join('');
+const badgePh = (t, size = 32) => `<span class="ph" style="width:${size}px;height:${size}px;background:${t.badge}" title="구간 배지 자리">${t.b}</span>`;
+
+// ---------- 내 기록 ----------
+const MY_REACHED = Date.UTC(2026, 10, 5, 3, 12);
+const lockedComp = () => S.cs === 3;
+const noRecord = () => S.cs === 4 || S.pts <= 0;
+const myNormal = () => ({ me: true, nickname: S.nick || '나', statue: S.statue, value: S.floor, at: MY_REACHED });
+const myComp = () => noRecord() ? null : { me: true, nickname: S.nick || '나', statue: S.statue, value: S.pts, sub: ptsFloor(S.pts), at: seasonAt(now()).start + 2 * DAY };
+const overrides = {}; // 시즌 경계를 넘을 때 내 점수로 확정된 시즌
+const seededPts = id => overrides[id] ?? Math.round((2000 + rng(hash('me:' + id))() * 14000) / 10) * 10;
+function settle(season) {
+  const pts = seededPts(season.id);
+  const list = ranked('comp', season.id, { me: true, value: pts, at: season.start + DAY });
+  const rank = list.find(e => e.me).rank, total = list.length;
+  return { season, pts, rank, pct: pctOf(rank, total), tier: tierOf(rank, total) };
+}
+
+// ---------- 화면 그리기 ----------
+const dev = document.getElementById('dev');
+let listScroll = 0;
+
+function render() {
+  const keep = dev.querySelector('.list');
+  if (keep) listScroll = keep.scrollTop;
+  dev.className = 'device' + (S.guides ? ' guides' : '');
+  dev.innerHTML = menuHtml() + (S.scene === 'rank' ? rankHtml() : '') + popupHtml()
+    + `<div class="toast n n-iron" id="toast" role="status" aria-live="polite"></div><span class="tempnote">※ 숫자·이름은 전부 임시</span>`;
+  const l = dev.querySelector('.list');
+  if (l) l.scrollTop = listScroll;
+  syncToolbar(); syncDebug(); tick();
+}
+
+function menuHtml() {
+  const icon = (id, x, y, badge) => `<button class="iconbtn" style="left:${x}px;top:${y}px" aria-label="${id}"><img src="${A}ui/menu/btn_${id}.png" alt=""></button>${badge ? `<img class="badge" src="${IMG.badge}" style="left:${x + 36}px;top:${y - 4}px" alt="">` : ''}`;
+  const plate = (x, y, w, h, text, dot, act) => `<button class="plate n n-plate" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px" ${act ? `data-act="${act}"` : ''} aria-label="${text}${dot ? ', 받을 보상 있음' : ''}"><span class="ol" style="font-size:18px;line-height:18px">${text}</span></button>${dot ? `<img class="badge" src="${IMG.badge}" style="left:${x + w - 10}px;top:${y - 6}px" alt="">` : ''}`;
+  return `<img class="menu-bg" src="${A}menu/menu_bg.png" alt="">
+    <div class="abs n n-plate" style="left:154px;top:28px;width:232px;height:56px"></div>
+    <div class="abs bar" style="left:154px;top:28px;width:232px;height:56px" aria-label="재화">
+      <img class="ic" style="left:18px" src="${IMG.gold}" alt="골드">
+      <div class="box n n-inset" id="box-gold" style="left:50px;width:72px"><span class="ol" id="v-gold">${fmt(disp.gold)}</span></div>
+      <img class="ic" style="left:132px" src="${IMG.dia}" alt="다이아">
+      <div class="box n n-inset" id="box-dia" style="left:162px;width:62px"><span class="ol" id="v-dia">${fmt(disp.dia)}</span></div>
+    </div>
+    ${icon('attendance', 20, 28, true)}${icon('event', 20, 92, true)}${icon('settings', 472, 28)}${icon('shop', 472, 92)}
+    <button class="crystal ${flash.crystal === 1 ? 'flash' : flash.crystal === 2 ? 'flash2' : ''}" data-act="openRank" aria-label="랭킹 열기 (봉인 원석)"></button>
+    ${plate(214, 466, 112, 36, '랭킹', S.pending, 'openRank')}
+    ${plate(214, 648, 112, 36, '보관함', false, '')}
+    <button class="play n n-play" aria-label="플레이"><img src="${A}ui/menu/play_glyph.png" alt=""><span class="t22 ol">플레이</span></button>`;
+}
+
+function rankHtml() {
+  const comp = S.tab === 'comp';
+  return `<div class="veil"></div><div class="veil" style="background:none">
+    <div class="sheet n n-popup"></div>
+    <img class="emblem" src="${IMG.emblem}" alt="" title="랭킹 문장 자리(emblem_win 임시)">
+    <div class="title t22 ol2">랭킹</div>
+    <button class="x" style="left:476px;top:104px" data-act="closeRank" aria-label="닫기"><img src="${IMG.close}" alt=""></button>
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="${!comp}" class="n n-tab ${comp ? '' : 'on'}" data-act="tab" data-v="normal"><span class="t22 ol">일반 모드</span></button>
+      <button role="tab" aria-selected="${comp}" class="n n-tab ${comp ? 'on' : ''}" data-act="tab" data-v="comp">${lockedComp() ? `<img src="${IMG.lock}" alt="잠김">` : ''}<span class="t22 ol">경쟁 모드</span></button>
+    </div>
+    <div class="rbody n n-body">${comp ? compBody() : normalBody()}</div>
+  </div>`;
+}
+
+// 한 줄: 순위 · 석상 · 닉네임 · 값 · 작은 글씨
+function rowHtml(e, mode, opts = {}) {
+  const top = e.rank <= 3;
+  const val = mode === 'normal' ? `${e.value}층` : `${fmt(e.value)} P`;
+  const sub = mode === 'normal' ? kstDate(e.at) : `${e.sub}층`;
+  const rk = opts.outside
+    ? `<span class="dim">상위</span><span class="t22 ol">${opts.outside}%</span>`
+    : opts.none ? `<span class="t22 dim">-</span>`
+    : top ? `<span class="ph" style="background:${['', 'var(--gold-l)', 'var(--bone)', 'var(--bronze)'][e.rank]}" title="메달 자리">${e.rank}</span>`
+    : `<span class="t22 ol">${e.rank}</span>`;
+  const cls = `row n n-card${e.me ? ' sel' : ''}${top && !opts.fixed ? ' fr-' + e.rank : ''}${e.me && !opts.fixed ? ' me-in' : ''}`;
+  const right = opts.go ? `<button class="go n n-btn b-primary" data-act="goComp"><span class="ol">경쟁 모드 하러 가기</span></button>`
+    : opts.none ? `<div class="vals"><span class="dim">기록 없음</span></div>`
+    : `<div class="vals"><span class="v t22 ol">${val}</span><span class="dim">${sub}</span></div>`;
+  return `<div class="${cls}" ${e.me && !opts.fixed ? 'id="me-in"' : ''} ${opts.fixed ? `tabindex="0" data-act="toMe" aria-label="내 순위, 눌러서 목록에서 찾기"` : ''}>
+    ${e.me && !opts.fixed ? '<span class="metag">나</span>' : ''}
+    <div class="rk">${rk}</div>${statueImg(e.statue)}<span class="nm t22 ol">${e.nickname}</span>${right}
+    ${opts.fixed ? `<button class="edit" data-act="editNick" aria-label="닉네임 바꾸기"><span class="ph" title="연필 아이콘 자리">연필</span></button>` : ''}</div>`;
+}
+
+function podiumHtml(list, mode) {
+  const H = { 1: 72, 2: 52, 3: 40 }, FR = { 1: 'var(--gold-l)', 2: 'var(--bone)', 3: 'var(--bronze)' };
+  return `<div class="podium">${[2, 1, 3].map(r => {
+    const e = list[r - 1];
+    return `<div class="pcol" ${e.me ? 'id="me-in"' : ''}>${e.me ? '<span class="metag">나</span>' : ''}
+      <span class="ph medal" style="background:${FR[r]}" title="메달 자리">${r}</span>${statueImg(e.statue)}
+      <span class="pn ol">${e.nickname}</span><span class="pv t22 ol">${mode === 'normal' ? e.value + '층' : fmt(e.value) + ' P'}</span>
+      <div class="step" style="height:${H[r]}px;border-color:${FR[r]}" title="단상 자리"><span class="t22 ol">${r}</span></div></div>`;
+  }).join('')}</div>`;
+}
+
+// 목록 = 1~100위 (시안 1은 1~3위를 단상으로). 경쟁 탭은 보상 구간이 바뀌는 곳마다 구분 줄.
+function listHtml(list, mode) {
+  const total = list.length;
+  let out = S.v === 1 ? podiumHtml(list, mode) : '';
+  let prev = null;
+  for (const e of list.slice(S.v === 1 ? 3 : 0, 100)) {
+    if (mode === 'comp') {
+      const t = tierOf(e.rank, total);
+      if (t !== prev && e.rank > 3) out += `<div class="divider" role="separator">${t.label} · ${rwText(t)}</div>`;
+      prev = t;
+    }
+    out += rowHtml(e, mode);
+  }
+  return out + `<div class="listfoot">1~100위까지 보여요 · 참가 ${fmt(total)}명</div>`;
+}
+
+function myState(list) {
+  const me = list.find(e => e.me);
+  return me && { me, outside: me.rank > 100 ? pctOf(me.rank, list.length) : 0 };
+}
+
+// 시안 2 머리글: 내 정보 크게 (이 카드가 "내 줄" 역할 - 눌러서 목록에서 찾기)
+function meBigHtml(mode, list) {
+  const m = myState(list);
+  const rankLine = !m ? `<span class="t22 dim">기록 없음</span>`
+    : m.outside ? `<span class="t22 gl ol">상위 ${m.outside}%</span> <span class="dim">(${fmt(m.me.rank)}위)</span>`
+    : `<span class="t22 gl ol">${m.me.rank}위</span>`;
+  const valLine = !m ? '' : mode === 'normal' ? `<span class="t22 ol">${S.floor}층</span> <span class="dim">· ${kstDate(MY_REACHED)} 도달</span>`
+    : `<span class="t22 ol">${fmt(S.pts)} P</span> <span class="dim">· ${ptsFloor(S.pts)}층</span>`;
+  const t = m && tierOf(m.me.rank, list.length);
+  const side = mode !== 'comp' ? '' : m ? `<div class="side">${badgePh(t, 48)}<span class="ol">${t.label}</span></div>`
+    : `<div class="side"><button class="go n n-btn b-primary" style="height:44px;padding:0 10px" data-act="goComp"><span class="ol">하러 가기</span></button></div>`;
+  return `<div class="mebig n n-card sel" tabindex="0" data-act="toMe" aria-label="내 정보, 눌러서 목록에서 찾기">
+    <div class="sbox n n-pinset">${statueImg(S.statue, '')}</div>
+    <div class="info"><span class="nm t22 ol" style="padding-right:40px">${S.nick || '나'}</span><div>${rankLine}</div><div>${valLine}</div></div>${side}
+    <button class="edit" data-act="editNick" aria-label="닉네임 바꾸기"><span class="ph" title="연필 아이콘 자리">연필</span></button></div>`;
+}
+
+function fixedMine(mode, list) {
+  const m = myState(list);
+  if (!m) return rowHtml({ me: true, nickname: S.nick || '나', statue: S.statue }, mode, { fixed: true, none: true, go: true });
+  return rowHtml(m.me, mode, { fixed: true, outside: m.outside });
+}
+
+function normalBody() {
+  const list = ranked('normal', 'all', myNormal());
+  return (S.v === 2 ? `<div class="hdr">${meBigHtml('normal', list)}</div>` : '')
+    + `<div class="list" aria-label="일반 모드 순위, 최고 도달 층">${listHtml(list, 'normal')}</div>`
+    + (S.v === 1 ? fixedMine('normal', list) : '');
+}
+
+function compBody() {
+  const s = seasonAt(now());
+  const list = ranked('comp', s.id, myComp());
+  const last = settle(prevSeason(s));
+  const settling = S.cs === 2 || s.end - now() <= 10 * 60e3;
+  const m = myState(list);
+  let tierRow = '';
+  if (S.v === 1) {
+    if (!m) tierRow = `<div class="tierrow n n-pinset">${badgePh(TIERS.at(-1))}<div class="txt"><span class="ol">아직 참여 전</span><span class="dim">1판만 해도 참여 보상</span></div><button class="n n-btn b-secondary" data-act="pop" data-v="rewards"><span class="ol">보상 보기</span></button></div>`;
+    else {
+      const t = tierOf(m.me.rank, list.length);
+      tierRow = `<div class="tierrow n n-pinset">${badgePh(t)}<div class="txt"><span class="ol">내 구간 <span class="gl">${t.label}</span></span><span class="dim">${nextTierText(list, m.me)}</span></div><button class="n n-btn b-secondary" data-act="pop" data-v="rewards"><span class="ol">보상 보기</span></button></div>`;
+    }
+  }
+  const hdr = `<div class="hdr">
+    <button class="last n n-card" data-act="pop" data-v="history"><span class="ol">지난 시즌 <span class="gl">${last.rank}위</span> · 상위 ${last.pct}%</span><span class="dim">최근 8주 ›</span></button>
+    <div class="season"><span class="ph" title="타이머 아이콘 자리">시계</span><span class="ol">${s.week}주차 시즌 · 종료까지</span><span class="tm t22 ol" id="timer">${remain(s.end - now())}</span></div>
+    ${settling ? `<div class="settle" role="status"><span class="ol">정산 대기 · 곧 이번 시즌이 끝나요</span><span class="ol" style="color:var(--bone)">지금 끝난 판도 이번 시즌에 들어가요 · 순위는 계속 보임</span></div>` : ''}
+    ${S.v === 2 ? meBigHtml('comp', list) + (m ? `<div class="season"><span class="dim">${nextTierText(list, m.me)}</span><button class="n n-btn b-secondary" style="margin-left:auto;height:44px;width:112px" data-act="pop" data-v="rewards"><span class="ol">보상 보기</span></button></div>` : `<div class="season"><span class="dim">1판만 해도 참여 보상</span><button class="n n-btn b-secondary" style="margin-left:auto;height:44px;width:112px" data-act="pop" data-v="rewards"><span class="ol">보상 보기</span></button></div>`) : tierRow}
+  </div>`;
+  const body = `<div class="list" aria-label="경쟁 모드 순위, 이번 주 포인트">${listHtml(list, 'comp')}</div>` + (S.v === 1 ? fixedMine('comp', list) : '');
+  if (!lockedComp()) return hdr + body;
+  return hdr + `<div style="flex:1;position:relative;display:flex;flex-direction:column;gap:6px;min-height:0">${body}
+    <div class="lockcover" style="top:0"><div class="lockband n n-iron"><img src="${IMG.lock}" alt=""><span class="t22 ol gl">잠김</span><span class="ol">해금 조건: 추가 예정 (예: 20층 도달)</span><span class="dim">순위표는 미리 볼 수 있어요</span></div></div></div>`;
+}
+
+// 바로 위 구간의 마지막 사람을 넘기려면 몇 P 필요한지 (동점이면 먼저 낸 사람이 위라서 +10)
+function nextTierText(list, me) {
+  const total = list.length, cur = tierOf(me.rank, total);
+  if (me.rank === 1) return '1위 지키는 중';
+  for (let r = me.rank - 1; r >= 1; r--) {
+    const t = tierOf(r, total);
+    if (t !== cur) return `다음 구간(${t.label})까지 ${fmt(list[r - 1].value - me.value + 10)} P`;
+  }
+  return '';
+}
+
+// ---------- 작은 팝업 ----------
+function popupHtml() {
+  if (!S.popup) return '';
+  const X = (act = 'closePop') => `<button class="x" data-act="${act}" aria-label="닫기"><img src="${IMG.close}" alt=""></button>`;
+  if (S.popup === 'rewards') {
+    const s = seasonAt(now()), list = ranked('comp', s.id, myComp()), m = myState(list);
+    const mine = m && tierOf(m.me.rank, list.length);
+    return `<div class="veil2"><div class="pop n n-popup" style="top:120px">${X()}
+      <div class="ptitle t22 ol2">경쟁 보상</div>
+      <div class="dim" style="margin:0 4px 6px">${s.week}주차 · 매주 월요일 00:00 정산 · 참가 ${fmt(list.length)}명</div>
+      ${TIERS.map(t => `<div class="trow${t === mine ? ' mytier' : ''}">${badgePh(t)}<span class="crit ol">${t.label}${t.crit ? ` <span class="dim">${t.crit}</span>` : ''}${t === mine ? ' <span class="gl">◀ 나</span>' : ''}</span><span class="rw">${rwIcons(t)}</span></div>`).join('')}
+      <p class="dim" style="margin-top:8px">순위·비율이 겹치면 더 좋은 쪽 하나만 · 1~3위 왕관 테두리, 4~10위 금 테두리는 다음 시즌 동안</p>
+    </div></div>`;
+  }
+  if (S.popup === 'history') {
+    let s = prevSeason(seasonAt(now()));
+    const rows = [];
+    for (let i = 0; i < 8; i++, s = prevSeason(s)) {
+      const r = settle(s);
+      rows.push(`<div class="hrow">${badgePh(r.tier)}<span class="ol" style="width:64px">${s.week}주차</span><span class="t22 gl ol" style="width:80px">${r.rank}위</span><span class="ol">상위 ${r.pct}%</span><span class="dim" style="margin-left:auto">${fmt(r.pts)} P</span></div>`);
+    }
+    return `<div class="veil2"><div class="pop n n-popup" style="top:180px">${X()}<div class="ptitle t22 ol2">최근 8주 기록</div>${rows.join('')}</div></div>`;
+  }
+  if (S.popup === 'result') {
+    const r = settle(prevSeason(seasonAt(now())));
+    return `<div class="veil2"><div class="pop n n-popup" style="top:250px;left:60px;width:420px"><div class="res">
+      <span class="ph ribbon" title="시즌 결과 리본 자리">${r.season.week}주차 시즌 결과</span>
+      ${badgePh(r.tier, 64).replace('class="ph"', 'class="ph bigph"')}
+      <span class="t22 gl ol2">${r.rank}위 · 상위 ${r.pct}%</span>
+      <span class="ol">${r.tier.label} 구간 · ${fmt(r.pts)} P</span>
+      <div class="rw">${rwIcons(r.tier, true)}</div>
+      <button class="n n-btn b-gold" style="width:100%;height:52px" data-act="claim"><span class="t22">받기</span></button>
+    </div></div></div>`;
+  }
+  if (S.popup === 'nick') {
+    const first = !S.nick;
+    const v = nickDraft, ok = /^[가-힣A-Za-z0-9]{2,10}$/.test(v);
+    const err = !v ? '' : v.length > 10 ? '10자까지 쓸 수 있어요' : v.length < 2 ? '2자 이상 써 주세요' : !ok ? '한글·영문·숫자만 쓸 수 있어요' : '';
+    return `<div class="veil2"><div class="pop n n-popup" style="top:200px">${X()}
+      <div class="ptitle t22 ol2">${first ? '랭킹에 쓸 이름' : '이름 바꾸기'}</div>
+      <label for="nickin" class="ol" style="display:flex;justify-content:space-between;margin:0 4px 4px"><span>닉네임 <span class="dim">2~10자 · 한글·영문·숫자</span></span><span class="dim" id="ncount">${[...v].length}/10</span></label>
+      <div class="nbox n n-pinset"><input id="nickin" class="nickin" maxlength="12" autocomplete="off" value="${v.replace(/"/g, '&quot;')}" placeholder="이름 입력" aria-describedby="nerr"></div>
+      <p id="nerr" style="color:var(--red-l);height:18px;margin:4px">${err}</p>
+      <div class="ol" style="margin:4px 4px 0">대표 석상</div>
+      <div class="picks" role="radiogroup" aria-label="대표 석상">${STATUES.map(c => `<button role="radio" aria-checked="${c === statueDraft}" class="n n-card${c === statueDraft ? ' sel' : ''}" data-act="pickStatue" data-v="${c}">${statueImg(c, '')}</button>`).join('')}</div>
+      <div class="acts"><button class="n n-btn ${ok ? 'b-gold' : 'b-disabled'}" data-act="saveNick" ${ok ? '' : 'aria-disabled="true"'}><span class="t22">저장</span></button></div>
+      ${first ? '<p class="dim" style="margin-top:8px;text-align:center">나중에 랭킹 내 줄의 연필 버튼으로 바꿀 수 있어요</p>' : ''}
+    </div></div>`;
+  }
+  return '';
+}
+let nickDraft = '', statueDraft = 'blue';
+
+// ---------- 동작 ----------
+function toast(text) {
+  const t = document.getElementById('toast');
+  t.innerHTML = `<span class="ol">${text}</span>`;
+  t.classList.add('open');
+  clearTimeout(toast.h); toast.h = setTimeout(() => t.classList.remove('open'), 1600);
+}
+function openNick() { nickDraft = S.nick; statueDraft = S.statue; S.popup = 'nick'; render(); setTimeout(() => document.getElementById('nickin')?.focus(), 0); }
+function openRank() {
+  // 원석이 잠깐 밝아짐(목업: 테두리 2번 깜빡임) → 팝업. 처음이면 닉네임 먼저.
+  let n = 0;
+  const step = () => {
+    flash.crystal = n < 4 ? (n % 2 ? 2 : 1) : 0;
+    render();
+    if (n++ < 4) return setTimeout(step, 70);
+    if (!S.nick) return openNick();
+    S.scene = 'rank'; listScroll = 0; render();
+  };
+  step();
+}
+function scrollToMe() {
+  const l = dev.querySelector('.list'), me = document.getElementById('me-in');
+  if (!l) return;
+  if (!me) { l.scrollTo({ top: l.scrollHeight, behavior: 'smooth' }); return toast(noRecord() && S.tab === 'comp' ? '이번 주 기록이 없어요' : '100위 밖이에요 · 내 줄에 상위 %로 표시'); }
+  l.scrollTo({ top: me.offsetTop - l.clientHeight / 2 + me.offsetHeight / 2, behavior: 'smooth' });
+  me.classList.remove('blink'); void me.offsetWidth; me.classList.add('blink');
+}
+function claim() {
+  const r = settle(prevSeason(seasonAt(now())));
+  const add = { dia: 0, gold: 0 };
+  for (const rw of r.tier.rw) if (rw[0] in add) add[rw[0]] += rwAmt(rw);
+  const from = { ...disp }, to = { gold: S.gold + add.gold, dia: S.dia + add.dia };
+  S.gold = to.gold; S.dia = to.dia; S.pending = false; S.popup = ''; S.scene = 'menu';
+  render();
+  const items = r.tier.rw.filter(x => x[0] === 'rainbow' || x[0] === 'revive');
+  if (items.length) toast(items.map(x => `${rwName[x[0]]} ×${x[1]}`).join(', ') + ' → 보관함');
+  // 보상이 재화로 날아가는 느낌 = 목업은 숫자 증가만 (0.8초)
+  const t0 = performance.now();
+  for (const k of ['gold', 'dia']) document.getElementById('box-' + k).classList.toggle('gain', add[k] > 0);
+  const anim = t => {
+    const p = Math.min(1, (t - t0) / 800);
+    for (const k of ['gold', 'dia']) { disp[k] = from[k] + (to[k] - from[k]) * p; const el = document.getElementById('v-' + k); if (el) el.textContent = fmt(disp[k]); }
+    if (p < 1) requestAnimationFrame(anim);
+    else for (const k of ['gold', 'dia']) document.getElementById('box-' + k)?.classList.remove('gain');
+  };
+  requestAnimationFrame(anim);
+}
+
+dev.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b) return;
+  const a = b.dataset.act, v = b.dataset.v;
+  if (a === 'editNick') { e.stopPropagation(); return openNick(); }
+  if (a === 'openRank') return openRank();
+  if (a === 'closeRank') { S.scene = 'menu'; return render(); }
+  if (a === 'tab') { S.tab = v; listScroll = 0; render(); if (v === 'comp' && lockedComp()) toast('경쟁 모드는 아직 잠겨 있어요'); return; }
+  if (a === 'toMe') return scrollToMe();
+  if (a === 'pop') { S.popup = v; return render(); }
+  if (a === 'closePop') { if (S.popup === 'result') return; S.popup = ''; return render(); }
+  if (a === 'claim') return claim();
+  if (a === 'goComp') { e.stopPropagation(); return toast('경쟁 모드 시작 (목업: 이동 없음)'); }
+  if (a === 'pickStatue') { statueDraft = v; return render(); }
+  if (a === 'saveNick') {
+    if (!/^[가-힣A-Za-z0-9]{2,10}$/.test(nickDraft)) return;
+    const first = !S.nick;
+    S.nick = nickDraft; S.statue = statueDraft; S.popup = '';
+    if (first) { S.scene = 'rank'; listScroll = 0; }
+    render(); return toast('저장했어요');
+  }
+});
+dev.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset?.act === 'toMe') { e.preventDefault(); scrollToMe(); } });
+dev.addEventListener('input', e => {
+  if (e.target.id !== 'nickin') return;
+  nickDraft = e.target.value.trim();
+  const pos = e.target.selectionStart, composing = e.isComposing;
+  if (composing) return; // 한글 조합 중에는 다시 그리지 않음
+  render();
+  const i = document.getElementById('nickin'); i.focus(); i.setSelectionRange(pos, pos);
+});
+dev.addEventListener('compositionend', e => { if (e.target.id === 'nickin') e.target.dispatchEvent(new Event('input', { bubbles: true })); });
+
+// ---------- 시계: 타이머 갱신 + 시즌 경계 ----------
+let seenSeason = seasonAt(now()).id;
+function tick() {
+  const s = seasonAt(now());
+  if (s.id !== seenSeason) {
+    // 시즌이 넘어감: 이번 주 점수로 지난 시즌 확정 → 결과 팝업 + 이름판 빨간 점
+    if (!noRecord()) overrides[seenSeason] = S.pts;
+    seenSeason = s.id; S.pts = 0; S.pending = true; S.popup = 'result';
+    return render();
+  }
+  const el = document.getElementById('timer');
+  if (el) el.textContent = remain(s.end - now());
+  const wantBand = S.tab === 'comp' && S.scene === 'rank' && (S.cs === 2 || s.end - now() <= 10 * 60e3);
+  if (S.scene === 'rank' && S.tab === 'comp' && wantBand !== !!dev.querySelector('.settle')) render();
+  const c = document.getElementById('d-clock');
+  if (c) c.textContent = kstInput(now()).replace('T', ' ') + ' · ' + s.id;
+}
+setInterval(tick, 250);
+
+// ---------- 툴바 (시안) ----------
+const VDESC = {
+  1: '시안 1 · 1~3위 단상(가운데 1위가 높은 3칸) + 아래 4~100위 목록 + 맨 아래 내 줄 고정',
+  2: '시안 2 · 단상 없이 같은 높이 줄(1~3위는 메달+테두리만) + 머리글에 내 정보 크게(이 카드가 내 줄 역할)',
+};
+function syncToolbar() {
+  document.getElementById('vt').innerHTML = [1, 2].map(v => `<button class="${S.v === v ? 'on' : ''}" data-v="${v}">시안 ${v}</button>`).join('');
+  document.getElementById('vdesc').textContent = VDESC[S.v];
+}
+document.getElementById('vt').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { S.v = Number(b.dataset.v); listScroll = 0; render(); } });
+
+// ---------- 디버그 패널 ----------
+const dbg = document.getElementById('dbg');
+const JUMPS = [['메뉴', 'menu', '', ''], ['일반', 'rank', 'normal', ''], ['경쟁', 'rank', 'comp', ''], ['보상 보기', 'rank', 'comp', 'rewards'], ['8주 기록', 'rank', 'comp', 'history'], ['시즌 결과', 'menu', '', 'result'], ['닉네임', 'menu', '', 'nick']];
+document.getElementById('jump').innerHTML = JUMPS.map((j, i) => `<button data-jump="${i}">${j[0]}</button>`).join('');
+function syncDebug() {
+  dbg.querySelectorAll('[data-k]').forEach(i => {
+    const k = i.dataset.k;
+    if (i.type === 'radio') i.checked = String(S[k]) === i.value;
+    else if (i.type === 'checkbox') i.checked = !!S[k];
+    else if (k === 'clock') { if (document.activeElement !== i) i.value = kstInput(now()); }
+    else if (document.activeElement !== i) i.value = S[k];
+  });
+  document.getElementById('d-floor').textContent = S.floor + '층';
+}
+dbg.addEventListener('input', e => {
+  const i = e.target, k = i.dataset.k;
+  if (!k) return;
+  if (k === 'clock') { const ms = Date.parse(i.value + '+09:00'); if (!isNaN(ms)) { setClock(ms); seenSeason = seasonAt(ms).id; render(); } return; }
+  S[k] = i.type === 'checkbox' ? i.checked : i.type === 'radio' ? Number(i.value) : Number(i.value);
+  if (k === 'N') S.N = Math.max(20, Math.min(5000, S.N || 20));
+  if (k === 'cs' && S.cs === 1 && S.pts <= 0) S.pts = 4200;
+  render();
+});
+dbg.addEventListener('click', e => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.act === 'dbg') return dbg.classList.toggle('closed');
+  if (b.dataset.jump) { const [, sc, tab, pop] = JUMPS[b.dataset.jump]; S.scene = sc; if (tab) S.tab = tab; if (pop === 'result') S.pending = true; if (pop === 'nick') return (S.scene = sc, openNick()); S.popup = pop; listScroll = 0; return render(); }
+  const end = seasonAt(now()).end;
+  const act = {
+    dbgResult: () => { S.pending = true; S.scene = 'menu'; S.popup = 'result'; },
+    dbgNick: () => { S.nick = ''; S.popup = ''; S.scene = 'menu'; },
+    clkEnd10: () => { setClock(end - 10 * 60e3); S.tab = 'comp'; S.scene = 'rank'; },
+    clkEnd5s: () => { setClock(end - 5e3); S.tab = 'comp'; S.scene = 'rank'; if (S.pts <= 0) S.pts = 4200; },
+    clkReal: () => { setClock(Date.now()); seenSeason = seasonAt(now()).id; },
+  }[b.dataset.act];
+  if (act) { act(); render(); }
+});
+
+// 처음: 결과 받을 게 있으면 메뉴 진입 때 결과 팝업 (URL popup=none이면 안 띄움)
+if (S.popup === 'none') S.popup = '';
+else if (!P.has('popup') && S.pending && S.scene === 'menu') S.popup = 'result';
+if (S.popup === 'nick') { nickDraft = S.nick; statueDraft = S.statue; }
+render();
+</script>
+</body>
+</html>

@@ -153,6 +153,28 @@ export function genFloor(B, E, O, f) {
   const interval = Math.max(fs.spawnInterval.min, fs.spawnInterval.base + fs.spawnInterval.perFloor * (f - 1));
   const spawnInterval = rdec(interval, 3);
 
+  // 무리(pack): 뒤쪽의 같은 몬스터를 당겨와 붙인다(구성은 그대로, 순서와 등장 시각만 바뀜).
+  const pk = fs.pack;
+  const spawnAt = [];
+  let t = 0;
+  for (let i = 0; i < units.length; ) {
+    let n = 1;
+    if (pk && f >= pk.fromFloor && !units[i].includes('@') && pk.roles.includes(types[units[i]].role) && rng() < pk.chance) {
+      const want = pk.size[0] + Math.floor(rng() * (pk.size[1] - pk.size[0] + 1));
+      for (let j = i + 1; j < units.length && n < want; j++) {
+        if (units[j] === units[i]) {
+          units.splice(i + n, 0, units.splice(j, 1)[0]);
+          n++;
+        }
+      }
+    }
+    for (let k = 0; k < n; k++) {
+      spawnAt.push(rdec(t, 3));
+      t += k < n - 1 ? pk.gap : n > 1 ? spawnInterval * n * pk.afterMul : spawnInterval;
+    }
+    i += n;
+  }
+
   const S = O.schedule;
   const obstacles = {};
   const cInit = ramp(S.crate.initial, f);
@@ -194,6 +216,7 @@ export function genFloor(B, E, O, f) {
     spawnInterval,
     totalEnemies: units.length,
     spawns: units,
+    spawnAt,
     obstacles,
   };
 }
@@ -220,7 +243,7 @@ export function unitStats(B, E, floor, spawn) {
     return {
       type,
       rank: 'boss',
-      hp: rnd(mul.hpBase * sc.hpMul * (mul.hpMulByFloor?.[floor.floor] ?? 1)),
+      hp: rnd(mul.hpBase * sc.hpMul * (mul.hpMulByFloor?.[floor.floor] ?? 1) * (B.scaling.enemyHpMul ?? 1)),
       def: sc.defAdd + mul.def,
       speed: (1 / mul.travelTime) * sc.speedMul,
       wallDmg: rnd(mul.wallDmgBase * sc.wallDmgMul),
@@ -232,7 +255,7 @@ export function unitStats(B, E, floor, spawn) {
   return {
     type,
     rank: rank || 'normal',
-    hp: rnd(t.hp * sc.hpMul * mul.hp),
+    hp: rnd(t.hp * sc.hpMul * mul.hp * (B.scaling.enemyHpMul ?? 1)),
     def: t.def + sc.defAdd + mul.def,
     speed: (1 / t.travelTime) * sc.speedMul * mul.speed,
     wallDmg: rnd(t.wallDmg * sc.wallDmgMul * mul.wallDmg),

@@ -6,6 +6,7 @@
 import { runFloorAttempt } from '../floorSim.js';
 import { buildModifierHooks, resolveModifierList } from '../modifiers.js';
 import { mdTable } from '../report.js';
+import { addResult } from '../agg.js';
 import { spendGold } from './t4.js';
 import { getFloor, unitStats } from '../../../src/core/balance/floorGen.js';
 import { clearBonus } from '../../../src/core/economy/economy.js';
@@ -35,15 +36,15 @@ const POWER_LO = 0.05;
 const POWER_HI = 3; // docs/balance.md 9장 needPower 최대 1.14 - 3이면 충분한 상한.
 const BISECT_STEPS = 8; // (3-0.05)/2^8 ~= 0.012 해상도. 효과가 몇 % 절약하는지 보려면 필요.
 
-// mul = 공격력 배율. rawDamage = 공격력 x 개수 x 연쇄보너스이므로 rawDamage에 곱하는 것은
-// 공격력에 곱하는 것과 정확히 같다(방어력 차감 전에 들어간다).
-function clearsFloor(env, player, floorNumber, level, modList, mul, statsAcc) {
+// mul = 공격력 배율(runFloorAttempt attackMul - 탑 공격력에 직접 곱하므로 기본 사격과 특수 잼 기술에
+// 똑같이 걸린다). skillArgs = { skills, bossRules } (기본은 --skills, T2s는 모드별로 넘긴다).
+function clearsFloor(env, player, floorNumber, level, modList, mul, statsAcc, skillArgs) {
   const { balance, enemies, obstacles, floorsData, sim, battleEffects, summon } = env.configs;
   const towerLevels = [level, level, level, level, level];
   let clears = 0;
   for (let s = 0; s < env.seeds; s++) {
     // 훅은 시도마다 새로 만든다 - dots/slows가 다음 전투의 같은 enemyId로 새는 것을 막는다.
-    const hooks = buildModifierHooks([...modList, { type: 'dmgMul', value: mul, trigger: 'allShots', probe: true }]);
+    const hooks = buildModifierHooks(modList);
     const result = runFloorAttempt({
       balance,
       enemies,
@@ -54,6 +55,8 @@ function clearsFloor(env, player, floorNumber, level, modList, mul, statsAcc) {
       towerLevels,
       playerCfg: sim.players[player],
       modifierHooks: hooks,
+      attackMul: mul,
+      ...skillArgs,
       seed: s + 1,
       dt: sim.dt,
       maxFloorSeconds: sim.maxFloorSeconds,
@@ -61,28 +64,31 @@ function clearsFloor(env, player, floorNumber, level, modList, mul, statsAcc) {
       battleEffects,
     });
     if (result.status === 'cleared') clears++;
-    if (statsAcc) {
+    if (statsAcc && hooks) {
       statsAcc.onShot += hooks.stats.onShot;
       statsAcc.onHit += hooks.stats.onHit;
       statsAcc.extraDamage += hooks.stats.extraDamage;
     }
+    if (statsAcc?.agg) addResult(statsAcc.agg, result);
   }
   return clears > env.seeds / 2;
 }
 
 // 그 층을 과반 시드로 깨는 최소 공격력 배율. 피해가 늘면 더 쉬워진다(단조)는 가정.
-export function needPower(env, player, floorNumber, level, modList, statsAcc) {
-  if (clearsFloor(env, player, floorNumber, level, modList, POWER_LO, statsAcc)) return POWER_LO;
-  if (!clearsFloor(env, player, floorNumber, level, modList, POWER_HI, statsAcc)) return null;
+export function needPower(env, player, floorNumber, level, modList, statsAcc, skillArgs = env.skillArgsAt(floorNumber)) {
+  if (clearsFloor(env, player, floorNumber, level, modList, POWER_LO, statsAcc, skillArgs)) return POWER_LO;
+  if (!clearsFloor(env, player, floorNumber, level, modList, POWER_HI, statsAcc, skillArgs)) return null;
   let lo = POWER_LO;
   let hi = POWER_HI;
   for (let i = 0; i < BISECT_STEPS; i++) {
     const mid = (lo + hi) / 2;
-    if (clearsFloor(env, player, floorNumber, level, modList, mid, statsAcc)) hi = mid;
+    if (clearsFloor(env, player, floorNumber, level, modList, mid, statsAcc, skillArgs)) hi = mid;
     else lo = mid;
   }
   return Math.round(hi * 100) / 100;
 }
+
+export { PROBE_FLOOR_NUMBERS };
 
 export async function run(env) {
   const { sim } = env.configs;

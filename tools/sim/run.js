@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// 밸런스 시뮬레이터 CLI. 사용: node tools/sim/run.js --test=T1|T2|T3|T4|T5|all
+// 밸런스 시뮬레이터 CLI. 사용: node tools/sim/run.js --test=T1|T2|T3|T4|T5|T6|T7|all
 // --player=fast|normal|slow|worst|all --seeds=N --floors=1-100 --mod=<sim.json modifiers 키>
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { loadConfigs, parseArgs } from './config.js';
+import { loadConfigs, parseArgs, applySets } from './config.js';
+import { skillsFor, skillArgsAtFor } from './skills.js';
 import { writeCsv, todayTag } from './report.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -12,20 +13,36 @@ const DEFAULT_REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
 const TEST_MODULES = {
   t1: () => import('./tests/t1.js'),
   t2: () => import('./tests/t2.js'),
+  t2s: () => import('./tests/t2s.js'),
   t3: () => import('./tests/t3.js'),
   t4: () => import('./tests/t4.js'),
   t5: () => import('./tests/t5.js'),
+  t6: () => import('./tests/t6.js'),
+  t7: () => import('./tests/t7.js'),
 };
 
 async function main() {
   const configs = loadConfigs();
   const args = parseArgs(process.argv.slice(2), configs.sim);
-  const env = { configs, players: args.players, seeds: args.seeds, floorsRange: args.floors, mods: args.mods };
+  const sets = applySets(configs.balance, args.set);
+  // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
+  const env = {
+    configs,
+    players: args.players,
+    seeds: args.seeds,
+    floorsRange: args.floors,
+    mods: args.mods,
+    skillsMode: args.skills,
+    skillArgs: skillsFor(args.skills, configs.skills),
+    // skillArgsAt(bestFloor) - shop 모드는 최고 도달 층에 따라 특수 기술 해금이 달라진다(그 층을 처음 도전 = bestFloor).
+    skillArgsAt: skillArgsAtFor(args.skills, configs.skills, configs.shop),
+    itemPolicies: args.itemPolicies,
+  };
   const dateTag = todayTag();
   // --out=<dir>: 단계별 비교 실행 결과를 reports/sim/summary.md와 섞지 않으려고 따로 저장.
   const REPORT_DIR = args.out ?? DEFAULT_REPORT_DIR;
 
-  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to}`);
+  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode}`);
 
   const { execSync } = await import('node:child_process');
   let commit = 'unknown';
@@ -46,7 +63,11 @@ async function main() {
 ` +
       `- 플레이어: ${env.players.join(', ')}
 ` +
-      `- 테스트: ${args.tests.join(', ')}`,
+      `- 테스트: ${args.tests.join(', ')}
+` +
+      `- 기술: ${env.skillsMode} (T2s는 모드별 비교) / enemyHpMul ${configs.balance.scaling.enemyHpMul ?? 1}` +
+      (sets.length ? `
+- 메모리 덮어쓰기(--set, balance.json 파일은 그대로): ${sets.join(', ')}` : ''),
   ];
   const allOutOfRange = [];
 

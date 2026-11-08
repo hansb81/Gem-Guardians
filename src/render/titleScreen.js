@@ -8,7 +8,7 @@ import { LayeredBg } from './layeredBg.js';
 import { DoorTransition, DOOR_TRANSITION_MS, uiFadeAlpha, menuFadeAlpha } from './doorTransition.js';
 import { audio } from '../audio/AudioManager.js';
 import { getFontString } from '../config/fonts.js';
-import { drawText } from './uiKit.js';
+import { drawText, drawNine } from './uiKit.js';
 import { t } from '../config/i18n.js';
 
 const FALLBACK_BG = '#0d0a10';
@@ -16,6 +16,11 @@ const SLOW_FRAME_LIMIT = 8; // 이만큼 느린 프레임이 쌓이면 문 열�
 const NATIVE_W = 180;
 const NATIVE_H = 320;
 const DRAW_SCALE = 3; // manifest.text 좌표계 기준(네이티브 180x320의 3배 = 540x960).
+// 로딩 게이지(540x960 기준) - "화면을 터치하세요" 자리. 그림은 메뉴 음량 슬라이더(slider_track 16x8 가로 3-slice +
+// slider_fill)를 2배로 - 메인 에셋보다 먼저 보여야 해서 이 두 장만 여기서 따로 읽는다.
+const GAUGE = { cx: 270, cy: 880, w: 280, h: 16, labelDy: -26, fill: { x: 4, y: 4, h: 8, padRight: 4 }, slice: [4, 0, 4, 0] };
+const GAUGE_EASE_MS = 150; // 실제 진행률을 이 시간 상수로 따라간다(한 번에 튀지 않고 차오르게).
+const GAUGE_MIN_SPEED = 1 / 1200; // 최소 속도(1/ms) - 끝까지 확실히 찬다.
 
 async function fetchJson(path) {
   try {
@@ -38,8 +43,20 @@ export class TitleScreen {
     this.logo = null;
     this.logoShine = null;
     this.fontReady = false;
+    // 에셋 로딩이 끝나야 true - 그 전엔 "화면을 터치하세요" 대신 로딩 게이지(main.js가 입력도 막는다).
+    this.tapReady = false;
+    this.loadTarget = 0; // 실제 진행률 0~1(setLoadProgress)
+    this.loadShown = 0; // 화면에 그리는 값 - loadTarget을 부드럽게 따라간다
+    this.gaugeTrack = null;
+    this.gaugeFill = null;
+    loadImage('assets/ui/menu/slider_track.png').then((s) => {
+      this.gaugeTrack = s;
+    });
+    loadImage('assets/ui/menu/slider_fill.png').then((s) => {
+      this.gaugeFill = s;
+    });
 
-    // 나가기 = 문 열림 전환(doorTransition.js, 2.2초). 그 사이 입력은 startExit()가 무시한다.
+    // 나가기 = 문 열림 전환(doorTransition.js, 1.6초). 그 사이 입력은 startExit()가 무시한다.
     this.exiting = false;
     this.exitElapsedMs = 0;
     this.exitDurationMs = DOOR_TRANSITION_MS;
@@ -73,11 +90,24 @@ export class TitleScreen {
     }
   }
 
+  // main.js loadAssets 진행 콜백. total이 0이면(목록 없음) 다 찬 것으로.
+  setLoadProgress(loaded, total) {
+    this.loadTarget = total > 0 ? Math.min(1, loaded / total) : 1;
+  }
+
+  // 게이지가 다 차고 로딩도 끝났으면 게이지 대신 "화면을 터치하세요".
+  get gaugeVisible() {
+    return !this.tapReady || this.loadShown < 1;
+  }
+
   // main.js가 탭/클릭/Enter/Space 시 호출한다 - 이미 진행 중이면 무시.
   startExit() {
     if (this.exiting) return;
     this.exiting = true;
     this.exitElapsedMs = 0;
+    // 첫 터치일 수 있으므로 resume()을 먼저 - 그래야 문 열림 0ms에 바로 울린다.
+    audio.unlock();
+    audio.play('ui_door_open');
   }
 
   isExitDone() {
@@ -90,7 +120,7 @@ export class TitleScreen {
     return menuFadeAlpha(this.exitElapsedMs);
   }
 
-  // 전환을 2.2초 안에 못 그리는 기기면 남은 구간을 300ms 검은 페이드로 바꾼다. 한두 번
+  // 전환을 1.6초 안에 못 그리는 기기면 남은 구간을 300ms 검은 페이드로 바꾼다. 한두 번
   // 끊기는 건(탭 전환, GC) 무시하고 20fps 아래 프레임이 여덟 번 쌓였을 때만 포기한다.
   _checkFrameBudget(dtMs) {
     if (this._blackFadeFromMs >= 0) return;
@@ -103,6 +133,10 @@ export class TitleScreen {
   // ctx/width/height는 CanvasRenderer가 쓰는 것과 같은 css px 좌표계(dpr 변환은 이미
   // ctx에 걸려 있다). dtMs는 페이드아웃 진행용(timeScale 영향 안 받는 실제 경과 시간).
   draw(ctx, width, height, dtMs, nowMs) {
+    const target = this.tapReady ? 1 : this.loadTarget;
+    if (this.loadShown < target) {
+      this.loadShown = Math.min(target, this.loadShown + Math.max(((target - this.loadShown) * dtMs) / GAUGE_EASE_MS, dtMs * GAUGE_MIN_SPEED));
+    }
     ctx.fillStyle = FALLBACK_BG;
     ctx.fillRect(0, 0, width, height);
     if (width > 0 && height > 0) {
@@ -124,23 +158,20 @@ export class TitleScreen {
       if (uiAlpha > 0) {
         if (uiAlpha < 1) ctx.globalAlpha = uiAlpha;
         this._drawLogo(ctx, offsetX, offsetY, scale, nowMs);
+        if (this.gaugeVisible) this._drawGauge(ctx, offsetX, offsetY, k);
         if (this.fontReady) this._drawText(ctx, offsetX, offsetY, k, nowMs);
         ctx.globalAlpha = 1;
       }
       if (this.exiting && this._blackFadeFromMs < 0) {
-        this.door.draw(ctx, offsetX, offsetY, scale, this.exitElapsedMs, height);
+        this.door.draw(ctx, offsetX, offsetY, scale, this.exitElapsedMs);
       }
       ctx.restore();
     }
 
     if (this.exiting) {
-      const prev = this.exitElapsedMs;
       this.exitElapsedMs += dtMs;
       this._checkFrameBudget(dtMs);
-      if (this._blackFadeFromMs < 0) {
-        this.door.fireCues(audio, prev, this.exitElapsedMs);
-        return;
-      }
+      if (this._blackFadeFromMs < 0) return;
       const alpha = Math.min(1, (this.exitElapsedMs - this._blackFadeFromMs) / 300);
       ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
       ctx.fillRect(0, 0, width, height);
@@ -162,6 +193,28 @@ export class TitleScreen {
       return;
     }
     if (ready(this.logo)) ctx.drawImage(this.logo.img, 0, 0, layer.w, layer.h, dx, dy, dw, dh);
+  }
+
+  // 홈(slider_track 3-slice) + 채움(slider_fill을 진행률만큼 가로로). 그림이 없으면 같은 자리에 단색.
+  _drawGauge(ctx, offsetX, offsetY, k) {
+    const g = GAUGE;
+    const x = offsetX + (g.cx - g.w / 2) * k;
+    const y = offsetY + (g.cy - g.h / 2) * k;
+    const fillMax = g.w - g.fill.x - g.fill.padRight;
+    const fillW = Math.round(fillMax * this.loadShown) * k;
+    if (ready(this.gaugeTrack)) drawNine(ctx, this.gaugeTrack.img, g.slice, x, y, g.w * k, g.h * k, 2 * k);
+    else {
+      ctx.fillStyle = '#3b3347';
+      ctx.fillRect(x, y, g.w * k, g.h * k);
+    }
+    if (fillW <= 0) return;
+    const fx = x + g.fill.x * k;
+    const fy = y + g.fill.y * k;
+    if (ready(this.gaugeFill)) ctx.drawImage(this.gaugeFill.img, fx, fy, fillW, g.fill.h * k);
+    else {
+      ctx.fillStyle = '#f2d264';
+      ctx.fillRect(fx, fy, fillW, g.fill.h * k);
+    }
   }
 
   _drawText(ctx, offsetX, offsetY, k, nowMs) {
@@ -187,7 +240,11 @@ export class TitleScreen {
     ctx.fillRect(sx(d.rightX) - dw / 2, sy(d.y) - dh / 2, dw, dh);
 
     const tap = text.tapToStart ?? { cx: 270, cy: 880, fontPx: 22, color: '#f2d264', blinkMs: 500 };
-    if (Math.floor(nowMs / tap.blinkMs) % 2 === 0) {
+    if (this.gaugeVisible) {
+      ctx.font = getFontString(sz(13));
+      ctx.fillStyle = '#e8dcc0';
+      drawText(ctx, `${t('loading.default')} ${Math.floor(this.loadShown * 100)}%`, sx(GAUGE.cx), sy(GAUGE.cy + GAUGE.labelDy), { outlineColor, outlineWidth });
+    } else if (Math.floor(nowMs / tap.blinkMs) % 2 === 0) {
       ctx.font = getFontString(sz(tap.fontPx));
       ctx.fillStyle = tap.color;
       drawText(ctx, t('title.tap'), sx(tap.cx), sy(tap.cy), { outlineColor, outlineWidth });

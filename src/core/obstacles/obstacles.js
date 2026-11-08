@@ -162,6 +162,45 @@ export function placeInitialObstacles(board, registry, floorObstacles, rng) {
   }
 }
 
+// "다음 층"에서 보드를 유지할 때(docs/balance.md 7장) - 종류별로 보드에 남은 수가 새 층
+// initial보다 적으면 부족분만 빈 일반 잼 칸(idle, occupant/attachment/특수 잼 없음)에 채운다.
+export function topUpInitialObstacles(board, registry, floorObstacles, rng) {
+  if (!floorObstacles) return;
+  const order = shuffledIndices(rng, board.grid.length);
+  let cursor = 0;
+  const nextFreeIdx = () => {
+    while (cursor < order.length) {
+      const idx = order[cursor++];
+      if (
+        board.grid[idx] >= 0 &&
+        board.cellStates[idx] === null &&
+        !board.occupants[idx] &&
+        !board.attachments[idx] &&
+        !board.specials[idx]
+      ) return idx;
+    }
+    return null;
+  };
+  // placeInitialObstacles와 같은 순서 - occupant 먼저, 그다음 attachment.
+  for (const layer of ['occupant', 'attachment']) {
+    for (const [type, cfg] of Object.entries(floorObstacles)) {
+      const typeDef = registry.get(type);
+      if (!typeDef || typeDef.layer !== layer || !cfg.initial) continue;
+      for (let missing = cfg.initial - countAlive(board, type); missing > 0; missing--) {
+        if (layer === 'occupant' && countOccupants(board) >= registry.boardCap) break;
+        const idx = nextFreeIdx();
+        if (idx === null) return;
+        if (layer === 'occupant') {
+          board.occupants[idx] = { type, hp: typeDef.hp };
+          board.grid[idx] = OBSTACLE;
+        } else {
+          board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer, wallDamagePct: cfg.wallDamagePct };
+        }
+      }
+    }
+  }
+}
+
 function pickRandomTopRowIdleCell(board, rng) {
   const candidates = [];
   for (let c = 0; c < board.cols; c++) {

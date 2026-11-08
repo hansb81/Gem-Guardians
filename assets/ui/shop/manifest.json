@@ -1,0 +1,159 @@
+{
+ "version": 1,
+ "drawScale": 2,
+ "imageSmoothing": false,
+ "_doc": "상점 화면 아이콘 (시안 2: 왼쪽 레일 + 1열 카드). 14x14 = ui/items/slot_*.png(22x22) 안쪽 (4,4). rail 12x12 = 레일 버튼 위쪽 가운데. banner 60x60 = 배너 카드 왼쪽 위. 모두 2배로 그림.",
+ "groups": {
+  "skill": "젬 스킬 탭. skill_{color} = 색 효과 5, skill_{spike,lava,soul,ult} = 특수 잼 기술 4 (몸통은 무채색, 아래 5색 점은 코드로)",
+  "totem": "토템 자리(준비 중)",
+  "pack": "패키지 카드 아이콘",
+  "rail": "왼쪽 레일 탭 아이콘",
+  "banner": "추천 탭 맨 위 큰 배너(스타터 팩 / 보스 돌파 팩)"
+ },
+ "icons": {
+  "banner_boss": {
+   "src": "ui/shop/banner_boss.png",
+   "w": 60,
+   "h": 60,
+   "group": "banner"
+  },
+  "banner_starter": {
+   "src": "ui/shop/banner_starter.png",
+   "w": 60,
+   "h": 60,
+   "group": "banner"
+  },
+  "pack_adfree": {
+   "src": "ui/shop/pack_adfree.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_boss": {
+   "src": "ui/shop/pack_boss.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_chapter": {
+   "src": "ui/shop/pack_chapter.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_monthly": {
+   "src": "ui/shop/pack_monthly.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_slot4": {
+   "src": "ui/shop/pack_slot4.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_starter": {
+   "src": "ui/shop/pack_starter.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "pack_weekly": {
+   "src": "ui/shop/pack_weekly.png",
+   "w": 14,
+   "h": 14,
+   "group": "pack"
+  },
+  "rail_dia": {
+   "src": "ui/shop/rail_dia.png",
+   "w": 12,
+   "h": 12,
+   "group": "rail"
+  },
+  "rail_items": {
+   "src": "ui/shop/rail_items.png",
+   "w": 12,
+   "h": 12,
+   "group": "rail"
+  },
+  "rail_packs": {
+   "src": "ui/shop/rail_packs.png",
+   "w": 12,
+   "h": 12,
+   "group": "rail"
+  },
+  "rail_skills": {
+   "src": "ui/shop/rail_skills.png",
+   "w": 12,
+   "h": 12,
+   "group": "rail"
+  },
+  "rail_totem": {
+   "src": "ui/shop/rail_totem.png",
+   "w": 12,
+   "h": 12,
+   "group": "rail"
+  },
+  "skill_blue": {
+   "src": "ui/shop/skill_blue.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_green": {
+   "src": "ui/shop/skill_green.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_lava": {
+   "src": "ui/shop/skill_lava.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_purple": {
+   "src": "ui/shop/skill_purple.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_red": {
+   "src": "ui/shop/skill_red.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_soul": {
+   "src": "ui/shop/skill_soul.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_spike": {
+   "src": "ui/shop/skill_spike.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_ult": {
+   "src": "ui/shop/skill_ult.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "skill_yellow": {
+   "src": "ui/shop/skill_yellow.png",
+   "w": 14,
+   "h": 14,
+   "group": "skill"
+  },
+  "totem_unknown": {
+   "src": "ui/shop/totem_unknown.png",
+   "w": 14,
+   "h": 14,
+   "group": "totem"
+  }
+ }
+}
