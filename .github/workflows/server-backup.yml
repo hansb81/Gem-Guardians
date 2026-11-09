@@ -12,7 +12,8 @@ jobs:
     steps:
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # 고정: v4에서 --db-url이 빠진다(2026-11 경고). 올릴 때는 --remote "$DB_URL"로 바꾸고 수동 실행으로 확인.
+          version: 3.0.0
       - name: dump
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL }}
