@@ -120,6 +120,16 @@ export class Inventory {
     return { ...OK, delta: d };
   }
 
+  // 환불 등으로 영구 플래그 회수. txId(예: 'refund:iap:pack.adfree:주문')가 이미 있으면 아무것도 안 함(한 번만).
+  revokeFlags(flags, { src, txId }) {
+    if (this.data.grantedTx.includes(txId)) return fail('duplicate');
+    const removed = flags.filter((f) => this.isUnlocked(f));
+    this.data.perm.flags = this.data.perm.flags.filter((f) => !flags.includes(f));
+    this.data.grantedTx.push(txId);
+    this._commit(src, { revokedFlags: removed }, txId);
+    return { ...OK, removed };
+  }
+
   // 부족하면 하나도 안 뺀다. 사용·예약 소모는 log에 남기지 않는다(log = 지급·구매·마이그레이션만).
   spend(id, n = 1) {
     if (!(n > 0) || !this.has(id, n)) return fail('noStock');

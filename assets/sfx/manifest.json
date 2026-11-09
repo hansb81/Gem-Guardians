@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "sampleRate": 44100,
   "formats": [
     "ogg",
@@ -284,6 +284,26 @@
       "volume": 1.0,
       "maxInstances": 1,
       "minGapMs": 0
+    },
+    "ui_purchase": {
+      "event": "상점 구매 성공 (재화가 빠지고 아이템을 받는 순간). 동전 쏟아짐 -> 금빛 차임",
+      "files": [
+        "ui_purchase"
+      ],
+      "durationMs": 1136,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 150
+    },
+    "ui_purchase_fail": {
+      "event": "재화 부족 등으로 구매 실패",
+      "files": [
+        "ui_purchase_fail"
+      ],
+      "durationMs": 490,
+      "volume": 1.0,
+      "maxInstances": 1,
+      "minGapMs": 150
     }
   }
 }

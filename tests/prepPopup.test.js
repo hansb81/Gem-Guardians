@@ -39,7 +39,7 @@ for (const [w, h] of SCREENS) {
         if (L.close) assert.ok(L.close.width >= 44 && L.close.height >= 44);
 
         if (tab === 'statue') {
-          checkGroup([...L.statue.rows.map((r) => r.card), L.statue.hint, L.statue.total], L.content, 'statue');
+          checkGroup([...L.statue.rows.map((r) => r.card), L.statue.hint, L.statue.total, L.statue.all], L.content, 'statue');
           L.statue.rows.forEach((r, i) => {
             checkGroup([r.statueBox, r.name, r.badge, r.plus, r.attack, r.upgrade, r.max], r.card, `row${i}`);
             assert.ok(r.upgrade.height >= 44, '강화 = 주 버튼 44');

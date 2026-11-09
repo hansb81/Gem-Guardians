@@ -1,5 +1,5 @@
 // 골드·탑 레벨 순수 계산(docs/balance.md §2, §8). 브라우저 API 사용 금지 - 저장은
-// src/platform/storage.js(인터페이스 + localStorage 구현)가 맡고, 이 모듈은 숫자만 다룬다.
+// src/platform/storage.js(캐시 + 마켓 어댑터 저장소)가 맡고, 이 모듈은 숫자만 다룬다.
 
 import { getFloor, unitStats } from '../balance/floorGen.js';
 
@@ -27,6 +27,24 @@ export function maxTowerLevelUps(balance, level, gold) {
     lvl += 1;
   }
   return { levels: lvl - level, cost: spent, newLevel: lvl };
+}
+
+// 일괄 강화 - 가장 낮은 레벨 석상(같으면 앞 번호)부터 1레벨씩, 골드가 모자랄 때까지 골고루 올린다.
+// 비용이 레벨에만 달려 있어 가장 낮은 석상이 늘 가장 싸다 = 남은 골드로 가장 많은 레벨을 올리는 순서.
+export function evenTowerLevelUps(balance, levels, gold) {
+  const { maxLevel } = balance.tower;
+  const next = levels.slice();
+  let spent = 0;
+  for (;;) {
+    let i = -1;
+    for (let k = 0; k < next.length; k++) if (next[k] < maxLevel && (i < 0 || next[k] < next[i])) i = k;
+    if (i < 0) break;
+    const cost = towerLevelCost(balance, next[i]);
+    if (spent + cost > gold) break;
+    spent += cost;
+    next[i] += 1;
+  }
+  return { levels: next, cost: spent, count: next.reduce((a, l, k) => a + l - levels[k], 0) };
 }
 
 // 처치 골드 = 기본 골드(unitStats().gold에 이미 적 종류/엘리트/보스 배율까지 반영됨).

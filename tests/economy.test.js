@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { towerAttack, towerLevelCost, maxTowerLevelUps, clearBonus } from '../src/core/economy/economy.js';
+import { towerAttack, towerLevelCost, maxTowerLevelUps, evenTowerLevelUps, clearBonus } from '../src/core/economy/economy.js';
 
 const balance = {
   tower: { baseAtk: 10, atkGrowthPerLevel: 1.05, maxLevel: 200, levelCost: { base: 20, growth: 1.06 } },
@@ -46,4 +46,16 @@ test('maxTowerLevelUps: 골드가 충분해도 maxLevel에서 멈춘다', () => 
   const r = maxTowerLevelUps(capped, 1, 1_000_000);
   assert.equal(r.levels, 1);
   assert.equal(r.newLevel, 2);
+});
+
+test('evenTowerLevelUps: 가장 낮은 석상부터 골고루, 골드 모자라면 멈추고 maxLevel은 건너뛴다', () => {
+  const c = (l) => towerLevelCost(balance, l);
+  // [1,1,2] + c(1)*2 → 앞의 두 석상이 2가 된다(같으면 앞 번호), 세 번째는 그대로.
+  const r = evenTowerLevelUps(balance, [1, 1, 2], c(1) * 2);
+  assert.deepEqual(r.levels, [2, 2, 2]);
+  assert.equal(r.cost, c(1) * 2);
+  assert.equal(r.count, 2);
+  assert.deepEqual(evenTowerLevelUps(balance, [3, 3], c(3) - 1), { levels: [3, 3], cost: 0, count: 0 });
+  const capped = { tower: { ...balance.tower, maxLevel: 2 } };
+  assert.deepEqual(evenTowerLevelUps(capped, [2, 1], 1e12).levels, [2, 2]);
 });

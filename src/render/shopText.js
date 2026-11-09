@@ -97,7 +97,7 @@ export function productText(p, env) {
       const name = t(`shop.pack.${p.pack}.name`, { ch: p.chapter });
       const info = [[t('shop.info.expose'), t(`shop.pack.${p.pack}.expose`, { ch: p.chapter })]];
       if (pk.pass) {
-        const pass = pk.pass;
+        const pass = { ...pk.pass, now: cfg.products[p.id].grant.diamonds };
         const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n })).join('');
         return {
           name, desc: [t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus, t('shop.pass.total', { n: fmt(pass.now + pass.daily * pass.days) })],
@@ -105,7 +105,7 @@ export function productText(p, env) {
           info: [[t('shop.info.instant'), t('shop.grant.dia', { n: pass.now })], [t('shop.info.daily'), t('shop.grant.dia', { n: pass.daily }) + plus], [t('shop.info.period'), t('shop.info.days', { n: pass.days })]],
         };
       }
-      const parts = grantParts(pk.grant);
+      const parts = grantParts(cfg.products[p.id].grant);
       if (pk.offerHours) info.push([t('shop.info.left'), t('shop.info.hours', { n: pk.offerHours })]);
       const TAGS = { boss: ['shop.tag.h24', ''], slot4: ['shop.tag.until20', 'blue'], chapter: ['shop.tag.perChapter', ''], adfree: ['shop.tag.one', ''] };
       const bannerTags = p.pack === 'starter' ? [['shop.tag.once', ''], ['shop.tag.value', 'gold', pk.value]] : [['shop.tag.perBoss', ''], ['shop.tag.value', 'gold', pk.value]];

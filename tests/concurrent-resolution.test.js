@@ -88,7 +88,7 @@ test('독립 진행: 겹치지 않는 열의 두 스왑은 동시에 각자 해�
 //      보드/resolutions가 전혀 바뀌지 않는다.
 // ============================================================
 
-test('잠금 무시: 해소가 진행 중인 열에 속한 칸으로의 새 스왑은 거부되고 아무것도 바뀌지 않는다', () => {
+test('칸 단위 잠금: 애니메이션 칸이나 그 위 칸으로의 스왑은 거부되고, 그 아래 안정 칸은 받는다', () => {
   const grid = [
     0, 0, 1, 2, 3, 4,
     1, 2, 0, 3, 4, 2,
@@ -107,17 +107,17 @@ test('잠금 무시: 해소가 진행 중인 열에 속한 칸으로의 새 스�
   const gridSnapshot = board.grid.slice();
   const cellStatesSnapshot = board.cellStates.slice();
 
-  // col1<->col2: col2가 이미 A에 의해 점유돼 있으므로 거부돼야 한다(col1 자체는 자유롭다).
+  // (0,2)는 A의 스왑 애니메이션 중이라 거부돼야 한다.
   const rejected = state.trySwap(0, 1, 0, 2);
-  assert.equal(rejected, false, '점유된 열(2)에 닿는 스왑은 거부돼야 한다');
+  assert.equal(rejected, false, '애니메이션 중인 칸에 닿는 스왑은 거부돼야 한다');
   assert.equal(state.resolutions.length, 1, 'A 하나만 남아있어야 한다(B가 새로 생기면 안 된다)');
   assert.deepEqual(board.grid, gridSnapshot, '거부된 스왑은 보드를 전혀 바꾸면 안 된다');
   assert.deepEqual(board.cellStates, cellStatesSnapshot, '거부된 스왑은 cellStates도 전혀 바꾸면 안 된다');
 
-  // col2의 다른 행(예: row3,col2)을 건드려도 마찬가지로 거부된다(그 열 전체가 잠겨 있으므로).
-  const rejected2 = state.trySwap(3, 1, 3, 2);
-  assert.equal(rejected2, false);
-  assert.equal(state.resolutions.length, 1);
+  // 같은 열이어도 애니메이션 칸(row0~1) 아래는 중력에 움직이지 않으므로 받아들인다(plan.md 4-2).
+  assert.equal(board.isCellStable(3, 2), true);
+  const accepted2 = state.trySwap(3, 1, 3, 2);
+  assert.equal(accepted2, true, '애니메이션 칸 아래 안정 칸의 스왑은 받아야 한다');
 
   drainAll(state, { maxTicks: 500 });
   assert.equal(findMatches(board).length, 0);
@@ -235,7 +235,7 @@ test('합류: 다른 열이 점유된 동안 그 열에 닿는 연쇄 효과는 
 //    칸이 없고, 끝까지 드레인하면 매치/EMPTY/비-idle 칸이 전혀 남지 않는다.
 // ============================================================
 
-for (const seed of [1001, 2002, 3003]) {
+for (const seed of [1001, 2002, 3003, 4242, 5151, 6060, 7777, 8888]) {
   test(`결정론적 퍼즈(seed=${seed}): 무작위 dt + 무작위 인접 스왑을 반복해도 idle-EMPTY 불변식이 깨지지 않는다`, () => {
     const board = new Board({ rows: 6, cols: 6, seed });
     const state = new GameState({ board });
@@ -258,8 +258,17 @@ for (const seed of [1001, 2002, 3003]) {
 
       // 불변식: idle(cellStates===null)인 칸은 절대 EMPTY일 수 없다.
       for (let idx = 0; idx < board.grid.length; idx++) {
+        // 불변식(칸 단위 잠금): 지워지는 중이 아닌 칸의 애니메이션 값은 보드 값과 같아야 한다 -
+        // 다른 해소의 낙하가 이 칸을 옮겼다면 어긋난다.
+        const cs = board.cellStates[idx];
+        if (cs && cs.phase !== 'clearing') {
+          assert.equal(cs.value, board.grid[idx], `seed=${seed}, i=${i}: idx=${idx}의 ${cs.phase} 값이 보드와 다르다`);
+        }
         if (board.cellStates[idx] === null) {
-          assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          // 예외: 낙하 대기(settleWait) 중인 해소의 열은 빈 칸이 idle로 남는다(plan.md 4-2).
+          if (!state.resolutions.some((r) => r.phase === 'settleWait' && r.settleCols.has(idx % board.cols))) {
+            assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          }
         }
       }
     }

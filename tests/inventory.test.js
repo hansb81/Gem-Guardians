@@ -10,7 +10,7 @@ import { Inventory } from '../src/game/inventory.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`../config/${name}`, import.meta.url), 'utf8'));
 const ITEMS = load('items.json');
-const SHOP = load('shop.json');
+const SHOP = { ...load('shop.json'), products: load('products.json') };
 const SKILLS = load('skills.json');
 
 function make(data = null) {

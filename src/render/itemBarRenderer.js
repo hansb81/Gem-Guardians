@@ -337,7 +337,7 @@ export class ItemBarRenderer {
         ctx.strokeRect(Math.round(x + 1 + shake), Math.round(y + 1), w - 2, h - 2);
       }
 
-      const key = cfg.target === 'pair' ? (aim.first ? 'pair2' : 'pair') : cfg.action === 'recolor' ? (aim.first ? 'dye2' : 'dye') : cfg.target;
+      const key = aim.confirm ? 'confirm' : cfg.target === 'pair' ? (aim.first ? 'pair2' : 'pair') : cfg.action === 'recolor' ? (aim.first ? 'dye2' : 'dye') : cfg.target;
       ctx.font = getFontString(Math.max(12, Math.round(guideRect.height * 0.42)), true);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';

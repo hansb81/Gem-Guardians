@@ -1,5 +1,5 @@
 {
-  "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. krw = 원화(가짜 결제, src/shop/iap.js).",
+  "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. 현금 상품의 가격·지급 내용은 config/products.json(키 pack.{id}, dia.{순번}) - 여기는 노출 조건·패스 일정·첫 구매 2배(diaBundles bonus)만.",
   "qtyMax": 99,
   "qtyQuick": [1, 5, 10],
   "free": { "item": "dye", "count": 1 },
@@ -32,13 +32,14 @@
     { "id": "mid",   "floors": 15, "dia": 50,  "stack": 3 },
     { "id": "big",   "floors": 40, "dia": 120, "stack": 5 }
   ],
+  "_diaBundlesFrozen": "순서 변경 금지 - N번째 = config/products.json dia.N(레거시 키 동결), 저장 firstBuyUsed가 순번을 쓴다.",
   "diaBundles": [
-    { "dia": 60,   "bonus": 0,    "krw": 1200,   "stack": 1 },
-    { "dia": 300,  "bonus": 30,   "krw": 5900,   "stack": 1 },
-    { "dia": 600,  "bonus": 90,   "krw": 12000,  "stack": 3 },
-    { "dia": 1600, "bonus": 320,  "krw": 29000,  "stack": 3 },
-    { "dia": 3400, "bonus": 850,  "krw": 59000,  "stack": 5 },
-    { "dia": 7000, "bonus": 2100, "krw": 119000, "stack": 5 }
+    { "bonus": 0,    "stack": 1 },
+    { "bonus": 30,   "stack": 1 },
+    { "bonus": 90,   "stack": 3 },
+    { "bonus": 320,  "stack": 3 },
+    { "bonus": 850,  "stack": 5 },
+    { "bonus": 2100, "stack": 5 }
   ],
   "diaItems": ["gold_coin", "revive"],
   "slot4Dia": 100,
@@ -59,19 +60,14 @@
     { "item": "booster_bomb", "count": 3, "dia": 30 }
   ],
   "packs": {
-    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 now + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
+    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
     "order": ["starter", "boss", "slot4", "weekly", "monthly", "chapter", "adfree"],
-    "starter": { "krw": 1200, "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5,
-      "grant": { "diamonds": 300, "items": { "hammer": 5, "scythe_h": 3, "scythe_v": 3, "repair": 3, "revive": 1 } } },
-    "boss": { "krw": 5900, "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3,
-      "grant": { "items": { "revive": 2, "hourglass": 3, "barrier": 3, "drum": 3 } } },
-    "slot4": { "krw": 4900, "once": true, "maxBestFloor": 20, "icon": "pack_slot4",
-      "grant": { "slot4": true, "items": { "rainbow": 3 } } },
-    "weekly": { "krw": 5900, "icon": "pack_weekly", "pass": { "now": 100, "daily": 60, "days": 7 } },
-    "monthly": { "krw": 11000, "icon": "pack_monthly", "pass": { "now": 300, "daily": 100, "days": 30, "dailyItems": { "dye": 1 } } },
-    "chapter": { "krw": 3900, "perChapter": true, "icon": "pack_chapter",
-      "grant": { "items": { "barrier": 3, "hourglass": 2, "booster_bomb": 2 } } },
-    "adfree": { "krw": 6500, "once": true, "icon": "pack_adfree",
-      "grant": { "diamonds": 200, "adFree": true } }
+    "starter": { "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5 },
+    "boss": { "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3 },
+    "slot4": { "once": true, "maxBestFloor": 20, "icon": "pack_slot4" },
+    "weekly": { "icon": "pack_weekly", "pass": { "daily": 60, "days": 7 } },
+    "monthly": { "icon": "pack_monthly", "pass": { "daily": 100, "days": 30, "dailyItems": { "dye": 1 } } },
+    "chapter": { "perChapter": true, "icon": "pack_chapter" },
+    "adfree": { "once": true, "icon": "pack_adfree" }
   }
 }

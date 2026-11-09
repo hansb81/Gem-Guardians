@@ -430,7 +430,10 @@ for (const seed of [4004, 5005]) {
       for (let idx = 0; idx < board.grid.length; idx++) {
         const cs = board.cellStates[idx];
         if (cs === null) {
-          assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          // 예외: 낙하 대기(settleWait) 중인 해소의 열은 빈 칸이 idle로 남는다(plan.md 4-2).
+          if (!state.resolutions.some((r) => r.phase === 'settleWait' && r.settleCols.has(idx % board.cols))) {
+            assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          }
           continue;
         }
         if (cs.phase === 'armed') {

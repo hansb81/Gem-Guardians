@@ -1,0 +1,12 @@
+{
+  "_doc": "iOS(Capacitor) 빌드 설정 - src/platform/capacitor가 읽는다. 값은 전부 placeholder. features = 기능 스위치(iap는 RevenueCat api 키를 넣은 뒤 true로, restore는 상점 '구매 내역 복원' 표시). admob.appId는 ios/App/App/Info.plist의 GADApplicationIdentifier에 넣는다(여기는 기록용), ATT 문구는 NSUserTrackingUsageDescription. 광고 단위 id는 Google 공식 테스트 id.",
+  "features": { "iap": false, "restore": true, "ads": true, "banner": false, "rewarded": true, "haptics": true },
+  "revenuecat": { "apiKey": "" },
+  "admob": {
+    "appId": "ca-app-pub-3940256099942544~1458002511",
+    "testing": true,
+    "interstitial": "ca-app-pub-3940256099942544/4411468910",
+    "rewarded": "ca-app-pub-3940256099942544/1712485313",
+    "banner": "ca-app-pub-3940256099942544/2934735716"
+  }
+}

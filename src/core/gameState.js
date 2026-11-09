@@ -161,6 +161,8 @@ export class GameState {
     // 콤보(연속 스트릭) - 특수 잼끼리의 "조합"(COMBO_KIND)과는 다른 개념이다.
     this.comboStreak = 0;
     this.comboStreakTimerMs = 0;
+    // false면 스트릭을 쌓지 않는다(튜토리얼, docs/tutorial.md 3장). 켜고 끌 때는 resetCombo()로 0부터.
+    this.comboEnabled = true;
 
     // 힌트(§C) - 입력이 일정 시간 없으면 가능한 수 한 칸을 가리킨다.
     this.hintCell = null;
@@ -176,6 +178,15 @@ export class GameState {
     // 않은 칸 옆으로 새 잼이 떨어진다. main.js가 매 프레임 "렌더가 아직 터뜨리는 중인가"를
     // 넣어준다(core는 연출 길이를 모르므로 판단은 렌더 쪽에 둔다 - reduceEffects와 같은 방식).
     this.settleHold = false;
+
+    // 리필 모드 - 'random'(기본) | 'noMatch'(튜토리얼 레슨만, 바로 매치가 생기지 않는 색만).
+    this.refillMode = 'random';
+  }
+
+  // 콤보 스트릭을 조용히 0으로(comboBreak 연출 없음).
+  resetCombo() {
+    this.comboStreak = 0;
+    this.comboStreakTimerMs = 0;
   }
 
   setReduceEffects(value) {
@@ -196,7 +207,7 @@ export class GameState {
   // 두 칸을 스왑 시도한다. 반환값은 "입력이 받아들여져 뭔가 반응했는지"(bool)뿐이고,
   // 더 이상 이벤트 배열을 돌려주지 않는다.
   // - 인접하지 않거나, 두 칸 중 하나라도 cellStates!==null(애니메이션 중)이거나, 두 열 중
-  //   하나라도 isColumnLocked이면: 아무 것도 하지 않고 false를 반환한다(이벤트도 애니메이션도 없음).
+  //   하나라도 isCellStable이 아니면: 아무 것도 하지 않고 false를 반환한다(이벤트도 애니메이션도 없음).
   // - 매치/컬러 스왑/조합 중 하나도 안 걸리면: 보드를 즉시 원복하고, 두 칸에 짧은 단일
   //   'falling' 들썩 애니메이션만 걸고 true를 반환한다(Resolution은 만들지 않음).
   // - 하나라도 걸리면: 새 Resolution을 만들어 두 칸에 스왑 위치 이동 'falling' 애니메이션을
@@ -221,8 +232,8 @@ export class GameState {
 
     const i1 = board.index(r1, c1);
     const i2 = board.index(r2, c2);
-    if (board.cellStates[i1] !== null || board.cellStates[i2] !== null) return false;
-    if (board.isColumnLocked(c1) || board.isColumnLocked(c2)) return false;
+    // 두 칸 모두 "안정"(자신과 아래가 idle, 빈 칸 없음)이면 다른 해소가 진행 중인 열이어도 받는다.
+    if (!board.isCellStable(r1, c1) || !board.isCellStable(r2, c2)) return false;
     // occupant 방해요소(swappable:false)는 스왑 판정에 들어오지 못한다 - 매치 코드는 손대지
     // 않고 여기서만 걸러낸다(docs/balance.md 7-2 "occupant는 스왑·매치 불가").
     if (this.obstaclesRegistry) {
@@ -294,7 +305,7 @@ export class GameState {
       // 겹치는 그룹이 있는지로 판정한다(_beginFirstCascadeStep과 같은 필터) - 그렇지 않으면
       // 무관한 매치 때문에 "매치됨"으로 오판해 되돌리지 않고, 뒤에서 relevant가 비어 아무
       // 일도 안 일어나는 채로 스왑된 상태가 영구히 남는 버그가 생긴다.
-      const matches = findMatches(board);
+      const matches = this._findIdleMatches();
       const swapKeys = new Set([keyOf(a), keyOf(b)]);
       const relevant = matches.some((group) => group.cells.some((cell) => swapKeys.has(keyOf(cell))));
       if (!relevant && force) {
@@ -353,14 +364,16 @@ export class GameState {
 
     // 콤보(연속 스트릭) - Resolution을 만드는 모든 성공 스왑(match/colorSwap/boxSwap/combo)에서
     // 스트릭을 올리고 타이머를 리셋한다. 무효 스왑(여기 도달하지 못함)은 기본적으로 끊지 않는다.
-    this.comboStreak += 1;
-    this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
-    this._pushEffect({
-      type: 'comboChange',
-      comboStreak: this.comboStreak,
-      remainingMs: this.comboStreakTimerMs,
-      durationMs: 1,
-    });
+    if (this.comboEnabled) {
+      this.comboStreak += 1;
+      this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
+      this._pushEffect({
+        type: 'comboChange',
+        comboStreak: this.comboStreak,
+        remainingMs: this.comboStreakTimerMs,
+        durationMs: 1,
+      });
+    }
 
     return true;
   }
@@ -487,7 +500,7 @@ export class GameState {
     board.grid[idx] = color;
 
     const cell = cells[0];
-    const relevant = findMatches(board).some((group) => group.cells.some((c) => keyOf(c) === keyOf(cell)));
+    const relevant = this._findIdleMatches().some((group) => group.cells.some((c) => keyOf(c) === keyOf(cell)));
     if (!relevant) {
       if (this.resolutions.length === 0) this._maybeReshuffle();
       return true;
@@ -501,9 +514,11 @@ export class GameState {
     this.resolutions.push(resolution);
     this._latestResolutionId = resolution.id;
     this.cascadeCount = 0;
-    this.comboStreak += 1;
-    this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
-    this._pendingSwapEffects.push({ type: 'comboChange', comboStreak: this.comboStreak, remainingMs: this.comboStreakTimerMs, durationMs: 1 });
+    if (this.comboEnabled) {
+      this.comboStreak += 1;
+      this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
+      this._pendingSwapEffects.push({ type: 'comboChange', comboStreak: this.comboStreak, remainingMs: this.comboStreakTimerMs, durationMs: 1 });
+    }
     return true;
   }
 
@@ -566,7 +581,7 @@ export class GameState {
   _itemTargetsIdle(cells) {
     if (this._hasActiveShuffle()) return false;
     const { board } = this;
-    return cells.every((c) => board.inBounds(c.row, c.col) && !board.isColumnLocked(c.col));
+    return cells.every((c) => board.inBounds(c.row, c.col) && board.isCellStable(c.row, c.col));
   }
 
   // trySwap과 같은 "입력 들어옴" 처리 - 힌트 유휴 타이머 취소.
@@ -613,13 +628,20 @@ export class GameState {
     return true;
   }
 
+  // 애니메이션 중인 칸을 뺀 매치 탐색(plan.md 4-2). 버퍼는 재사용한다.
+  _findIdleMatches() {
+    const { board } = this;
+    this._idleGridBuf = board.idleGrid(this._idleGridBuf);
+    return findMatches({ grid: this._idleGridBuf, rows: board.rows, cols: board.cols });
+  }
+
   _createResolution() {
     return {
       id: this._nextResolutionId++,
       cascadeIndex: 0,
-      columns: new Set(), // 지금까지 이 Resolution이 건드린 열(디버깅/검증용, 로직은 의존하지 않음).
+      columns: new Set(), // 지금까지 이 Resolution이 건드린 열 - 낙하를 커밋할 열(_settleAfterClear).
       done: false,
-      phase: 'swap', // 'swap' | 'clearing' | 'settling' | 'blocked'
+      phase: 'swap', // 'swap' | 'clearing' | 'settleWait' | 'settling' | 'blocked'
       watchCells: [], // 지금 애니메이션 완료를 기다리고 있는 칸들(체인이 발견되는 대로 동적으로 늘어난다).
       seedCells: [], // settling이 끝난 뒤 "내가 settle시킨 칸"으로 다음 매치를 찾을 때 쓰는 기준점.
       trigger: null, // 첫 단계를 시작할 때 쓸 정보: { kind: 'combo'|'colorSwap'|'boxSwap'|'match', data }.
@@ -704,16 +726,28 @@ export class GameState {
   _advanceInvalidSwaps() {
     const { board } = this;
     if (this._invalidSwapCells.length === 0) return;
+    const ended = [];
     this._invalidSwapCells = this._invalidSwapCells.filter((cell) => {
       const idx = board.index(cell.row, cell.col);
       const cs = board.cellStates[idx];
       if (!cs) return false;
       if (cs.elapsedMs >= cs.durationMs) {
         board.cellStates[idx] = null;
+        ended.push(cell);
         return false;
       }
       return true;
     });
+    // 들썩/강제 이동 중엔 매치 탐색에서 가려졌으므로(_findIdleMatches), 그동안 옆에 내려앉은 잼과
+    // 매치가 됐을 수 있다 - 해소가 없는 칸이라 아무도 다시 안 보니, 여기서 연쇄 판정을 맡긴다.
+    if (ended.length === 0) return;
+    const endedKeys = new Set(ended.map(keyOf));
+    if (this._findIdleMatches().some((g) => g.cells.some((c) => endedKeys.has(keyOf(c))))) {
+      const resolution = this._createResolution();
+      resolution.phase = 'blocked'; // 다음 틱 _checkNextCascadeStep이 seedCells 기준으로 판정한다.
+      resolution.seedCells = ended;
+      this.resolutions.push(resolution);
+    }
   }
 
   // 콤보(연속 스트릭) 타이머 - §B3. 보드에 armed/clearing/falling/spawning 칸이 하나라도
@@ -799,6 +833,10 @@ export class GameState {
       this._checkNextCascadeStep(resolution);
       return;
     }
+    if (resolution.phase === 'settleWait') {
+      this._settleAfterClear(resolution);
+      return;
+    }
 
     if (!this._cellsComplete(resolution.watchCells)) return; // 아직 애니메이션/체인 발동 중.
     // 렌더가 아직 이 제거를 연출하는 중이면 중력/리필만 미룬다(이미 지워진 칸은 그대로 빈 자리로
@@ -811,6 +849,11 @@ export class GameState {
     if (resolution.phase === 'swap') {
       this._beginFirstCascadeStep(resolution);
     } else if (resolution.phase === 'clearing') {
+      // 내 칸 상태는 이미 비웠으니 watchCells를 놓고 대기 단계로 - 기다리는 동안 다른 해소가 이
+      // 칸에 낙하 상태를 걸 수 있어서, 다시 _clearCellStates를 돌리면 남의 상태를 지운다.
+      resolution.settleCols = new Set(resolution.columns);
+      resolution.watchCells = [];
+      resolution.phase = 'settleWait';
       this._settleAfterClear(resolution);
     } else if (resolution.phase === 'settling') {
       resolution.seedCells = resolution.watchCells;
@@ -845,7 +888,7 @@ export class GameState {
       // 아직 처리하지 않은) 매치를 가로채지 않는다. _checkNextCascadeStep의 seedCells 필터링과
       // 같은 원칙이다.
       const swapCells = trigger.data.swapCells;
-      const matches = findMatches(this.board);
+      const matches = this._findIdleMatches();
       const swapKeys = new Set(swapCells.map(keyOf));
       const relevant = matches.filter((group) => group.cells.some((cell) => swapKeys.has(keyOf(cell))));
       this._resolveMatchStep(resolution, relevant, 1, swapCells);
@@ -856,8 +899,12 @@ export class GameState {
   // falling/spawning cellStates를 건다.
   _settleAfterClear(resolution) {
     const { board } = this;
-    const moves = applyGravity(board);
-    const spawns = refill(board);
+    const cols = resolution.settleCols;
+    // 내 열 중 하나라도 빈 칸 위에 다른 해소의 애니메이션이 있으면 끝날 때까지 기다린다(그
+    // 잼을 지금 옮기면 그 해소의 cellState와 보드 값이 어긋난다).
+    for (const col of cols) if (!board.canSettleColumn(col)) return;
+    const moves = applyGravity(board, cols);
+    const spawns = refill(board, cols, { mode: this.refillMode });
 
     const watchCells = [];
     for (const move of moves) {
@@ -912,7 +959,7 @@ export class GameState {
       return;
     }
 
-    const matches = findMatches(board);
+    const matches = this._findIdleMatches();
     const seedKeys = new Set(resolution.seedCells.map(keyOf));
     const relevant = matches.filter((group) => group.cells.some((cell) => seedKeys.has(keyOf(cell))));
 
@@ -921,11 +968,8 @@ export class GameState {
       return;
     }
 
-    const columns = new Set();
-    for (const group of relevant) {
-      for (const cell of group.cells) columns.add(cell.col);
-    }
-    const blocked = Array.from(columns).some((col) => board.isColumnLocked(col));
+    // 그룹 칸이 아직 떨어질 수 있으면(아래에 빈 칸/애니메이션) 자리 잡을 때까지 기다린다.
+    const blocked = relevant.some((group) => group.cells.some((cell) => !board.isCellStable(cell.row, cell.col)));
     if (blocked) {
       resolution.phase = 'blocked';
       return; // 다음 틱에 같은 조건을 다시 본다.
@@ -1463,6 +1507,8 @@ export class GameState {
       resolution.obstacleDamagedKeys.set(cascadeIndex, seen);
     }
     const effects = damageOccupantsInCells(this.board, this.obstaclesRegistry, cells, seen, cause);
+    // 파괴된 occupant 칸은 watchCells 없이 바로 빈 칸이 된다 - 낙하 대상 열에 넣는다.
+    for (const c of cells) if (this.board.inBounds(c.row, c.col) && this.board.get(c.row, c.col) === EMPTY) resolution.columns.add(c.col);
     for (const effect of effects) this._pushEffect({ ...effect, cascadeIndex, durationMs: 1 });
   }
 
@@ -1553,9 +1599,36 @@ export class GameState {
   // 재생한다 - 입장에는 치울 이전 보드가 없어서, 그 단계를 그대로 쓰면 방금 만든 보드가
   // 내려가며 사라졌다가 다시 위에서 떨어지는 것처럼 보인다. 재배치(수가 없을 때)는 기본값
   // false로 두 단계를 모두 쓴다.
-  shuffleBoard({ skipClear = false } = {}) {
+  //
+  // targetBoard(행 문자열 배열이 아니라 색 인덱스 flat 배열, 길이 rows*cols)를 주면 섞지 않고 그 보드로
+  // 통째로 바꾼다(튜토리얼 레슨 보드) - 방해요소·특수 잼은 비운다. 연출은 같은 shuffle 이펙트로,
+  // 비우기 단계는 원래 젬(fromValue)을 그린다.
+  shuffleBoard({ skipClear = false, targetBoard = null } = {}) {
+    if (targetBoard) {
+      this._setBoard(targetBoard, skipClear);
+      return;
+    }
     const fixed = this.obstaclesRegistry ? occupantIndices(this.board) : undefined;
     this._shuffleBoard(fixed, skipClear);
+  }
+
+  _setBoard(grid, skipClear) {
+    const { board } = this;
+    const n = board.rows * board.cols;
+    const posOf = (i) => ({ row: Math.floor(i / board.cols), col: i % board.cols });
+    const moves = [];
+    for (let i = 0; i < n; i++) {
+      moves.push({ id: i, from: posOf(i), to: posOf(i), value: grid[i], special: null, fromValue: board.grid[i], fromSpecial: board.specials[i] });
+    }
+    board.grid = grid.slice();
+    board.specials = new Array(n).fill(null);
+    board.occupants = new Array(n).fill(null);
+    board.attachments = new Array(n).fill(null);
+    board.cellStates = new Array(n).fill(null);
+    this._invalidSwapCells = [];
+    const durationMs = this.reduceEffects ? ANIMATION_DURATIONS_MS.shuffleReduced : ANIMATION_DURATIONS_MS.shuffle;
+    const seed = Math.floor(board.rng() * 2147483647);
+    this._pushEffect({ type: 'shuffle', moves, durationMs, seed, skipClear });
   }
 
   // "다음 층" - 보드를 유지한 채 새 층 방해요소 규칙으로 바꾼다(docs/balance.md 7장).

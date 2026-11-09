@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- onestore flavor 전용(main 매니페스트에 합쳐진다). Android 11+ 패키지 가시성: 원스토어 서비스 앱의 결제 서비스와
+     onestore:// 링크(로그인·설치 화면)를 찾을 수 있어야 PurchaseClient가 붙는다. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <queries>
+        <intent>
+            <action android:name="com.onestore.ipc.iap.IapService.ACTION" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="onestore" />
+        </intent>
+    </queries>
+</manifest>

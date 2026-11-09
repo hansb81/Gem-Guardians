@@ -7,6 +7,8 @@ import { isValidNickname } from '../ranking/rankingSave.js';
 import { hitRankingPopup, scrollToMeValue } from '../render/ui/rankingPopup.js';
 import { audio } from '../audio/AudioManager.js';
 import { t } from '../config/i18n.js';
+import { platform } from '../platform/index.js';
+import { RANKING_TABS } from '../render/ui/rankingPopup.js';
 
 const DRAG_PX = 8; // 보관함 목록과 같음 - 이만큼 넘게 움직이면 끌기
 const DEV_STATES = { 1: 'normal', 2: 'settle', 3: 'locked', 4: 'none' };
@@ -59,8 +61,12 @@ export class RankingUi {
     this._drag = null;
   }
 
+  // 마켓 리더보드가 있으면(토스) 일반 모드 탭 + "토스 랭킹 보기"만, 경쟁 모드 탭은 숨김(docs/platforms.md 3-2).
   _newState(sheet, tab) {
-    return { sheet, tab, scrollBy: { normal: 0, comp: 0 }, sub: null, data: {}, blinkAt: -1, nick: null, loaded: false };
+    const market = platform.caps.leaderboard;
+    const tabs = market ? ['normal'] : RANKING_TABS;
+    if (!tabs.includes(tab)) tab = 'normal';
+    return { sheet, tab, tabs, tossBoard: market, scrollBy: { normal: 0, comp: 0 }, sub: null, data: {}, blinkAt: -1, nick: null, loaded: false };
   }
 
   async refresh() {
@@ -181,6 +187,11 @@ export class RankingUi {
         audio.play('ui_click');
         st.scrollBy[st.tab] = scrollToMeValue(L);
         st.blinkAt = st.nowMs;
+        return null;
+      case 'tossBoard':
+        audio.play('ui_click');
+        // 리더보드가 열리면 게임은 백그라운드로 간다 - 소리 정지·저장은 lifecycle.onPause가 맡는다.
+        platform.leaderboard.open().catch(() => {});
         return null;
       case 'goComp':
         audio.play('ui_click');

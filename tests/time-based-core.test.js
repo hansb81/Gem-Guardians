@@ -170,7 +170,9 @@ test('스트레스: 결정론적 무작위 trySwap + 무작위 update(dt)를 반
     // (clearing 중인 칸은 아직 보드값이 EMPTY로 커밋돼 있을 수 있으므로 EMPTY 허용, 다만
     // cellStates는 반드시 null이 아니어야 한다 - idle인데 EMPTY인 칸은 절대 없어야 한다).
     for (let idx = 0; idx < board.grid.length; idx++) {
-      if (board.grid[idx] === EMPTY) {
+      // 예외: 낙하 대기(settleWait) 중인 해소의 열은 빈 칸이 idle로 남는다(plan.md 4-2).
+      const waiting = state.resolutions.some((r) => r.phase === 'settleWait' && r.settleCols.has(idx % board.cols));
+      if (board.grid[idx] === EMPTY && !waiting) {
         assert.notEqual(board.cellStates[idx], null, `i=${i}: EMPTY인 칸(idx=${idx})은 idle이면 안 된다`);
       }
     }

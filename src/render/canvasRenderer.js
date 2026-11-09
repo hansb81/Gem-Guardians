@@ -19,6 +19,7 @@ import { InventoryTab } from './inventoryTab.js';
 import { layoutPrepPopup, drawPrepPopup } from './ui/prepPopup.js';
 import { layoutRankingPopup, drawRankingPopup } from './ui/rankingPopup.js';
 import { DETONATION_CONFIG } from '../config/detonation.js';
+import { TutorialRenderer } from './tutorialRenderer.js';
 
 const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
@@ -109,7 +110,6 @@ export class CanvasRenderer {
 
     // 콤보 마일스톤/브레이크 배너 - 렌더 전용 임시 상태(gameState에 넣지 않는다, §10).
     this._comboMilestone = null; // { label, elapsedMs }
-    this._comboBreakDisplay = null; // { streak, elapsedMs }
 
     // combo_great / timebomb_tick 판정용 - core에 전용 effect가 없는 소리들이라 렌더에서
     // 직전 값과 비교해 "변한 순간"을 찾는다(퍼즐 로직은 건드리지 않는다).
@@ -157,6 +157,32 @@ export class CanvasRenderer {
     this._itemFx = []; // 망치 번쩍 / 낫 세그먼트 - { kind, cells, ageMs }
     this._boardFloats = []; // 보드 위 데미지 폰트 숫자(해제 부적 "+5") - { row, col, text, variant, ageMs }
     this._bombBounce = new Map(); // "row,col" -> ageMs - 시한폭탄 타이머 숫자 튕김(해제 부적)
+    this.tutorial = new TutorialRenderer(); // 에셋은 main.js가 load()
+  }
+
+  // 튜토리얼 대상 이름 -> 지금 레이아웃의 화면 rect(docs/tutorial.md 2장). render() 뒤에만 유효.
+  getUiRect(name) {
+    const L = this.lastLayout;
+    if (!L) return null;
+    const b = L.battleParts;
+    switch (name) {
+      case 'currencyBar': return L.currencyBar;
+      case 'floorBox': return b?.floorLabel ?? null;
+      case 'itemBar': return L.actionBar;
+      case 'topRightButton': return L.skipButton ?? b?.pauseButton ?? null;
+      case 'battlePanel': return L.battle;
+      case 'wallGauge': return b?.wallBar ?? null;
+      case 'statues': return b?.towerArea ?? null;
+      case 'board': return L.board;
+      default: return null;
+    }
+  }
+
+  // 게임 화면(render) 위에 튜토리얼 오버레이 - 건너뛰기 버튼 rect를 먼저 정해 topRightButton 대상으로도 쓴다.
+  drawTutorial(tut, now) {
+    if (!this.lastLayout) return;
+    this.lastLayout.skipButton = this.tutorial.layoutSkip(this.ctx, this.lastLayout.battleParts?.pauseButton);
+    this.tutorial.draw(this.ctx, this, tut, now);
   }
 
   setItemAssets(itemAssets) {
@@ -192,6 +218,11 @@ export class CanvasRenderer {
 
   // 메인 메뉴(mainMenuScreen.js) - ctx/css 크기만 공유하고 그리기는 MainMenuScreen이 직접 한다.
   // alpha < 1이면 타이틀 문 열림 전환 위로 겹쳐지는 크로스페이드다(titleScreen.menuFadeAlpha).
+  // 전투 scene 위에 메뉴의 종료 확인 모달만(뒤로가기 - 정비 팝업에서).
+  drawMenuPopup(mainMenuScreen) {
+    mainMenuScreen.drawPopupOnly(this.ctx, this.cssWidth, this.cssHeight, this.assets);
+  }
+
   drawMainMenu(mainMenuScreen, playerState, now, alpha = 1) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     if (alpha >= 1) {
@@ -284,6 +315,7 @@ export class CanvasRenderer {
       ctx.restore();
     }
     this.lastLayout.pauseButton = battleLayout?.pauseButton ?? null;
+    this.lastLayout.battleParts = battleLayout;
     this.lastLayout.battle = battleLayout ? { ...layout.battle, towerArea: battleLayout.towerArea } : null;
     this._drawBoard(
       layout.board,
@@ -1920,13 +1952,10 @@ export class CanvasRenderer {
       if (effect.type === 'comboActivate' && settings.hitstop) {
         this._hitstopRemainingMs = Math.max(this._hitstopRemainingMs, settings.hitstopMs ?? 50);
       }
-      // 콤보 HUD 배너(§10) - comboChange가 tier 경계값과 정확히 같으면 마일스톤 문구,
-      // comboBreak는 끊기기 직전 peak 문구.
+      // 콤보 HUD 배너(§10) - comboChange가 tier 경계값과 정확히 같으면 마일스톤 문구.
       if (effect.type === 'comboChange') {
         const tier = COMBO_CONFIG.tiers.find((t) => t.min === effect.comboStreak);
         if (tier) this._comboMilestone = { label: t(tier.labelKey), elapsedMs: 0 };
-      } else if (effect.type === 'comboBreak') {
-        this._comboBreakDisplay = { streak: effect.comboStreak, elapsedMs: 0 };
       }
 
       // 방해요소 부서짐/폭발 스프라이트 애니메이션(파티클/흔들림과 별개 - effects.json
@@ -2663,7 +2692,9 @@ export class CanvasRenderer {
     // 제목/설명/버튼 크기 계산은 그대로 두고 그 사이에 블록만 끼운다).
     const headH = cardWidth * 0.62;
     const audioBlockH = kind === 'pause' ? headH * 0.62 : 0;
-    const cardHeight = headH + audioBlockH;
+    // 일시정지 = 인게임 설정 - 튜토리얼 다시 보기는 비활성 버튼 + 안내만(연습 모드는 메인 메뉴 설정에서, docs/tutorial.md 5장).
+    const replayBlockH = kind === 'pause' ? headH * 0.34 : 0;
+    const cardHeight = headH + audioBlockH + replayBlockH;
     const cardX = (width - cardWidth) / 2;
     const cardY = (height - cardHeight) / 2;
 
@@ -2717,6 +2748,7 @@ export class CanvasRenderer {
     drawText(ctx, title.desc, cardX + cardWidth / 2, cardY + headH * 0.48);
 
     const audioRects = audioBlockH > 0 ? this._drawAudioSettings(cardX + 14, cardY + headH * 0.6, cardWidth - 28, audioBlockH) : null;
+    if (replayBlockH > 0) this._drawDisabledReplay(cardX + 14, cardY + headH * 0.6 + audioBlockH + 6, cardWidth - 28, replayBlockH - 6);
 
     const buttons = BUTTONS[kind];
     const btnGap = 8;
@@ -2739,7 +2771,8 @@ export class CanvasRenderer {
       if (uiReady(btnState) && btnMeta?.slice) {
         ctx.imageSmoothingEnabled = false;
         drawNine(ctx, btnState.img, btnMeta.slice, bx, btnY, snap(btnWidth), snap(btnHeight));
-        textColor = btnMeta.textColor ?? textColor;
+        // 부활만 밝은 글자(다른 btn_gold는 manifest의 어두운 글자 유지).
+        textColor = isGold ? '#ffffff' : btnMeta.textColor ?? textColor;
       } else {
         ctx.fillStyle = isGold ? '#c28a20' : isPrimary ? cfg.primary : cfg.ghost;
         ctx.fillRect(bx, btnY, btnWidth, btnHeight);
@@ -2766,6 +2799,32 @@ export class CanvasRenderer {
 
     ctx.restore();
     this.lastLayout.popup = { kind, buttons: rects, audio: audioRects };
+  }
+
+  // 비활성 "튜토리얼 다시 보기" 버튼(반투명, 터치 판정 없음) + 아래 안내 한 줄.
+  _drawDisabledReplay(x, y, width, height) {
+    const { ctx } = this;
+    const btnH = Math.max(22, height * 0.55);
+    const st = getUi(this.assets, 'buttons/btn_secondary.png');
+    const meta = getUiMeta(this.assets, 'buttons/btn_secondary.png');
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    if (uiReady(st) && meta?.slice) drawNine(ctx, st.img, meta.slice, x, y, snap(width), snap(btnH));
+    else {
+      ctx.fillStyle = HUD_CONFIG.popup.ghost;
+      ctx.fillRect(x, y, width, btnH);
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = HUD_CONFIG.popup.disabled;
+    ctx.font = getFontString(Math.max(10, btnH * 0.42), true);
+    drawText(ctx, t('tutorial.replay'), x + width / 2, y + btnH / 2);
+    ctx.restore();
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = HUD_CONFIG.text.dim;
+    ctx.font = getFontString(Math.max(10, height * 0.2));
+    drawText(ctx, t('tutorial.replayInGame'), x + width / 2, y + btnH + (height - btnH) / 2);
   }
 
   // 효과음/배경음 슬라이더 + 음소거 버튼(일시정지 팝업). 전용 UI 에셋이 없어 팝업 버튼의
@@ -2868,7 +2927,7 @@ export class CanvasRenderer {
   // 콤보 마일스톤("Great!" 등)/브레이크 peak 문구 - render()가 매 프레임 _advanceComboBanners로
   // 늙힌 로컬 상태만 읽는다(렌더 전용, gameState에 없음).
   _drawComboBanners() {
-    if (!this._comboMilestone && !this._comboBreakDisplay) return;
+    if (!this._comboMilestone) return;
     const { ctx } = this;
     const cx = this.cssWidth / 2;
     const cy = this.cssHeight / 3;
@@ -2887,20 +2946,6 @@ export class CanvasRenderer {
       drawText(ctx, label, cx, cy);
       ctx.restore();
     }
-
-    if (this._comboBreakDisplay) {
-      const { streak, elapsedMs } = this._comboBreakDisplay;
-      const progress = Math.min(1, elapsedMs / COMBO_CONFIG.breakDisplayDurationMs);
-      ctx.save();
-      // 처음부터 흐려지면 읽기 전에 사라진다 - 60%까지는 그대로 두고 나머지만 페이드아웃.
-      ctx.globalAlpha = progress > 0.6 ? Math.max(0, 1 - (progress - 0.6) / 0.4) : 1;
-      ctx.fillStyle = '#ff6b6b';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.font = getFontString(22, true);
-      drawText(ctx, t('hud.comboBreak', { count: streak }), cx, cy + 36, { outlineWidth: 3 });
-      ctx.restore();
-    }
   }
 
   // render()가 매 프레임 호출 - 마일스톤/브레이크 배너의 수명을 늙히고 끝나면 지운다.
@@ -2908,10 +2953,6 @@ export class CanvasRenderer {
     if (this._comboMilestone) {
       this._comboMilestone.elapsedMs += dtMs;
       if (this._comboMilestone.elapsedMs >= COMBO_CONFIG.milestoneDurationMs) this._comboMilestone = null;
-    }
-    if (this._comboBreakDisplay) {
-      this._comboBreakDisplay.elapsedMs += dtMs;
-      if (this._comboBreakDisplay.elapsedMs >= COMBO_CONFIG.breakDisplayDurationMs) this._comboBreakDisplay = null;
     }
   }
 }

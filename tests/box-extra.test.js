@@ -291,7 +291,10 @@ for (const seed of [11, 22, 33, 44, 55]) {
       // 불변식: idle인 칸은 절대 EMPTY일 수 없다(기존 스트레스 테스트와 동일한 패턴).
       for (let idx = 0; idx < board.grid.length; idx++) {
         if (board.cellStates[idx] === null) {
-          assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          // 예외: 낙하 대기(settleWait) 중인 해소의 열은 빈 칸이 idle로 남는다(plan.md 4-2).
+          if (!state.resolutions.some((r) => r.phase === 'settleWait' && r.settleCols.has(idx % board.cols))) {
+            assert.notEqual(board.grid[idx], EMPTY, `seed=${seed}, i=${i}: idle인 칸(idx=${idx})이 EMPTY면 안 된다`);
+          }
         }
       }
     }

@@ -110,7 +110,14 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
     location.reload(); // 새로고침 전에 다른 save()가 덮어쓰지 않게 바로.
   };
 
-  panel.append(floorInput, floorGo, goldBtn, itemsBtn, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn);
+  // 튜토리얼 초기화 - 다음 1층 진입 때 최초 튜토리얼이 다시 자동으로 뜬다(docs/tutorial.md).
+  const tutorialBtn = document.createElement('button');
+  tutorialBtn.textContent = '튜토리얼 초기화';
+  tutorialBtn.onclick = () => {
+    playerState.tutorial = { ...playerState.tutorial, done: false };
+    playerState.save();
+  };
+  panel.append(floorInput, floorGo, goldBtn, itemsBtn, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn, tutorialBtn);
 
   // assets/effects 스프라이트 확인용 - 보드 가운데 칸에서 line/bomb/box/color 발동을
   // 하나씩 강제로 재생해본다(core 매치 규칙 없이, CanvasRenderer._spawnSpecialFx만 확인).

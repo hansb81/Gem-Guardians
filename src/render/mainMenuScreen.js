@@ -13,9 +13,13 @@ import { loadImage } from './assetLoader.js';
 import { LayeredBg } from './layeredBg.js';
 import { getFontString } from '../config/fonts.js';
 import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton } from './uiKit.js';
-import { t } from '../config/i18n.js';
+import { t, getLocale, setLocale, LOCALE_IDS } from '../config/i18n.js';
+import { storage } from '../platform/storage.js';
 import { audio } from '../audio/AudioManager.js';
 import { HUD_CONFIG } from '../config/hud.js';
+import { GAME_INFO } from '../config/gameInfo.js';
+import { platform } from '../platform/index.js';
+import { haptics } from '../platform/haptics.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -35,12 +39,14 @@ const COLORS = {
   blue: '#386cbc',
   redLight: '#ec6a6a',
   overlay: 'rgba(13, 10, 16, 0.75)',
+  title: '#ffe14a', // 메뉴 팝업 제목(인게임 HUD 제목 #f2d264와 다름).
 };
 
 const DEFAULT_LAYOUT = {
   currencyBar: [154, 28, 232, 56],
   attendance: [20, 28, 48, 48],
   event: [20, 92, 48, 48],
+  mail: [20, 156, 48, 48], // assets/ui/menu/manifest.json layoutA_screenPx - assets/menu/manifest.json엔 아직 없다.
   settings: [472, 28, 48, 48],
   shop: [472, 92, 48, 48],
   playButton: [90, 760, 360, 64],
@@ -60,10 +66,19 @@ const BAR_BOX_H = 28;
 
 const POPUP_SIZES = {
   mode: [400, 330],
-  settings: [400, 440],
+  settings: [400, 496],
+  help: [480, 820],
+  about: [480, 820],
   attendance: [400, 180],
   event: [400, 180],
+  mail: [400, 180],
+  exit: [400, 240],
 };
+// 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
+const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 468, 320, 46] };
+const HAPTICS_EXTRA_H = 56;
+// 종료 확인(뒤로가기 - 메뉴에서). 카드 왼쪽 위 기준.
+const EXIT = { bodyY: 110, cancel: [40, 160, 150, 46], ok: [210, 160, 150, 46] };
 
 // 설정 팝업 본문(카드 왼쪽 위 기준). 슬라이더 홈은 slider_track(16x8)을 가로 3-slice로 늘린다.
 const SETTINGS = {
@@ -75,10 +90,33 @@ const SETTINGS = {
   trackW: 280,
   valueX: 360,
   buttons: [
-    { id: 'help', labelKey: 'menu.settings.help', rect: [40, 272, 320, 46] },
-    { id: 'about', labelKey: 'menu.settings.about', rect: [40, 342, 320, 46] },
+    { id: 'mute', labelKey: 'menu.settings.mute', rect: [40, 244, 320, 46] },
+    { id: 'help', labelKey: 'menu.settings.help', rect: [40, 300, 320, 46] },
+    { id: 'about', labelKey: 'menu.settings.about', rect: [40, 356, 320, 46] },
+    { id: 'language', labelKey: 'menu.settings.language', rect: [40, 412, 320, 46] },
   ],
 };
+// 도움말 팝업(카드 왼쪽 위 기준, 카드 480x820). 본문은 locale의 menu.help.pages(쪽마다 { title, image?, body: [문단] }).
+// image = assets/ui/help/<이름>.png(tools/make_help_images.py로 만든 설명 그림, 원본 1px = 화면 2px).
+// 튜토리얼 다시 보기 버튼은 docs/tutorial.md 5장대로 도움말 화면에 둔다.
+const HELP = {
+  headY: 100,
+  bodyX: 30,
+  bodyY: 134,
+  bodyW: 420,
+  lineH: 27,
+  paraGap: 10,
+  textSize: 14,
+  imageScale: 2,
+  imageGap: 24, // 그림 아래 ~ 첫 줄 가운데
+  prev: [30, 690, 130, 46],
+  next: [320, 690, 130, 46],
+  replay: [30, 750, 420, 46],
+};
+
+// 게임 정보 팝업(카드 왼쪽 위 기준, 카드 480x820). 본문은 locale menu.about.body 한 쪽을 위아래로 스크롤한다.
+const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13, lineH: 24, headSize: 16, headH: 40 };
+
 // slider_track manifest의 fill = { x: 2, y: 2, h: 4, padRight: 2 } 원본 px -> 화면 2배.
 const TRACK_FILL = { x: 4, y: 4, h: 8, padRight: 4 };
 
@@ -117,13 +155,21 @@ export class MainMenuScreen {
     this.manifest = null;
     this.bg = null; // 정지 폴백(menu_bg.png) - 조각 시트가 오기 전까지만 쓴다.
     this.bgLayers = new LayeredBg('assets/menu');
+    // 종료 확인 모달 종류: 'app' = 메뉴에서 앱 종료, 'floor' = 전투(층 클리어·패배 정비 팝업)에서 마을로.
+    this.exitKind = 'app';
     this._transform = null; // 최근 draw()의 {offsetX, offsetY, k} - 포인터 판정에 그대로 쓴다.
     this._assets = null; // CanvasRenderer.assets(uiImages/uiManifest) - draw()마다 받는다.
 
-    this.popup = null; // null | 'mode' | 'settings' | 'attendance' | 'event' (보관함은 main.js의 정비 팝업)
+    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' (보관함은 main.js의 정비 팝업)
     this._modeLockHint = false;
     this._pressed = null; // 누르고 있는 버튼 id - _pressed 그림으로 바꿔 그린다.
     this._drag = null; // 설정 슬라이더를 끌고 있는 중 - { channel, rect } | null.
+    this._helpPage = 0;
+    this._helpWrap = null; // { key, lines } - 쪽·배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
+    this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
+    this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
+    this._helpImages = {}; // 이름 -> 로드 상태(도움말을 처음 열 때 그 쪽 그림만 불러온다).
+    this.mailBadge = () => false; // 우편 시스템이 생기면 "읽지 않은 우편 있음"에 연결.
     this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
@@ -139,7 +185,7 @@ export class MainMenuScreen {
   }
 
   _layout() {
-    return this.manifest?.layoutA_screenPx ?? DEFAULT_LAYOUT;
+    return { ...DEFAULT_LAYOUT, ...this.manifest?.layoutA_screenPx };
   }
 
   _altar() {
@@ -170,6 +216,17 @@ export class MainMenuScreen {
     this._drawBackground(ctx, offsetX, offsetY, scale, nowMs);
     this._drawUi(ctx, playerState);
     if (this.popup) this._drawPopup(ctx, width, height);
+    ctx.restore();
+  }
+
+  // 메뉴 밖(전투 scene)에서 종료 확인 모달만 위에 덮어 그린다 - 입력도 같은 handlePointerDown으로 받는다.
+  drawPopupOnly(ctx, width, height, assets = null) {
+    if (!this.popup || width <= 0 || height <= 0) return;
+    this._assets = assets;
+    this._setTransform(width, height);
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    this._drawPopup(ctx, width, height);
     ctx.restore();
   }
 
@@ -251,6 +308,7 @@ export class MainMenuScreen {
     // 출석/이벤트는 받을 보상이 있다고 보고 배지를 띄운다(보상 상태가 생기면 여기에 연결).
     this._drawIconButton(ctx, 'attendance', layout.attendance, COLORS.gold, true);
     this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, true);
+    this._drawIconButton(ctx, 'mail', layout.mail, COLORS.bone, this.mailBadge());
     this._drawIconButton(ctx, 'settings', layout.settings, COLORS.bg3, false);
     this._drawIconButton(ctx, 'shop', layout.shop, COLORS.blue, false);
     this._drawPlayButton(ctx);
@@ -322,7 +380,8 @@ export class MainMenuScreen {
 
   // 팝업 카드(basis 540x960 가운데 정렬) - 종류별로 크기가 다르다.
   _popupCardBasis() {
-    const [w, h] = POPUP_SIZES[this.popup] ?? [400, 200];
+    const [w, h0] = POPUP_SIZES[this.popup] ?? [400, 200];
+    const h = this.popup === 'settings' && platform.caps.haptics ? h0 + HAPTICS_EXTRA_H : h0;
     return [(BASIS_W - w) / 2, (BASIS_H - h) / 2, w, h];
   }
 
@@ -343,14 +402,17 @@ export class MainMenuScreen {
     const [cx, cy, cw] = card;
     // 문장(48x48)을 윗변 가운데에 반쯤 걸쳐서. 전용 문장이 없는 팝업은 설정 문장을 쓴다. 제목은 금색 #f2d264.
     this._sprite(ctx, this.popup === 'mode' ? 'menu/emblem_mode.png' : 'menu/emblem_settings.png', cx + cw / 2 - 24, cy - 24);
-    const title = t(`menu.${this.popup}.title`);
-    this._text(ctx, title, cx + cw / 2, cy + 52, { size: 22, color: HUD_CONFIG.text.title, align: 'center' });
+    const title = t(`menu.${this._popupKey()}.title`);
+    this._text(ctx, title, cx + cw / 2, cy + 52, { size: 22, color: COLORS.title, align: 'center' });
 
     const close = this._closeRects(card);
     this._sprite(ctx, `menu/btn_close${this._pressed === 'close' ? '_pressed' : ''}.png`, close.imgX, close.imgY);
 
     if (this.popup === 'mode') this._drawModePopup(ctx, card);
     else if (this.popup === 'settings') this._drawSettingsPopup(ctx, card);
+    else if (this.popup === 'help') this._drawHelpPopup(ctx, card);
+    else if (this.popup === 'about') this._drawAboutPopup(ctx, card);
+    else if (this.popup === 'exit') this._drawExitPopup(ctx, card);
     else this._drawPlaceholderPopup(ctx, card);
   }
 
@@ -387,13 +449,163 @@ export class MainMenuScreen {
       this._text(ctx, String(Math.round(value * 100)), cx + SETTINGS.valueX, g.y, { size: 13, align: 'right' });
     }
 
-    for (const btn of SETTINGS.buttons) {
+    for (const btn of this._settingsButtons()) {
       const [bx, by, bw, bh] = btn.rect;
       const down = this._pressed === btn.id;
       const rect = [cx + bx, cy + by, bw, bh];
       if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
-      this._text(ctx, t(btn.labelKey), cx + bx + bw / 2, cy + by + bh / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+      const label = btn.id === 'mute' && audio.muted ? 'menu.settings.unmute' : btn.id === 'haptics' ? (haptics.enabled() ? 'menu.settings.hapticsOn' : 'menu.settings.hapticsOff') : btn.labelKey;
+      this._text(ctx, t(label), cx + bx + bw / 2, cy + by + bh / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
     }
+  }
+
+  _settingsButtons() {
+    return platform.caps.haptics ? [...SETTINGS.buttons, HAPTICS_BUTTON] : SETTINGS.buttons;
+  }
+
+  // 로케일 키 - 종료 확인은 종류(exitKind)마다 문구가 다르다.
+  _popupKey() {
+    return this.popup === 'exit' && this.exitKind === 'floor' ? 'quitFloor' : this.popup;
+  }
+
+  _drawExitPopup(ctx, [cx, cy, cw]) {
+    const key = this._popupKey();
+    this._text(ctx, t(`menu.${key}.body`), cx + cw / 2, cy + EXIT.bodyY, { size: 15, align: 'center' });
+    for (const [id, r] of [['exitCancel', EXIT.cancel], ['exitOk', EXIT.ok]]) {
+      const down = this._pressed === id;
+      const rect = [cx + r[0], cy + r[1], r[2], r[3]];
+      if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+      this._text(ctx, t(`menu.${key}.${id === 'exitOk' ? 'ok' : 'cancel'}`), rect[0] + r[2] / 2, rect[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+    }
+  }
+
+  _drawHelpPopup(ctx, card) {
+    const [cx, cy, cw] = card;
+    const pages = t('menu.help.pages');
+    if (!Array.isArray(pages) || pages.length === 0) return;
+    this._helpPage = Math.min(this._helpPage, pages.length - 1);
+    const page = pages[this._helpPage];
+    this._text(ctx, page.title, cx + cw / 2, cy + HELP.headY, { size: 18, color: HUD_CONFIG.text.title, align: 'center' });
+
+    let y = cy + HELP.bodyY;
+    const pic = page.image ? this._helpImage(page.image) : null;
+    if (pic) {
+      const { offsetX, offsetY, k } = this._transform;
+      const w = pic.img.width * HELP.imageScale;
+      const h = pic.img.height * HELP.imageScale;
+      ctx.drawImage(pic.img, offsetX + (cx + (cw - w) / 2) * k, offsetY + y * k, w * k, h * k);
+      y += h + HELP.imageGap;
+    }
+    for (const line of this._helpLines(ctx, page)) {
+      if (line === null) y += HELP.paraGap;
+      else {
+        this._text(ctx, line, cx + HELP.bodyX, y, { size: HELP.textSize });
+        y += HELP.lineH;
+      }
+    }
+
+    const last = pages.length - 1;
+    this._helpButton(ctx, card, 'helpPrev', HELP.prev, t('menu.help.prev'), this._helpPage > 0);
+    this._helpButton(ctx, card, 'helpNext', HELP.next, t('menu.help.next'), this._helpPage < last);
+    this._text(ctx, `${this._helpPage + 1} / ${pages.length}`, cx + cw / 2, cy + HELP.prev[1] + HELP.prev[3] / 2, { size: 15, align: 'center' });
+    this._helpButton(ctx, card, 'tutorialReplay', HELP.replay, t('tutorial.replay'), true);
+  }
+
+  _drawAboutPopup(ctx, card) {
+    const [cx, cy, cw] = card;
+    const lines = this._aboutLines(ctx);
+    const viewH = ABOUT.viewBottom - ABOUT.viewY;
+    let contentH = 0;
+    for (const l of lines) contentH += l.head ? ABOUT.headH : ABOUT.lineH;
+    this._aboutScroll = Math.max(0, Math.min(this._aboutScroll, contentH - viewH));
+
+    const { offsetX, offsetY, k } = this._transform;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(offsetX + cx * k, offsetY + (cy + ABOUT.viewY) * k, cw * k, viewH * k);
+    ctx.clip();
+    let y = cy + ABOUT.viewY - this._aboutScroll;
+    for (const l of lines) {
+      const h = l.head ? ABOUT.headH : ABOUT.lineH;
+      if (y + h > cy + ABOUT.viewY && y < cy + ABOUT.viewBottom) {
+        if (l.head) this._text(ctx, l.head, cx + cw / 2, y + h / 2 + 4, { size: ABOUT.headSize, color: HUD_CONFIG.text.title, align: 'center' });
+        else this._text(ctx, l.text, cx + ABOUT.bodyX, y + h / 2, { size: ABOUT.textSize });
+      }
+      y += h;
+    }
+    ctx.restore();
+  }
+
+  // 본문을 { head } / { text } 줄 목록으로 자른다. '{versionLine}'은 GAME_INFO로 채운다.
+  _aboutLines(ctx) {
+    const body = t('menu.about.body');
+    const key = `${this._transform.k}|${body}`;
+    if (this._aboutWrap?.key === key) return this._aboutWrap.lines;
+    const lines = [];
+    const versionLine = t('menu.about.version', GAME_INFO);
+    for (const item of Array.isArray(body) ? body : []) {
+      if (typeof item === 'object') {
+        lines.push({ head: item.head });
+        continue;
+      }
+      let line = '';
+      for (const word of item.replace('{versionLine}', versionLine).split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && this._measure(ctx, next, ABOUT.textSize) > ABOUT.bodyW) {
+          lines.push({ text: line });
+          line = word;
+        } else line = next;
+      }
+      lines.push({ text: line });
+    }
+    this._aboutWrap = { key, lines };
+    return lines;
+  }
+
+  // 게임 정보가 열려 있으면 휠로 스크롤하고 true(main.js가 기본 동작을 막는다).
+  handleWheel(deltaY) {
+    if (this.popup !== 'about') return false;
+    this._aboutScroll += deltaY * 0.5; // 범위는 그릴 때 자른다.
+    return true;
+  }
+
+  _helpImage(name) {
+    if (!(name in this._helpImages)) {
+      this._helpImages[name] = null;
+      loadImage(`assets/ui/help/${name}.png`).then((s) => {
+        this._helpImages[name] = s;
+      });
+    }
+    const state = this._helpImages[name];
+    return ready(state) ? state : null;
+  }
+
+  _helpButton(ctx, [cx, cy], id, [bx, by, bw, bh], label, enabled) {
+    const down = enabled && this._pressed === id;
+    const rect = [cx + bx, cy + by, bw, bh];
+    if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+    this._text(ctx, label, cx + bx + bw / 2, cy + by + bh / 2 + (down ? 2 : 0), { size: 15, align: 'center', color: enabled ? COLORS.bone : COLORS.bg3 });
+  }
+
+  // 문단을 본문 폭에 맞춰 줄로 자른다(공백 단위, 한 단어가 폭보다 길면 그 줄만 넘친다). null = 문단 사이 간격.
+  _helpLines(ctx, page) {
+    const key = `${this._helpPage}|${this._transform.k}|${page.title}`;
+    if (this._helpWrap?.key === key) return this._helpWrap.lines;
+    const lines = [];
+    for (const para of page.body) {
+      if (lines.length) lines.push(null);
+      let line = '';
+      for (const word of para.split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && this._measure(ctx, next, HELP.textSize) > HELP.bodyW) {
+          lines.push(line);
+          line = word;
+        } else line = next;
+      }
+      lines.push(line);
+    }
+    this._helpWrap = { key, lines };
+    return lines;
   }
 
   _drawModePopup(ctx, card) {
@@ -437,7 +649,12 @@ export class MainMenuScreen {
       this._pressed = 'shop';
       return 'openShop'; // 상점은 팝업이 아니라 전체 화면 씬(src/render/shopScreen.js) - main.js가 넘어간다.
     }
-    for (const id of ['attendance', 'event', 'settings']) {
+    // 상단 재화 바: 골드 칸 → 골드 교환, 다이아 칸 → 다이아 탭. 경계는 두 칸(BAR_ITEMS) 사이.
+    const [bx, by, bw, bh] = layout.currencyBar;
+    const split = BAR_ITEMS[1].iconX - 5;
+    if (pressButton(x, y, this._toScreen([bx, by, split, bh]))) return 'openShopGold';
+    if (pressButton(x, y, this._toScreen([bx + split, by, bw - split, bh]))) return 'openShopDia';
+    for (const id of ['attendance', 'event', 'mail', 'settings']) {
       if (!pressButton(x, y, this._toScreen(layout[id]))) continue;
       this._pressed = id;
       this.popup = id;
@@ -449,12 +666,48 @@ export class MainMenuScreen {
     return null;
   }
 
+  // 뒤로가기(main.js 핸들러 스택): 열린 팝업을 X와 같은 규칙으로 닫는다. 닫았으면 true.
+  closePopup() {
+    if (!this.popup) return false;
+    this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null;
+    this._drag = null;
+    return true;
+  }
+
   _handlePopupPointerDown(x, y) {
     const card = this._popupCardBasis();
     if (pressButton(x, y, this._toScreen(this._closeRects(card).hit), 'cancel')) {
       this._pressed = 'close';
-      this.popup = null;
+      this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null; // 도움말·게임 정보 X는 설정으로 돌아간다.
       return null;
+    }
+
+    if (this.popup === 'help') {
+      const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+      const pages = t('menu.help.pages');
+      const count = Array.isArray(pages) ? pages.length : 1;
+      if (this._helpPage > 0 && pressButton(x, y, hit(HELP.prev))) {
+        this._pressed = 'helpPrev';
+        this._helpPage--;
+        return null;
+      }
+      if (this._helpPage < count - 1 && pressButton(x, y, hit(HELP.next))) {
+        this._pressed = 'helpNext';
+        this._helpPage++;
+        return null;
+      }
+      if (pressButton(x, y, hit(HELP.replay))) {
+        this.popup = null;
+        return 'replayTutorial'; // main.js가 바로 튜토리얼 연습 전투로 들어간다(세이브 안 건드림).
+      }
+    }
+
+    if (this.popup === 'about') {
+      const view = [card[0], card[1] + ABOUT.viewY, card[2], ABOUT.viewBottom - ABOUT.viewY];
+      if (pointInRect(x, y, this._toScreen(view))) {
+        this._drag = { scrollFromY: y, scrollStart: this._aboutScroll };
+        return null;
+      }
     }
 
     if (this.popup === 'settings') {
@@ -466,13 +719,41 @@ export class MainMenuScreen {
         audio.play('gem_select');
         return null;
       }
-      for (const btn of SETTINGS.buttons) {
+      for (const btn of this._settingsButtons()) {
         const rect = [card[0] + btn.rect[0], card[1] + btn.rect[1], btn.rect[2], btn.rect[3]];
         if (pressButton(x, y, this._toScreen(rect))) {
-          this._pressed = btn.id; // 도움말/게임 정보 화면은 아직 없다 - 눌림 표시만.
+          this._pressed = btn.id;
+          if (btn.id === 'mute') audio.toggleMute();
+          if (btn.id === 'haptics') haptics.setEnabled(!haptics.enabled());
+          if (btn.id === 'language') {
+            const next = LOCALE_IDS[(LOCALE_IDS.indexOf(getLocale()) + 1) % LOCALE_IDS.length];
+            setLocale(next);
+            storage.save('locale', next);
+          }
+          if (btn.id === 'about') {
+            this.popup = 'about';
+            this._aboutScroll = 0;
+          }
+          if (btn.id === 'help') {
+            this.popup = 'help';
+            this._helpPage = 0;
+          }
           return null;
         }
       }
+    }
+
+    if (this.popup === 'exit') {
+      const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+      if (pressButton(x, y, hit(EXIT.cancel), 'cancel')) {
+        this._pressed = 'exitCancel';
+        this.popup = null;
+      } else if (pressButton(x, y, hit(EXIT.ok))) {
+        this._pressed = 'exitOk';
+        this.popup = null;
+        return this.exitKind === 'floor' ? 'quitFloor' : 'exitApp'; // main.js: 마을로 / platform.lifecycle.exit()
+      }
+      return null;
     }
 
     if (this.popup === 'mode') {
@@ -503,9 +784,10 @@ export class MainMenuScreen {
     audio.setVolume(this._drag.channel, clamp01((x - fillX) / (geom.fillMaxW * k)));
   }
 
-  handlePointerMove(x) {
+  handlePointerMove(x, y) {
     if (!this._drag || !this._transform) return;
-    this._applySliderAt(x, this._drag.geom);
+    if (this._drag.scrollFromY != null) this._aboutScroll = this._drag.scrollStart - (y - this._drag.scrollFromY) / this._transform.k;
+    else this._applySliderAt(x, this._drag.geom);
   }
 
   // (x, y)가 없으면(pointercancel) 누름만 푼다. 받침대를 영역 안에서 떼면 'openInventory'(main.js가 정비 팝업을 연다),

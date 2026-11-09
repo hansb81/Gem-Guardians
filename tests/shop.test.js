@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildRail, buyProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack } from '../src/core/shop/shop.js';
+import { buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack } from '../src/core/shop/shop.js';
 import { itemPrice, normalFloorReward } from '../src/core/economy/economy.js';
 import { defaultSkillLevels } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const load = (name) => JSON.parse(readFileSync(join(__dirname, '..', 'config', name), 'utf8'));
 const DATA = { balance: load('balance.json'), enemies: load('enemies.json'), obstacles: load('obstacles.json'), floorsData: load('floors.json') };
 const ITEMS = load('items.json');
-const SHOP = load('shop.json');
+const SHOP = { ...load('shop.json'), products: load('products.json') };
 const SKILLS = load('skills.json');
 const NOW = 1_700_000_000_000;
 const TODAY = '2026-11-07';
@@ -115,11 +115,12 @@ test('스타터 팩 72시간이 지나면 사라진다, 보스 돌파 팩은 보
 test('다이아 첫 구매 2배는 묶음마다 한 번만', () => {
   const player = makePlayer();
   const ctx = ctxOf(player);
-  const b = SHOP.diaBundles[1];
+  // dia.1 = 300 + 보너스 30(products.json grant 330, shop.json bonus 30) - 첫 구매는 기본 300을 한 번 더.
   assert.ok(buyProduct(ctx, 'dia.1').ok);
-  assert.equal(player.diamonds, b.dia * 2 + b.bonus);
+  assert.equal(player.diamonds, 630);
   assert.ok(buyProduct(ctx, 'dia.1').ok);
-  assert.equal(player.diamonds, b.dia * 2 + b.bonus + b.dia + b.bonus);
+  assert.equal(player.diamonds, 630 + 330);
+  assert.equal(buildRail(ctx, 'dia').find((p) => p.id === 'dia.1').price, 5900);
   assert.equal(buildRail(ctx, 'dia').find((p) => p.id === 'dia.1').first, false);
   assert.equal(buildRail(ctx, 'dia').find((p) => p.id === 'dia.0').first, true);
 });
@@ -127,7 +128,8 @@ test('다이아 첫 구매 2배는 묶음마다 한 번만', () => {
 test('패스: 사면 즉시 다이아, 다음 날부터 하루 한 번 받기', () => {
   const player = makePlayer();
   const ctx = ctxOf(player);
-  const pass = SHOP.packs.weekly.pass;
+  const pass = { ...SHOP.packs.weekly.pass, now: SHOP.products['pack.weekly'].grant.diamonds };
+  assert.equal(pass.now, 100);
   assert.ok(buyProduct(ctx, 'pack.weekly').ok);
   assert.equal(player.diamonds, pass.now);
   assert.equal(buyProduct(ctx, 'pass.weekly').reason, 'sold', '산 날은 못 받는다');
@@ -223,4 +225,71 @@ test('A안 잠금: 특수 기술만 빠지고, 그 잼이 지운 칸의 기본 �
   const lv = defaultSkillLevels(SHOP.skills); // 새 플레이어: 용암탄 Lv 0
   assert.deepEqual(run(lv), { shots: 1, casts: 0 }, '잠김: 기본 사격 1발(빨강 3칸), 용암탄 없음');
   assert.deepEqual(run({ ...lv, lava: 1 }), { shots: 1, casts: 1 }, '해금: 기본 사격 그대로 + 용암탄');
+});
+
+test('products.json: 현금 상품 = 상점 krw 상품과 1:1, 지급은 txId iap:{키}:{주문} 한 번만', () => {
+  const player = makePlayer({ bestFloor: 6 });
+  player.shop.offers.boss = { floor: 10, expiresAt: NOW + 1000 };
+  player.shop.offers.starter = NOW + 1000;
+  const ctx = ctxOf(player);
+  const krw = ['packs', 'dia'].flatMap((r) => buildRail(ctx, r)).filter((p) => p.cur === 'krw');
+  assert.ok(krw.length >= 13, '팩 7 + 다이아 6이 다 보이는 상태에서 확인');
+  const keys = Object.keys(SHOP.products).filter((k) => !k.startsWith('_'));
+  for (const p of krw) assert.ok(keys.includes(p.id), p.id);
+  for (const k of keys) {
+    const prod = SHOP.products[k];
+    assert.ok(Number.isInteger(prod.priceKRW) && prod.priceKRW > 0, k);
+    assert.ok(prod.grant && prod.ids, k);
+  }
+  assert.ok(buyProduct(ctx, 'pack.adfree', 1, 'iap:pack.adfree:o1').ok);
+  assert.equal(player.diamonds, 200);
+  assert.equal(buyProduct(ctx, 'pack.weekly', 1, 'iap:pack.weekly:o2').ok, true);
+  assert.equal(buyProduct(ctx, 'dia.0', 1, 'iap:dia.0:o3').ok, true);
+  assert.equal(buyProduct(ctx, 'dia.0', 1, 'iap:dia.0:o3').reason, 'sold', '같은 주문 id는 두 번 지급 안 됨');
+});
+
+test('canSell: 못 파는 현금 상품은 목록·구매에서 빠지고, 이미 산 패스 받기는 남는다', () => {
+  const player = makePlayer({ bestFloor: 6 });
+  player.shop.offers.starter = NOW + 1000;
+  player.shop.passes.weekly = { daysLeft: 3, claimedToday: false };
+  const ctx = ctxOf(player, { canSell: () => false });
+  const packs = buildRail(ctx, 'packs').filter((e) => e.id);
+  assert.deepEqual(packs.map((e) => e.id), ['pass.weekly']);
+  const dia = buildRail(ctx, 'dia');
+  assert.ok(!dia.some((e) => e.kind === 'diaBundle' || e.hdr === 'diaBuy'));
+  assert.ok(dia.some((e) => e.kind === 'diaItem'), '다이아로 사는 상품은 그대로');
+  assert.equal(buyProduct(ctx, 'dia.0', 1, 'iap:dia.0:x').reason, 'missing');
+  const some = ctxOf(player, { canSell: (k) => k === 'dia.2' });
+  assert.deepEqual(buildRail(some, 'dia').filter((e) => e.kind === 'diaBundle').map((e) => e.id), ['dia.2']);
+});
+
+test('grantPaidProduct: 미지급 복구/복원 - 목록에 있으면 상점 규칙대로, 이미 받았으면 성공, 목록에 없으면 products.json 지급만', () => {
+  const player = makePlayer({ bestFloor: 6 });
+  const ctx = ctxOf(player);
+  assert.ok(grantPaidProduct(ctx, 'pack.adfree', 'iap:pack.adfree:o1').ok);
+  assert.equal(player.diamonds, 200);
+  assert.ok(player.shop.purchasedOnce.includes('pack.adfree'), '상점 1회 구매 기록');
+  const again = grantPaidProduct(ctx, 'pack.adfree', 'iap:pack.adfree:o1');
+  assert.deepEqual([again.ok, again.duplicate], [true, true], '같은 주문은 두 번 안 주고 성공으로(스토어에 완료 알림)');
+  assert.equal(player.diamonds, 200);
+  // 기간이 끝난 보스 팩(지금 목록에 없음)도 산 것은 준다.
+  assert.ok(grantPaidProduct(ctx, 'pack.boss', 'iap:pack.boss:o2').ok);
+  assert.equal(player.items.revive, 2);
+  assert.equal(grantPaidProduct(ctx, 'nope', 'iap:nope:o3').ok, false);
+});
+
+test('복원·환불: 목록에 없는 1회 팩도 기록이 되살아나고, 환불은 광고 제거만 한 번 회수(slot4는 유지)', () => {
+  const player = makePlayer({ bestFloor: 30 }); // 스타터 노출 기간 아님 -> 목록에 없음
+  const ctx = ctxOf(player);
+  assert.ok(grantPaidProduct(ctx, 'pack.starter', 'iap:pack.starter:o1').ok);
+  assert.ok(player.shop.purchasedOnce.includes('pack.starter'), '1회 팩 기록 복원');
+  assert.ok(grantPaidProduct(ctx, 'pack.adfree', 'iap:pack.adfree:o2').ok);
+  player.inventory.grant({ flags: ['slot4'] }, { src: 'bossReward', txId: 'boss:20' });
+  assert.ok(player.inventory.isUnlocked('adFree'));
+  const r = revokePaidProduct(ctx, 'pack.adfree', 'o2');
+  assert.deepEqual(r.removed, ['adFree']);
+  assert.equal(player.inventory.isUnlocked('adFree'), false);
+  assert.equal(revokePaidProduct(ctx, 'pack.adfree', 'o2').reason, 'duplicate', '같은 환불은 한 번만');
+  assert.deepEqual(revokePaidProduct(ctx, 'pack.slot4', 'o3').removed, [], 'slot4는 다른 경로로도 얻으므로 회수 안 함');
+  assert.ok(player.inventory.isUnlocked('slot4'));
 });

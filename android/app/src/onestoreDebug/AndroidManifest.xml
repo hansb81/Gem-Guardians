@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- onestore + debug 빌드에만(release에는 안 들어간다). onestore:dev_option = 개발 중 연결할 원스토어 서비스 지역.
+     onestore_00 = 대한민국. 로그 레벨은 OneStoreIapPlugin.load()가 debuggable 빌드에서만 올린다. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <meta-data android:name="onestore:dev_option" android:value="onestore_00" />
+    </application>
+</manifest>

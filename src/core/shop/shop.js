@@ -2,8 +2,10 @@
 // 날짜(today 'YYYY-MM-DD')는 호출부가 넘긴다. 상품은 데이터만(id/kind/가격/상태) 돌려주고 글자는
 // render(shopScreen)가 locales로 만든다.
 //
-// ctx = { cfg(shop.json), itemsConfig(items.json), data({balance, enemies, obstacles, floorsData}),
-//         player, now, today }
+// ctx = { cfg(shop.json + cfg.products = config/products.json 현금 상품 가격·지급), itemsConfig(items.json), data({balance, enemies, obstacles, floorsData}),
+//         player, now, today, canSell? }
+// canSell(productKey) = 이 마켓에서 현금 상품을 팔 수 있는지(없으면 전부 판다 - 테스트·시뮬레이터). 못 파는 현금 상품은
+//          목록에서 빠지고 살 수도 없다. 이미 산 패스의 매일 받기는 그대로 남는다.
 // player = playerState와 같은 모양: gold, diamonds, bestFloor, shop, inventory(src/game/inventory.js).
 //          보유·젬 스킬·4번째 슬롯은 inventory로 읽고, 지급·차감은 inventory.buy()/grant() 한 번으로만 한다
 //          (docs/inventory.md 3장 - 주입된 객체 호출이라 core 규칙(브라우저 API 금지)과 무관).
@@ -150,7 +152,8 @@ function railPacks(ctx) {
   const out = [];
   for (const id of cfg.packs.order) {
     const p = cfg.packs[id];
-    const base = { id: `pack.${id}`, kind: 'pack', pack: id, cur: 'krw', price: p.krw, state: '' };
+    const base = { id: `pack.${id}`, kind: 'pack', pack: id, cur: 'krw', price: cfg.products[`pack.${id}`].priceKRW, state: '' };
+    if (ctx.canSell && !ctx.canSell(base.id) && !(p.pass && shop.passes[id].daysLeft > 0)) continue;
     if (id === 'starter') {
       const exp = shop.offers.starter;
       if (player.bestFloor >= p.minBestFloor && !bought('pack.starter') && exp != null && now < exp) out.push({ ...base, expiresAt: exp, onceKey: 'pack.starter' });
@@ -179,9 +182,12 @@ function railPacks(ctx) {
 function railDia(ctx) {
   const { cfg, player, itemsConfig } = ctx;
   const shop = player.shop;
-  const out = [hdr('diaBuy')];
+  const out = [];
   cfg.diaBundles.forEach((b, i) => {
-    out.push({ id: `dia.${i}`, kind: 'diaBundle', index: i, cur: 'krw', price: b.krw, dia: b.dia, bonus: b.bonus, stack: b.stack, first: !shop.firstBuyUsed.includes(i), state: '' });
+    if (ctx.canSell && !ctx.canSell(`dia.${i}`)) return;
+    if (out.length === 0) out.push(hdr('diaBuy'));
+    const prod = cfg.products[`dia.${i}`]; // grant = 기본 + 보너스 다이아
+    out.push({ id: `dia.${i}`, kind: 'diaBundle', index: i, cur: 'krw', price: prod.priceKRW, dia: prod.grant.diamonds - b.bonus, bonus: b.bonus, stack: b.stack, first: !shop.firstBuyUsed.includes(i), state: '' });
   });
   out.push(hdr('diaOnly'));
   for (const id of cfg.diaItems) out.push({ id: `dg.${id}`, kind: 'diaItem', item: id, cur: 'dia', price: itemsConfig.items[id].diamond, state: '' });
@@ -265,8 +271,7 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
     case 'skillUnlock': bundle.skills = { [p.skill]: '+1' }; break;
     case 'pack': {
       const pk = cfg.packs[p.pack];
-      if (pk.pass) giveDia(pk.pass.now);
-      else giveBundle(pk.grant);
+      giveBundle(cfg.products[p.id].grant);
       after = () => {
         if (pk.pass) shop.passes[p.pack] = { daysLeft: pk.pass.days, claimedToday: true }; // 매일 받기는 다음 날부터.
         if (p.onceKey) shop.purchasedOnce.push(p.onceKey);
@@ -286,7 +291,8 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       break;
     }
     case 'diaBundle':
-      giveDia(p.dia * (p.first ? 2 : 1) + p.bonus);
+      giveBundle(cfg.products[p.id].grant);
+      if (p.first) giveDia(p.dia); // 첫 구매 2배 = 기본 다이아만큼 더.
       after = () => shop.firstBuyUsed.push(p.index);
       break;
     case 'diaItem': giveItem(p.item, 1); break;
@@ -309,6 +315,43 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
   if (bundle.skills) got.skillLv = player.inventory.skillLevel(p.skill);
   if (bundle.flags?.includes('slot4')) got.slot4 = true;
   return { ok: true, product: p, qty: n, total, got, delta: res.delta };
+}
+
+// 결제가 끝난 현금 상품 지급(시작 시 미지급 복구·구매 복원). 지금 목록에 있으면 buyProduct 그대로(1회 구매·패스 등 상점 상태 포함),
+// 이미 같은 txId로 받았으면 성공(스토어에 지급 완료를 알려도 됨), 목록에 없으면(기간 끝난 팩 등) 산 것은 줘야 하므로
+// products.json grant만 그대로 준다(상점 상태는 안 바뀜). 결과 { ok, duplicate?, reason? }.
+export function grantPaidProduct(ctx, key, txId) {
+  const res = buyProduct(ctx, key, 1, txId);
+  if (res.ok) return res;
+  const inv = ctx.player.inventory;
+  if (inv.data.grantedTx.includes(txId)) return { ok: true, duplicate: true };
+  const grant = ctx.cfg.products[key]?.grant;
+  if (!grant) return { ok: false, reason: 'unknownProduct' };
+  const out = inv.grant(bundleOfGrant(grant), { src: 'iap', txId });
+  // 1회 팩 기록도 되살린다(재설치·기기 변경 복원 - 다시 상점에 뜨지 않게).
+  const pack = key.startsWith('pack.') ? ctx.cfg.packs[key.slice(5)] : null;
+  const shop = ctx.player.shop;
+  if (out.ok && pack?.once && shop && !shop.purchasedOnce.includes(key)) shop.purchasedOnce.push(key);
+  return out;
+}
+
+function bundleOfGrant(grant) {
+  const bundle = { diamonds: grant.diamonds ?? 0, items: { ...grant.items }, flags: [] };
+  if (grant.slot4) bundle.flags.push('slot4');
+  if (grant.adFree) bundle.flags.push('adFree');
+  return bundle;
+}
+
+// 결제로만 얻는 플래그 - 환불 때 회수한다. slot4는 다이아·보스 보상으로도 얻으므로 회수하지 않는다(정당하게 얻은 것까지 뺏을 수 있음).
+const IAP_ONLY_FLAGS = ['adFree'];
+
+// 환불된 비소모성 주문: 결제로만 얻는 플래그를 회수(같은 주문은 한 번만). 결과 { ok, removed? }.
+export function revokePaidProduct(ctx, key, orderId) {
+  const grant = ctx.cfg.products[key]?.grant;
+  if (!grant) return { ok: false, reason: 'unknownProduct' };
+  const flags = bundleOfGrant(grant).flags.filter((f) => IAP_ONLY_FLAGS.includes(f));
+  if (flags.length === 0) return { ok: true, removed: [] };
+  return ctx.player.inventory.revokeFlags(flags, { src: 'refund', txId: `refund:iap:${key}:${orderId}` });
 }
 
 // 전투 기술에 상점 레벨을 반영한 skills 설정(새 객체). config/skills.json 값 x values[lv-1]/values[0]만 곱하므로

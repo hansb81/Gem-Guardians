@@ -1,0 +1,5 @@
+{
+  "_doc": "원스토어(onestore 빌드) 결제 설정 - src/platform/capacitor/iap/onestore.js가 읽는다. 광고·진동 등 나머지는 config/platform.android.json을 같이 쓴다. licenseKey = 원스토어 개발자센터 > 앱 > 라이선스 관리의 base64 공개키(PurchaseClient.setBase64PublicKey, 구매 서명 검증용 - 비밀 키가 아님). 넣은 뒤 features.iap를 true로. 상품 id는 config/products.json ids.onestore. 서버 API(iap-apis.onestore.net)용 client_id/client_secret은 여기·앱·저장소에 절대 넣지 않는다 - 서버 환경 변수에만.",
+  "features": { "iap": false },
+  "onestore": { "licenseKey": "" }
+}

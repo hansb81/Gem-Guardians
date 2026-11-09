@@ -274,7 +274,7 @@ export class Animator {
         if (move.value === EMPTY || move.value === OBSTACLE) continue;
         if (elapsed < fadeOutMs) {
           const opacity = 1 - elapsed / fadeOutMs;
-          list.push({ row: move.from.row, col: move.from.col, value: move.value, special: move.special, opacity, scale: 1 });
+          list.push({ row: move.from.row, col: move.from.col, value: move.fromValue ?? move.value, special: move.fromValue === undefined ? move.special : move.fromSpecial, opacity, scale: 1 });
         } else {
           const opacity = Math.min(1, (elapsed - fadeOutMs) / fadeInMs);
           list.push({ row: move.to.row, col: move.to.col, value: move.value, special: move.special, opacity, scale: 1 });
@@ -301,12 +301,14 @@ export class Animator {
       const t = clearMs > 0 ? elapsed / clearMs : 1;
       const sinkCells = cfg.clear?.sinkCells ?? 0.3;
       for (const move of effect.moves) {
-        if (move.value === EMPTY || move.value === OBSTACLE) continue;
+        // fromValue = 보드 교체(shuffleBoard targetBoard) 때 그 칸에 원래 있던 젬.
+        const value = move.fromValue ?? move.value;
+        if (value === EMPTY || value === OBSTACLE) continue;
         list.push({
           row: move.from.row + sinkCells * t,
           col: move.from.col,
-          value: move.value,
-          special: move.special,
+          value,
+          special: move.fromValue === undefined ? move.special : move.fromSpecial,
           opacity: 1 - t,
           scale: 1,
         });

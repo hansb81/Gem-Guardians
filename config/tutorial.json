@@ -1,0 +1,28 @@
+{
+  "_doc": "최초 진입 튜토리얼(docs/tutorial.md). steps 순서대로 진행. type info = 탭해서 다음, lesson = boards.json(assets/ui/tutorial)의 lesson 보드로 만들기(->쓰기) 수, done = 완료 팝업. target = 렌더러 getUiRect 이름(여러 개면 배열), arrow = 대상 옆 화살표. textKey = locales tutorial.* (lesson은 .make/.use). 시간 단위 ms. rewardGold 0이면 완료 보상 없음.",
+  "version": 1,
+  "rewardGold": 100,
+  "typeMsPerChar": 30,
+  "infoInputDelayMs": 400,
+  "praiseDelayMs": 600,
+  "praiseMs": 1000,
+  "doneDelayMs": 800,
+  "forceKillMs": 2000,
+  "monsterStopAt": 0.6,
+  "steps": [
+    { "id": "greet", "type": "info", "target": null, "textKey": "greet" },
+    { "id": "currencyBar", "type": "info", "target": "currencyBar", "arrow": true, "textKey": "currency" },
+    { "id": "floorBox", "type": "info", "target": "floorBox", "arrow": true, "textKey": "floor" },
+    { "id": "itemBar", "type": "info", "target": "itemBar", "textKey": "items" },
+    { "id": "topRightButton", "type": "info", "target": "topRightButton", "arrow": true, "textKey": "pause" },
+    { "id": "battlePanel", "type": "info", "target": "battlePanel", "textKey": "battle" },
+    { "id": "wallGauge", "type": "info", "target": "wallGauge", "arrow": true, "textKey": "wall" },
+    { "id": "statues", "type": "info", "target": "statues", "textKey": "statues" },
+    { "id": "board", "type": "info", "target": "board", "textKey": "puzzle" },
+    { "id": "lessonMatch3", "type": "lesson", "lesson": "match3", "target": ["battlePanel"], "textKey": "lesson.match3" },
+    { "id": "lessonLine", "type": "lesson", "lesson": "line", "target": ["battlePanel"], "textKey": "lesson.line" },
+    { "id": "lessonBomb", "type": "lesson", "lesson": "bomb", "target": ["battlePanel"], "textKey": "lesson.bomb" },
+    { "id": "lessonBox", "type": "lesson", "lesson": "box", "target": ["battlePanel"], "textKey": "lesson.box" },
+    { "id": "done", "type": "done", "target": null }
+  ]
+}

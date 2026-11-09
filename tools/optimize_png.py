@@ -87,6 +87,8 @@ def main(argv):
             continue
         for dirpath, _, names in os.walk(root):
             files += [os.path.join(dirpath, n) for n in names if n.lower().endswith('.png')]
+    # store/ = 스토어 제출용 원본. 경로로 넘겨도 건드리지 않는다.
+    files = [f for f in files if 'store' not in os.path.normpath(os.path.relpath(f)).split(os.sep)[:1]]
 
     before_total = after_total = meta_total = 0
     changed = skipped = 0

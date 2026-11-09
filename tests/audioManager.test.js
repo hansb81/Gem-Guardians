@@ -7,20 +7,25 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { AudioManager, pickFile, bgmForScene } from '../src/audio/AudioManager.js';
+import { initStorage, storage } from '../src/platform/storage.js';
 import { getFloor } from '../src/core/balance/floorGen.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'assets', 'sfx', 'manifest.json'), 'utf8'));
 
-// 테스트 사이에 값이 새지 않도록 매번 새 저장소를 끼운다(storage.js는 localStorage만 본다).
-function stubStorage(initial = {}) {
-  const data = { ...initial };
-  globalThis.localStorage = {
-    getItem: (k) => (k in data ? data[k] : null),
-    setItem: (k, v) => {
-      data[k] = String(v);
+// 테스트 사이에 값이 새지 않도록 매번 새 저장소(platform.storage 모양, async)를 끼운다. 캐시 비우기는 동기라
+// 기본값만 보는 테스트는 기다리지 않아도 된다. 저장값을 미리 넣은 경우·저장 결과를 보는 경우만 await.
+async function stubStorage(initial = {}) {
+  const data = { dataEpoch: '1', ...initial };
+  await initStorage({
+    get: async (k) => (k in data ? data[k] : null),
+    set: async (k, v) => {
+      data[k] = v;
     },
-  };
+    remove: async (k) => {
+      delete data[k];
+    },
+  });
   return data;
 }
 
@@ -69,8 +74,8 @@ test('maxInstances를 넘으면 새 재생을 무시하고, 음소거면 아무�
   assert.equal(audio.play('gem_pop'), false);
 });
 
-test('볼륨은 0~1로 자르고 storage에 저장한다(기본 sfx 0.8 / bgm 0.6)', () => {
-  const data = stubStorage();
+test('볼륨은 0~1로 자르고 storage에 저장한다(기본 sfx 0.8 / bgm 0.6)', async () => {
+  const data = await stubStorage();
   const audio = new AudioManager();
   assert.equal(audio.sfxVolume, 0.8);
   assert.equal(audio.bgmVolume, 0.6);
@@ -80,12 +85,14 @@ test('볼륨은 0~1로 자르고 storage에 저장한다(기본 sfx 0.8 / bgm 0.
   assert.equal(audio.setVolume('bgm', 1.5), 1);
   assert.equal(audio.setVolume('sfx', -3), 0);
   audio.setMuted(true);
+  assert.equal(data.sfxVolume, undefined, '쓰기는 디바운스 - 바로 안 간다');
+  await storage.flush(); // onPause 때와 같은 즉시 flush.
   assert.equal(data.sfxVolume, '0');
   assert.equal(data.bgmVolume, '1');
   assert.equal(data.muted, 'true');
 
   // 저장된 값으로 다시 시작한다.
-  stubStorage({ sfxVolume: '0.3', bgmVolume: '0.9', muted: 'true' });
+  await stubStorage({ sfxVolume: '0.3', bgmVolume: '0.9', muted: 'true' });
   const restored = new AudioManager();
   assert.equal(restored.sfxVolume, 0.3);
   assert.equal(restored.bgmVolume, 0.9);
@@ -168,4 +175,54 @@ test('bgmForScene: 타이틀/메뉴, 10·20층은 보스 곡, 나머지 층은 �
   assert.equal(bgmForScene('game', floor(20)), 'bgm_boss');
   for (const f of [1, 9, 11, 19, 21]) assert.equal(bgmForScene('game', floor(f)), 'bgm_battle', `floor ${f}`);
   assert.equal(bgmForScene('shop'), null); // 메뉴 안 화면은 지금 곡을 잇는다.
+});
+
+test('pauseFor/resumeFor: 사유별로 세어 겹쳐도 마지막 resume 때만 BGM이 돌아온다', () => {
+  stubStorage();
+  const audio = new AudioManager();
+  const gains = [];
+  audio._ctx = { suspend() {}, resume: () => Promise.resolve() }; // gain 값만 본다.
+  audio.master = { gain: {} };
+  audio.sfx = { gain: {} };
+  audio.bgm = { gain: { set value(v) { gains.push(v); } } };
+  audio.pauseFor('purchase');
+  audio.pauseFor('ad');
+  audio.pauseFor('ad');
+  audio.resumeFor('ad');
+  audio.resumeFor('purchase');
+  assert.deepEqual(gains, [0, 0, 0, 0, 0]);
+  audio.resumeFor('ad');
+  assert.equal(gains.at(-1), audio.bgmVolume);
+  audio.resumeFor('ad'); // 짝 없는 resume은 무시.
+  assert.equal(gains.at(-1), audio.bgmVolume);
+});
+
+test('storage: dataEpoch가 다르면 아는 키를 지우고 새로 시작한다', async () => {
+  const data = { dataEpoch: '0', sfxVolume: '0.1', other: 'x' };
+  await initStorage({ get: async (k) => data[k] ?? null, set: async (k, v) => { data[k] = v; }, remove: async (k) => { delete data[k]; } });
+  assert.equal(storage.load('sfxVolume'), null);
+  assert.deepEqual(data, { dataEpoch: '1', other: 'x' });
+});
+
+test("pauseFor('ad')는 AudioContext를 suspend(효과음 포함), 결제('purchase')는 BGM만 끈다", async () => {
+  stubStorage();
+  const audio = new AudioManager();
+  const calls = [];
+  audio._ctx = { suspend: () => calls.push('suspend'), resume: () => (calls.push('resume'), Promise.resolve()), state: 'running' };
+  audio.master = { gain: {} };
+  audio.sfx = { gain: { value: 1 } };
+  audio.bgm = { gain: { value: 1 } };
+  audio.pauseFor('purchase');
+  assert.equal(audio.bgm.gain.value, 0);
+  assert.equal(audio.sfx.gain.value, audio.sfxVolume);
+  assert.deepEqual(calls, [], '결제는 AudioContext를 건드리지 않음');
+  audio.pauseFor('ad');
+  assert.equal(calls.at(-1), 'suspend');
+  audio.unlock(); // 광고 중 탭 - 되살리면 안 된다.
+  assert.equal(calls.at(-1), 'suspend');
+  audio.resumeFor('ad');
+  assert.equal(calls.at(-1), 'resume');
+  assert.equal(audio.bgm.gain.value, 0, '결제가 아직 남아 있다');
+  audio.resumeFor('purchase');
+  assert.equal(audio.bgm.gain.value, audio.bgmVolume);
 });

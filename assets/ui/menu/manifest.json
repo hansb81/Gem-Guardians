@@ -22,6 +22,12 @@
    48,
    48
   ],
+  "mail": [
+   20,
+   156,
+   48,
+   48
+  ],
   "settings": [
    472,
    28,
@@ -110,6 +116,18 @@
   },
   "btn_shop_pressed": {
    "file": "btn_shop_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "btn_mail": {
+   "file": "btn_mail.png",
+   "w": 24,
+   "h": 24,
+   "use": "mail 아이콘 버튼 24x24"
+  },
+  "btn_mail_pressed": {
+   "file": "btn_mail_pressed.png",
    "w": 24,
    "h": 24,
    "use": "눌림 상태"

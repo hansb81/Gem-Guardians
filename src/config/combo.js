@@ -7,7 +7,6 @@ export const COMBO_CONFIG = {
   timerMs: 3000,
   breakOnNonMatchSwap: false, // true면 매치 없는(무효) 스왑도 즉시 콤보를 끊는다. 기본은 false.
   milestoneDurationMs: 900, // tier 문구(Good!/Great!/...)가 뜬 뒤 사라지기까지.
-  breakDisplayDurationMs: 1400, // 콤보가 끊길 때 peak 문구가 떠 있는 시간(마지막 40%만 페이드아웃).
   tiers: [
     { min: 5, damageMultiplier: 1.2, effectIntensity: 1, labelKey: 'combo.tier.good' },
     { min: 10, damageMultiplier: 1.5, effectIntensity: 2, labelKey: 'combo.tier.great' },

@@ -72,6 +72,8 @@ export class BattleState {
     // 상태다. battleConfig.summon이 없으면(에셋 로더가 assets/summon/manifest.json을 못
     // 읽었을 때) 연출 없이 즉시 비활성 - 렌더는 바로 statue_idle로 그린다.
     this.summon = this._createSummon();
+    // 튜토리얼(docs/tutorial.md 0장) 동안 true - 층 소환 타이머(웨이브)가 멈춘다.
+    this.holdSpawns = false;
     this._startSpawning();
   }
 
@@ -307,7 +309,9 @@ export class BattleState {
   // 피해 적용 + enemyHit + 죽으면 enemyDie/클리어 판정. fields는 enemyHit에 그대로 붙는다
   // (towerId, source: 'poison'|'splash'|'skill' 등).
   _damageEnemy(target, damage, fields) {
-    target.currentHealth -= damage;
+    // hpFloor(튜토리얼) - 맞는 연출은 그대로, HP는 그 아래로 안 내려간다. skillBreaksFloor(쓰기 수)면 기술 피해만 뚫는다.
+    const floor = target.hpFloor == null || (target.skillBreaksFloor && fields.source === 'skill') ? -Infinity : target.hpFloor;
+    target.currentHealth = Math.max(floor, target.currentHealth - damage);
     this._pushEvent('enemyHit', {
       enemyId: target.id,
       damage,
@@ -316,9 +320,10 @@ export class BattleState {
     });
     if (target.currentHealth <= 0) {
       target.state = 'dead';
-      this._killedCount++;
-      this._pushEvent('enemyDie', { enemyId: target.id, gold: target.gold, enemyType: target.type, rank: target.rank });
-      this._checkProgress();
+      // 튜토리얼 몬스터는 처치 수·클리어 판정에 안 들어간다(골드는 0).
+      if (!target.tutorial) this._killedCount++;
+      this._pushEvent('enemyDie', { enemyId: target.id, gold: target.gold, enemyType: target.type, rank: target.rank, tutorial: !!target.tutorial });
+      if (!target.tutorial) this._checkProgress();
     }
   }
 
@@ -675,6 +680,20 @@ export class BattleState {
     });
   }
 
+  // 튜토리얼 몬스터(docs/tutorial.md 3장) - 층 소환 목록과 별개. stopAt(길 비율)에서 멈춰 성벽을 치지 않고,
+  // 골드 0·처치 수 제외. hpFloor가 null이 아니면 HP가 그 아래로 안 내려간다.
+  spawnTutorialEnemy(stat, { hp = 1, hpFloor = null, stopAt = 0.6 } = {}) {
+    this._spawnEnemy({ ...stat, hp, gold: 0 });
+    const enemy = this.enemies[this.enemies.length - 1];
+    Object.assign(enemy, { tutorial: true, hpFloor, stopAt });
+    return enemy;
+  }
+
+  // 기술/탄이 날아가는 중인지(튜토리얼 "모든 연쇄/기술이 끝남" 판정).
+  get attacksInFlight() {
+    return this._pendingShots.size > 0 || this._pendingSkills.size > 0;
+  }
+
   _spawnDue() {
     while (this._spawnedCount < this.spawns.length && this._elapsedSec >= (this.spawnAt ? this.spawnAt[this._spawnedCount] : this._spawnedCount * this.spawnInterval)) {
       this._spawnEnemy(this.spawns[this._spawnedCount]);
@@ -717,7 +736,7 @@ export class BattleState {
 
     // 소환 연출이 끝나기 전엔(마지막 슬롯이 landFrame을 지나기 전) 스폰 타이머를 멈춘다 -
     // 적이 석상보다 먼저 나타나 보이지 않게 한다(docs 요청).
-    if (!this.summon.active) {
+    if (!this.summon.active && !this.holdSpawns) {
       this._elapsedSec += dtSec;
       this._spawnDue();
     }
@@ -738,8 +757,9 @@ export class BattleState {
       if (moveMul === 0) continue; // 경직 - 이동·성벽 공격(_attackTimer) 정지.
       if ((enemy.rank === 'boss' ? frozenBoss : frozenNormal) > 0) continue; // 모래시계 정지(isEnemyFrozen과 같은 판정, 갱신 전 값).
 
-      if (enemy.progress < 1) {
-        enemy.progress = Math.min(1, enemy.progress + enemy.speed * moveMul * dtSec);
+      const stopAt = enemy.stopAt ?? 1;
+      if (enemy.progress < stopAt) {
+        enemy.progress = Math.min(stopAt, enemy.progress + enemy.speed * moveMul * dtSec);
       }
 
       if (enemy.progress >= 1 && !enemy._reachedLine) {

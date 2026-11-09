@@ -318,14 +318,13 @@ function shuffleInPlace(cells, rng) {
   return cells;
 }
 
-// 박스 잼의 "랜덤 count개" 대상: idle(애니메이션 없음)이고 열이 잠기지 않았고 excludeKeys에
+// 박스 잼의 "랜덤 count개" 대상: 안정 칸(board.isCellStable)이고 excludeKeys에
 // 없는 칸만 풀로 써서 seed RNG로 섞어 최대 count개 뽑는다(모자라면 있는 만큼만).
 export function pickRandomIdleCells(board, count, excludeKeys = new Set()) {
   const pool = [];
   for (let r = 0; r < board.rows; r++) {
     for (let c = 0; c < board.cols; c++) {
-      if (board.cellStates[board.index(r, c)] !== null) continue;
-      if (board.isColumnLocked(c)) continue;
+      if (!board.isCellStable(r, c)) continue;
       const cell = { row: r, col: c };
       if (excludeKeys.has(keyOf(cell))) continue;
       pool.push(cell);

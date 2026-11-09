@@ -9,17 +9,20 @@ async function fetchJson(path) {
 
 export async function loadBalanceData() {
   try {
-    const [balance, enemies, obstacles, floorsData, items, shop, ranking] = await Promise.all([
+    const [balance, enemies, obstacles, floorsData, items, shopCfg, products, ranking] = await Promise.all([
       fetchJson('config/balance.json'),
       fetchJson('config/enemies.json'),
       fetchJson('config/obstacles.json'),
       fetchJson('config/floors.json'),
       fetchJson('config/items.json'),
       // 상점(config/shop.json)은 없어도 게임은 돈다 - 상점 화면만 빈다.
+      // 현금 상품(config/products.json)은 상점 규칙이 같이 읽는다(cfg.products) - 둘 중 하나라도 없으면 상점 없음.
       fetchJson('config/shop.json').catch(() => null),
+      fetchJson('config/products.json').catch(() => null),
       // 랭킹(config/ranking.json)도 없으면 원석 랭킹만 안 열린다.
       fetchJson('config/ranking.json').catch(() => null),
     ]);
+    const shop = shopCfg && products ? { ...shopCfg, products } : null;
     return { balance, enemies, obstacles, floorsData, items, shop, ranking };
   } catch {
     return null;

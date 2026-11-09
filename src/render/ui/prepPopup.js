@@ -9,7 +9,7 @@ import { drawNine, drawText, drawDamage, drawFixedImage, getUi, getUiMeta, getUi
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
 import { HUD_CONFIG } from '../../config/hud.js';
-import { towerLevelCost, maxTowerLevelUps } from '../../core/economy/economy.js';
+import { towerLevelCost, maxTowerLevelUps, evenTowerLevelUps } from '../../core/economy/economy.js';
 import { vaultSections } from '../inventoryTab.js';
 import { fmt as fmtGold } from '../shopText.js'; // 골드 1,000 형식(메뉴 재화 바·상점과 같음)
 
@@ -24,6 +24,7 @@ const ACTION_H = 48;
 const ROW_GAP = 6;
 const ROW_MAX_H = 112;
 const FOOTER_H = 24;
+const ALL_H = 40; // 일괄 강화 버튼
 const UPGRADE_W = 116;
 const UPGRADE_H = 44; // 주 버튼
 const MAX_H = 36;
@@ -59,6 +60,12 @@ export function statueRowInfo(balance, level, gold) {
   const cost = maxed ? 0 : towerLevelCost(balance, level);
   const maxUps = maxed ? 0 : maxTowerLevelUps(balance, level, gold).levels;
   return { maxed, cost, affordable: !maxed && gold >= cost, maxUps };
+}
+
+// 일괄 강화 버튼 - 골고루 올릴 레벨 수(+N)와 총 비용.
+export function statueAllInfo(balance, levels, gold) {
+  const { count, cost } = evenTowerLevelUps(balance, levels, gold);
+  return { count, cost };
 }
 
 export function layoutPrepPopup(screenW, screenH, context, tab) {
@@ -105,7 +112,7 @@ export function layoutPrepPopup(screenW, screenH, context, tab) {
 }
 
 function layoutStatueTab(c) {
-  const rowH = Math.min(ROW_MAX_H, Math.floor((c.height - FOOTER_H - ROW_GAP - ROW_GAP * 4) / 5));
+  const rowH = Math.min(ROW_MAX_H, Math.floor((c.height - FOOTER_H - ALL_H - ROW_GAP * 2 - ROW_GAP * 4) / 5));
   const rows = [];
   for (let i = 0; i < 5; i++) {
     const card = rect(c.x, c.y + i * (rowH + ROW_GAP), c.width, rowH);
@@ -128,7 +135,7 @@ function layoutStatueTab(c) {
   }
   const fy = rows[4].card.y + rowH + ROW_GAP;
   const half = Math.floor(c.width / 2);
-  return { rows, hint: rect(c.x, fy, half, FOOTER_H), total: rect(c.x + half, fy, c.width - half, FOOTER_H) };
+  return { rows, hint: rect(c.x, fy, half, FOOTER_H), total: rect(c.x + half, fy, c.width - half, FOOTER_H), all: rect(c.x, fy + FOOTER_H + ROW_GAP, c.width, ALL_H) };
 }
 
 function layoutTotemTab(c) {
@@ -158,6 +165,7 @@ export function hitPrepPopup(layout, x, y) {
       if (inside(bx, by, row.upgrade)) return { type: 'upgrade', index: i };
       if (inside(bx, by, row.max)) return { type: 'max', index: i };
     }
+    if (inside(bx, by, layout.statue.all)) return { type: 'all' };
   }
   const v = layout.vaultHits;
   if (v) {
@@ -278,6 +286,11 @@ function drawStatueTab(ctx, assets, state, tab, view) {
   });
   label(ctx, t('popup.prep.holdHint'), tab.hint, C.sub, 12, false, 'left');
   label(ctx, t('popup.prep.totalAttack', { n: Math.round(view.totalAttack) }), tab.total, C.text, 13, true, 'right');
+  const all = view.all ?? { count: 0, cost: 0 };
+  const can = all.count > 0;
+  const allMeta = nine(ctx, assets, can ? 'buttons/btn_primary.png' : 'upgrade/btn_disabled.png', tab.all, HUD_CONFIG.popup.disabled);
+  const allText = can ? t('popup.prep.allN', { n: all.count, cost: fmtGold(all.cost) }) : t('popup.prep.all');
+  label(ctx, allText, tab.all, can ? allMeta?.textColor ?? C.text : C.sub, 14, true, 'center');
 }
 
 function drawTotemTab(ctx, assets, tab, view) {

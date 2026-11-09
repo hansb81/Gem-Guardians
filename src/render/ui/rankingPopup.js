@@ -46,7 +46,9 @@ export function layoutRankingPopup(screenW, screenH, st) {
   out.close = rect(sheet.x + sheet.width - 52, sheet.y + 8, 44, 44);
   out.title = rect(ix + 48, sheet.y + 36, iw - 96, 32);
   const tabY = sheet.y + 80;
-  const tw = (iw - 6) / 2;
+  // st.tabs = 보일 탭(토스 빌드는 일반 모드만 - 경쟁 모드는 자체 서버 전까지 숨김). 하나면 한 줄 전체.
+  const one = (st.tabs ?? RANKING_TABS).length === 1;
+  const tw = one ? iw : (iw - 6) / 2;
   out.tabs = { normal: rect(ix, tabY, tw, TAB_H), comp: rect(ix + tw + 6, tabY, tw, TAB_H) };
   out.body = rect(ix, tabY + TAB_H, iw, sheet.y + sheet.height - BOTTOM - tabY - TAB_H);
   const c = rect(out.body.x + 8, out.body.y + 8, out.body.width - 16, out.body.height - 16);
@@ -71,7 +73,9 @@ export function layoutRankingPopup(screenW, screenH, st) {
       y += 44;
     }
   }
-  out.list = rect(c.x, y, c.width, out.mine.y - 6 - y);
+  // 마켓 리더보드 버튼(토스 "토스 랭킹 보기") - 일반 모드 탭, 내 줄 바로 위.
+  if (st.tossBoard && !comp) out.tossBoard = rect(c.x, out.mine.y - 50, c.width, 44);
+  out.list = rect(c.x, y, c.width, (out.tossBoard ? out.tossBoard.y : out.mine.y) - 6 - y);
   if (comp && st.compState === 'locked') {
     out.lockCover = rect(c.x, out.list.y, c.width, cBottom - out.list.y);
     out.lockBand = rect(c.x + 24, Math.round(out.lockCover.y + out.lockCover.height / 2 - 64), c.width - 48, 128);
@@ -179,7 +183,8 @@ export function hitRankingPopup(L, x, y, st) {
   }
   if (!st.sheet) return { type: 'none' };
   if (inside(bx, by, L.close)) return { type: 'close' };
-  for (const key of RANKING_TABS) if (inside(bx, by, L.tabs[key])) return { type: 'tab', tab: key };
+  for (const key of st.tabs ?? RANKING_TABS) if (inside(bx, by, L.tabs[key])) return { type: 'tab', tab: key };
+  if (inside(bx, by, L.tossBoard)) return { type: 'tossBoard' };
   if (inside(bx, by, L.last)) return { type: 'history' };
   if (inside(bx, by, L.rewardsBtn)) return { type: 'rewards' };
   if (inside(bx, by, L.lockCover)) return { type: 'none' }; // 잠김: 목록·내 줄은 디더 덮개 아래
@@ -241,12 +246,13 @@ function drawSheet(ctx, assets, st, L) {
   drawFixedImage(ctx, assets, 'upgrade/btn_close.png', L.close.x + 22, L.close.y + 22, K);
   label(ctx, t('ranking.title'), L.title, C.goldL, 22, 'center');
 
-  for (const key of RANKING_TABS) if (key !== st.tab) drawTab(ctx, assets, L.tabs[key], key, false, st);
+  for (const key of st.tabs ?? RANKING_TABS) if (key !== st.tab) drawTab(ctx, assets, L.tabs[key], key, false, st);
   nine(ctx, assets, 'upgrade/tab_body.png', L.body, '#15121c');
   drawTab(ctx, assets, L.tabs[st.tab], st.tab, true, st);
 
   if (st.tab === 'comp') drawCompHeader(ctx, assets, st, L);
   drawList(ctx, assets, st, L);
+  if (L.tossBoard) button(ctx, assets, 'buttons/btn_primary.png', L.tossBoard, t('ranking.tossBoard'), C.bone, 22);
   drawMine(ctx, assets, st, L);
   if (L.lockCover) drawLock(ctx, assets, L);
 }

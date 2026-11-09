@@ -1,0 +1,221 @@
+{
+ "_note": "좌표 [행,열] 0부터 위 왼쪽. R/B/Y/G/P. make/use=[from,to] 스왑. highlight=바꿀 두 칸 외에 밝힐 칸. 레슨 중 리필은 noMatch. art/tutorial/boards.py로 검증.",
+ "match3": {
+  "board": [
+   "RBBYBGR",
+   "RRYPYRP",
+   "GYPRPBP",
+   "RGBYBGR",
+   "YRRPRBG",
+   "RGRRGYB",
+   "BGYGBPY"
+  ],
+  "make": [
+   [
+    4,
+    4
+   ],
+   [
+    5,
+    4
+   ]
+  ],
+  "use": null,
+  "highlight": {
+   "make": [
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     3
+    ]
+   ]
+  },
+  "special": null
+ },
+ "line": {
+  "board": [
+   "YPRBRGY",
+   "YRYBGYG",
+   "RPGPGRB",
+   "BRGYBBG",
+   "BYPBGBR",
+   "GBBYBPP",
+   "GRPBRBP"
+  ],
+  "make": [
+   [
+    4,
+    3
+   ],
+   [
+    5,
+    3
+   ]
+  ],
+  "use": [
+   [
+    4,
+    4
+   ],
+   [
+    4,
+    3
+   ]
+  ],
+  "highlight": {
+   "make": [
+    [
+     5,
+     1
+    ],
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     4
+    ]
+   ],
+   "use": [
+    [
+     6,
+     3
+    ]
+   ]
+  },
+  "special": {
+   "type": "line",
+   "at": [
+    5,
+    3
+   ]
+  }
+ },
+ "bomb": {
+  "board": [
+   "RBBYBGR",
+   "RRYPYRP",
+   "GYPRPBP",
+   "RGBYRGR",
+   "YRRPRBG",
+   "RGRRGRB",
+   "BGYGYRR"
+  ],
+  "make": [
+   [
+    5,
+    5
+   ],
+   [
+    5,
+    4
+   ]
+  ],
+  "use": [
+   [
+    5,
+    4
+   ],
+   [
+    6,
+    4
+   ]
+  ],
+  "highlight": {
+   "make": [
+    [
+     5,
+     2
+    ],
+    [
+     5,
+     3
+    ],
+    [
+     3,
+     4
+    ],
+    [
+     4,
+     4
+    ]
+   ],
+   "use": [
+    [
+     6,
+     5
+    ],
+    [
+     6,
+     6
+    ]
+   ]
+  },
+  "special": {
+   "type": "bomb",
+   "at": [
+    5,
+    4
+   ]
+  }
+ },
+ "box": {
+  "board": [
+   "PBPYRYB",
+   "GPBRYGB",
+   "PGGBYYG",
+   "RGRPGPR",
+   "PPGGYPR",
+   "PYGYGYG",
+   "RGRPRRB"
+  ],
+  "make": [
+   [
+    5,
+    4
+   ],
+   [
+    5,
+    3
+   ]
+  ],
+  "use": [
+   [
+    5,
+    3
+   ],
+   [
+    6,
+    3
+   ]
+  ],
+  "highlight": {
+   "make": [
+    [
+     4,
+     2
+    ],
+    [
+     4,
+     3
+    ],
+    [
+     5,
+     2
+    ]
+   ],
+   "use": []
+  },
+  "special": {
+   "type": "box",
+   "at": [
+    5,
+    3
+   ]
+  }
+ }
+}

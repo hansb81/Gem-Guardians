@@ -8,14 +8,17 @@ import { getFontString } from '../config/fonts.js';
 import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton } from './uiKit.js';
 import { t } from '../config/i18n.js';
 import { audio } from '../audio/AudioManager.js';
-import { RAILS, buildRail, buyProduct, hasNewPack, refreshOffers, rolloverDay, walletOf } from '../core/shop/shop.js';
-import { purchase } from '../shop/iap.js';
+import { RAILS, buildRail, buyProduct, grantPaidProduct, revokePaidProduct, hasNewPack, refreshOffers, rolloverDay, walletOf } from '../core/shop/shop.js';
+import { purchase, restore } from '../shop/iap.js';
+import { platform } from '../platform/index.js';
 import { ITEM_CAP } from '../core/inventory/inventory.js';
 import { productText, gotText, fmt } from './shopText.js';
 import { rewardFromDelta } from './rewardPopup.js';
 
 // 획득 팝업으로 알리는 상품(나머지는 토스트) - docs/inventory.md 5-2.
 const REWARD_KINDS = new Set(['pack', 'passClaim', 'free']);
+// 현금 상품이 있는 탭 - 마켓 결제 전에 할 일(원스토어 로그인 등)이 있으면 들어올 때 안내한다.
+const CASH_RAILS = new Set(['packs', 'dia']);
 
 const NATIVE_W = 180;
 const NATIVE_H = 320;
@@ -71,6 +74,7 @@ export class ShopScreen {
   constructor() {
     this.env = null; // { cfg, itemsConfig, data, player, save(), itemIcons() } - main.js가 데이터 로드 후 setEnv.
     this.rail = 'items';
+    this.rails = RAILS; // open()이 마켓에 맞게 줄인다.
     this.scroll = 0;
     this.entries = []; // [{ e, y, h, tx, lines?, linesK? }]
     this.contentH = 0;
@@ -95,7 +99,8 @@ export class ShopScreen {
   }
 
   // 상점에 들어올 때(메뉴 상점 아이콘). 날짜 갱신·기간 한정 팩 열기 후 목록을 만든다.
-  open(rail = 'items') {
+  // hdr: 열면서 그 머리글로 스크롤(예: 'goldex' = 다이아 탭의 골드 교환).
+  open(rail = 'items', hdr = null) {
     this.rail = rail;
     this.scroll = 0;
     this.popup = null;
@@ -104,16 +109,23 @@ export class ShopScreen {
     this.changed = false;
     if (!this.env) return;
     const ctx = this._ctx();
+    // 현금 상품을 못 파는 마켓(웹)은 패키지 탭을 숨긴다 - 이미 산 패스 받기가 있으면 남는다.
+    this.rails = RAILS.filter((id) => id !== 'packs' || buildRail(ctx, 'packs').some((e) => e.id));
+    if (!this.rails.includes(rail)) this.rail = 'items';
+    if (CASH_RAILS.has(this.rail)) this._storeNotice();
     const a = rolloverDay(this.env.player.shop, ctx.today);
     const b = refreshOffers(ctx);
     if (a || b) this.env.save();
     this._rebuild();
+    if (hdr) this._scrollToHdr(hdr);
   }
 
   _ctx() {
     const now = Date.now();
     const { cfg, itemsConfig, data, player } = this.env;
-    return { cfg, itemsConfig, data, player, now, today: localDay(now) };
+    // 현금 상품: 결제가 되는 마켓이고 그 마켓 상품 id가 등록된 것만. dev 가짜 결제 중엔 전부.
+    const canSell = (key) => platform.caps.iap && (platform.dev || !!cfg.products[key]?.ids?.[platform.id]);
+    return { cfg, itemsConfig, data, player, now, today: localDay(now), canSell };
   }
 
   _rebuild() {
@@ -290,7 +302,7 @@ export class ShopScreen {
   }
 
   _drawRail(ctx) {
-    RAILS.forEach((id, i) => {
+    this.rails.forEach((id, i) => {
       const [x, y, w, h] = this._railRect(i);
       const on = id === this.rail;
       this._nine(ctx, on ? 'upgrade/card_selected.png' : 'upgrade/card.png', x, y, w, h);
@@ -327,8 +339,40 @@ export class ShopScreen {
     this._fill(ctx, C.bg2, x, y + HDR_H - 2, CARD.w, 2);
   }
 
+  // 구매 내역 복원은 복원이 있는 마켓(iOS)에서만.
   _legalParts() {
-    return ['restore', 'terms', 'refund'];
+    return platform.caps.restore ? ['restore', 'terms', 'refund'] : ['terms', 'refund'];
+  }
+
+  // 결제가 끝난 주문 지급(시작 시 미지급 복구·구매 복원) - 성공이면 true(어댑터가 스토어에 지급 완료를 알린다).
+  grantPaid(productKey, orderId) {
+    if (!this.env) return false;
+    const res = grantPaidProduct(this._ctx(), productKey, `iap:${productKey}:${orderId}`);
+    if (res.ok && !res.duplicate) {
+      this.env.save();
+      this.changed = true;
+      this._dirty = true;
+    }
+    return res.ok;
+  }
+
+  // 환불된 비소모성 주문 - 결제로만 얻는 플래그(광고 제거) 회수.
+  revokePaid(productKey, orderId) {
+    if (!this.env) return;
+    const res = revokePaidProduct(this._ctx(), productKey, orderId);
+    if (res.ok && res.removed?.length) {
+      this.env.save();
+      this._dirty = true;
+    }
+  }
+
+  async _restore() {
+    const results = await restore(
+      (key, orderId) => this.grantPaid(key, orderId),
+      (key, orderId) => this.revokePaid(key, orderId)
+    );
+    const n = results.filter((r) => r.ok).length;
+    this._showToast(n > 0 ? t('shop.toast.restored', { n }) : t('shop.toast.restoreNone'));
   }
 
   _drawLegal(ctx, y) {
@@ -650,7 +694,27 @@ export class ShopScreen {
     this.toast = { msg, action, until: Date.now() + TOAST_MS, _w: null };
   }
 
+  // 마켓 결제 전에 사용자가 할 일(원스토어 서비스 앱 로그인/설치)이 있으면 안내 + 버튼 토스트. 띄운 상태 값 또는 null.
+  _storeNotice() {
+    const st = platform.iap.getStoreStatus?.() ?? null; // 원스토어 provider만 구현(어댑터 iap는 통째로 바뀐다).
+    if (st) this._showToast(t(`shop.toast.store_${st}`), [t(`shop.toast.storeBtn_${st}`), 'storeFix']);
+    return st;
+  }
+
+  // 구매 버튼: 로그인 전이면 안내만 하지 않고 원스토어 로그인 창까지 연다. 처리했으면 true.
+  _storeGate() {
+    const st = this._storeNotice();
+    if (st === 'needLogin') this._fixStore();
+    return !!st;
+  }
+
+  _fixStore() {
+    this.toast = null;
+    platform.iap.fixStoreStatus().then((ok) => (ok ? this._showToast(t('shop.toast.storeOk')) : this._storeNotice()));
+  }
+
   _poorToast(cur) {
+    audio.play('ui_purchase_fail');
     if (cur === 'gold') this._showToast(t('shop.toast.poorGold'), [t('shop.toast.toGoldex'), 'goldex']);
     else this._showToast(t('shop.toast.poorDia'), [t('shop.toast.toDia'), 'dia']);
   }
@@ -662,11 +726,13 @@ export class ShopScreen {
     this.rail = 'dia';
     this.scroll = 0;
     this._rebuild();
-    if (where === 'goldex') {
-      const row = this.entries.find((r) => r.e.hdr === 'goldex');
-      if (row) this.scroll = row.y;
-      this._clampScroll();
-    }
+    if (where === 'goldex') this._scrollToHdr('goldex');
+  }
+
+  _scrollToHdr(hdr) {
+    const row = this.entries.find((r) => r.e.hdr === hdr);
+    if (row) this.scroll = row.y;
+    this._clampScroll();
   }
 
   setRail(rail) {
@@ -675,6 +741,7 @@ export class ShopScreen {
     this.scroll = 0;
     this.sel = null;
     this._rebuild();
+    if (CASH_RAILS.has(rail)) this._storeNotice();
   }
 
   // 뒤로 가기: 팝업 -> 토스트 순으로 닫는다. 닫은 게 있으면 true(상점은 그대로).
@@ -704,8 +771,12 @@ export class ShopScreen {
       return this._showToast(t(key));
     }
     if (p.kind === 'passClaim') return this._buy(p, tx, 1);
+    if (p.cur === 'krw' && this._storeGate()) return;
     if ((p.cur === 'gold' || p.cur === 'dia') && walletOf(this.env.player, p.cur) < p.price) return this._poorToast(p.cur);
-    if (p.qty && this._qtyMax(p) < 1) return this._showToast(t('shop.toast.cap'));
+    if (p.qty && this._qtyMax(p) < 1) {
+      audio.play('ui_purchase_fail');
+      return this._showToast(t('shop.toast.cap'));
+    }
     audio.play('ui_click');
     this._openPopup(p, tx);
   }
@@ -715,11 +786,15 @@ export class ShopScreen {
     const ctx = this._ctx();
     const res = buyProduct(ctx, p.id, qty, txId);
     if (!res.ok) {
-      if (res.reason === 'poor') this._poorToast(p.cur);
-      else if (res.reason === 'cap') this._showToast(t('shop.toast.cap'));
-      else this._showToast(t(res.reason === 'sold' ? 'shop.toast.already' : 'shop.toast.gone'));
+      if (res.reason === 'poor') this._poorToast(p.cur); // 실패음은 _poorToast가 낸다.
+      else {
+        audio.play('ui_purchase_fail');
+        if (res.reason === 'cap') this._showToast(t('shop.toast.cap'));
+        else this._showToast(t(res.reason === 'sold' ? 'shop.toast.already' : 'shop.toast.gone'));
+      }
       return res;
     }
+    audio.play('ui_purchase');
     this.env.save();
     this.changed = true;
     this._rebuild();
@@ -737,19 +812,26 @@ export class ShopScreen {
       this.popup.step = 'paying';
       this.popup.layout = null;
       const pop = this.popup;
-      purchase(p.id).then((r) => {
+      audio.pauseFor('purchase'); // 결제 창 동안 BGM 정지(토스 심사).
+      // 지급은 결제 도중 어댑터가 grant를 부를 때 - 주문 id로 txId를 만들어 같은 결제가 두 번 지급되지 않게
+      // (docs/inventory.md 4장). 지급이 성공해야 어댑터가 스토어에 완료를 알린다. 팝업을 닫아도 지급은 된다.
+      let res = null;
+      const onGrant = (productKey, orderId) => {
+        res = this._buy(p, tx, 1, `iap:${productKey}:${orderId}`);
+        return res.ok;
+      };
+      purchase(p.id, onGrant).then((r) => {
+        audio.resumeFor('purchase');
+        if (!r?.ok || !res?.ok) {
+          if (this.popup === pop) this.popup = null;
+          // 결제 중에 로그인이 필요하다고 나오면(원스토어) 로그인 창으로. 지급 실패 토스트는 _buy가 이미 띄웠다.
+          if (!res && !(r?.reason === 'needLogin' && this._storeGate())) {
+            audio.play('ui_purchase_fail');
+            this._showToast(t('shop.toast.payFail'));
+          }
+          return;
+        }
         if (this.popup !== pop) return;
-        if (!r?.ok) {
-          this.popup = null;
-          this._showToast(t('shop.toast.payFail'));
-          return;
-        }
-        // 영수증 id로 txId를 만들어 같은 결제가 두 번 지급되지 않게(docs/inventory.md 4장 지급 출처).
-        const res = this._buy(p, tx, 1, `iap:${p.id}:${r.receiptId ?? r.productId}`);
-        if (!res.ok) {
-          this.popup = null;
-          return;
-        }
         if (REWARD_KINDS.has(p.kind) && this.env.showReward) {
           this.popup = null; // 패키지는 획득 팝업이 알려 준다.
           return;
@@ -780,7 +862,8 @@ export class ShopScreen {
     if (act && inRect(bx, by, [act[0], TOAST[1], act[2], TOAST[3]])) {
       this._pressed = 'toastAct';
       audio.play('ui_click');
-      this.goTo(this.toast.action[1]);
+      if (this.toast.action[1] === 'storeFix') this._fixStore();
+      else this.goTo(this.toast.action[1]);
       return null;
     }
     if (inRect(bx, by, CLOSE.hit)) {
@@ -794,10 +877,10 @@ export class ShopScreen {
       this.goTo('dia');
       return null;
     }
-    for (let i = 0; i < RAILS.length; i++) {
+    for (let i = 0; i < this.rails.length; i++) {
       if (!inRect(bx, by, this._railRect(i))) continue;
-      if (RAILS[i] !== this.rail) audio.play('ui_click');
-      this.setRail(RAILS[i]);
+      if (this.rails[i] !== this.rail) audio.play('ui_click');
+      this.setRail(this.rails[i]);
       return null;
     }
     if (inRect(bx, by, [LIST.x, LIST.y, LIST.w, LIST.h])) this._drag = { y0: y, scroll0: this.scroll, moved: false, bx, by };
@@ -817,8 +900,7 @@ export class ShopScreen {
       return;
     }
     if (hit(b.buy)) {
-      this._pressed = 'buy';
-      audio.play('ui_click');
+      this._pressed = 'buy'; // 버튼음 없음: 결과음(ui_purchase / ui_purchase_fail)이 대신한다.
       this._confirmBuy();
       return;
     }
@@ -864,7 +946,8 @@ export class ShopScreen {
       const parts = this._legalParts();
       const i = Math.max(0, Math.min(parts.length - 1, Math.floor(((drag.bx - CARD.x) / CARD.w) * parts.length)));
       audio.play('ui_click');
-      this._showToast(t('shop.legal.page', { name: t(`shop.legal.${parts[i]}`) }));
+      if (parts[i] === 'restore') this._restore();
+      else this._showToast(t('shop.legal.page', { name: t(`shop.legal.${parts[i]}`) }));
       return;
     }
     if (drag.bx < CARD.x || drag.bx >= CARD.x + CARD.w) return;

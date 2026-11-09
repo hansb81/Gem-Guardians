@@ -43,7 +43,7 @@ export function findCandidateMoves(gameState) {
   const out = [];
 
   const usable = (r, c) => {
-    if (board.cellStates[board.index(r, c)] !== null) return false;
+    if (!board.isCellStable(r, c)) return false;
     if (registry && !isSwappable(board, registry, r, c)) return false;
     return true;
   };
@@ -51,10 +51,10 @@ export function findCandidateMoves(gameState) {
   for (let r = 0; r < board.rows; r++) {
     for (let c = 0; c < board.cols; c++) {
       if (!usable(r, c)) continue;
-      if (c + 1 < board.cols && usable(r, c + 1) && !board.isColumnLocked(c) && !board.isColumnLocked(c + 1)) {
+      if (c + 1 < board.cols && usable(r, c + 1)) {
         if (isProductiveSwap(board, r, c, r, c + 1)) out.push({ r1: r, c1: c, r2: r, c2: c + 1 });
       }
-      if (r + 1 < board.rows && usable(r + 1, c) && !board.isColumnLocked(c)) {
+      if (r + 1 < board.rows && usable(r + 1, c)) {
         if (isProductiveSwap(board, r, c, r + 1, c)) out.push({ r1: r, c1: c, r2: r + 1, c2: c });
       }
     }

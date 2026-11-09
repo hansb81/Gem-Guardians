@@ -50,7 +50,10 @@ export class BattleController {
   // 클리어/재도전/dev 이동 모두 이 메서드를 거친다 - PuzzleBattleBridge가 참조를 놓치지
   // 않게 하는 유일한 경로). this.currentFloor/콜백의 floor 인자는 main.js가 그 층의
   // floor.obstacles로 퍼즐 보드를 다시 만드는 데 쓴다.
-  _resetBattleState(floorNumber) {
+  // practice = 튜토리얼 다시 보기(연습 모드) 전용 전투 - 층 번호와 상관없이 그 층 데이터만 쓰고, 예약 아이템
+  // 소모(beginFloor)·층 표시·클리어 보상은 하지 않는다. 진행 중 층/세이브는 그대로(나가면 retryFloor로 원래 층).
+  _resetBattleState(floorNumber, { practice = false } = {}) {
+    this.practice = practice;
     const floor = getFloor(this.balance, this.enemies, this.obstacles, this.floorsData, floorNumber);
     this.currentFloor = floor;
     const resolvedFloor = { wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns: resolveFloorSpawns(this.balance, this.enemies, floor) };
@@ -65,7 +68,7 @@ export class BattleController {
       this.items.resetFloor();
       this.items.battleState = this.battleState;
     }
-    this._floorStarted = false; // 예약 아이템은 beginFloor()(첫 update = 소환 연출 시작)에서 소모한다.
+    this._floorStarted = practice; // 예약 아이템은 beginFloor()(첫 update = 소환 연출 시작)에서 소모한다. 연습 모드는 소모 안 함.
     playerState.inventory.endFloor(); // 층 밖(메뉴·재도전 대기) - 장착 변경 즉시 적용.
     this.onBattleStateChanged?.(this.battleState, floor);
   }
@@ -95,7 +98,12 @@ export class BattleController {
   }
 
   get floor() {
-    return playerState.floor;
+    return this.practice ? this.currentFloor.floor : playerState.floor;
+  }
+
+  // 튜토리얼 다시 보기 - 1층 데이터로 튜토리얼 전용 전투를 연다(docs/tutorial.md 5장).
+  startPractice() {
+    this._resetBattleState(1, { practice: true });
   }
 
   update(dtSec) {
@@ -105,7 +113,7 @@ export class BattleController {
     // 클리어된 그 프레임에 한 번만 클리어 보상을 지급 - lastClearReward는 렌더가 팝업에
     // 보여줄 "얻은 골드"를 그대로 들고 있고, _resetBattleState가 null로 되돌린다(다음
     // 층을 새로 시작할 때까지는 다시 계산할 일이 없다).
-    if (this.battleState.status === 'cleared' && !this.lastClearReward) this._applyClearReward();
+    if (this.battleState.status === 'cleared' && !this.lastClearReward && !this.practice) this._applyClearReward();
     // 클리어 팝업에서는 장착 변경이 즉시 적용된다. 패배 팝업은 층 진행 중(pending - 재도전 때 적용, 부활하면 그대로).
     if (this.battleState.status === 'cleared' && playerState.inventory.inFloor) playerState.inventory.endFloor();
     // 보스층 패배 직후 - 보스 돌파 팩(상점 패키지) 노출. offerBossPack이 보스당 1회만 연다.
@@ -197,6 +205,13 @@ export class BattleController {
   maxLevelUpTower(index) {
     const ok = playerState.levelUpTowerMax(this.balance, index);
     if (ok) this.towersData[index].stats.attack = towerAttack(this.balance, playerState.towerLevel(index));
+    return ok;
+  }
+
+  // 일괄 강화 - 다섯 석상을 골고루 올리고 공격력을 다시 계산한다.
+  levelUpAllEven() {
+    const ok = playerState.levelUpAllEven(this.balance);
+    if (ok) for (let i = 0; i < this.towersData.length; i++) this.towersData[i].stats.attack = towerAttack(this.balance, playerState.towerLevel(i));
     return ok;
   }
 

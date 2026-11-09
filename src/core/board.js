@@ -106,6 +106,39 @@ export class Board {
     return false;
   }
 
+  // 이 칸과 그 아래 칸이 전부 idle이고 빈 칸이 없으면 "안정" - 중력은 빈 칸 위만 끌어내리므로
+  // 이 칸은 다른 해소가 진행 중이어도 위치가 바뀌지 않는다(plan.md 4-2). 스왑·매치·아이템 대상 판정용.
+  isCellStable(row, col) {
+    for (let r = row; r < this.rows; r++) {
+      const i = this.index(r, col);
+      if (this.cellStates[i] !== null || this.grid[i] === EMPTY) return false;
+    }
+    return true;
+  }
+
+  // 낙하를 지금 커밋해도 되는 열인지 - 가장 아래 빈 칸과 그 위가 전부 idle이어야 한다(그 위의
+  // 잼만 움직이므로). 빈 칸 아래쪽 칸은 애니메이션 중이어도 상관없다.
+  canSettleColumn(col) {
+    let lowestEmpty = -1;
+    for (let r = this.rows - 1; r >= 0; r--) {
+      if (this.grid[this.index(r, col)] === EMPTY) {
+        lowestEmpty = r;
+        break;
+      }
+    }
+    for (let r = 0; r <= lowestEmpty; r++) {
+      if (this.cellStates[this.index(r, col)] !== null) return false;
+    }
+    return true;
+  }
+
+  // 애니메이션 중인 칸을 EMPTY로 가린 grid 사본 - 매치 탐색용. 떨어지는 중인 잼은 데이터상
+  // 이미 도착해 있어서, 가리지 않으면 화면에 닿기 전에 매치로 잡힌다. out 버퍼를 재사용한다.
+  idleGrid(out = new Array(this.grid.length)) {
+    for (let i = 0; i < this.grid.length; i++) out[i] = this.cellStates[i] === null ? this.grid[i] : EMPTY;
+    return out;
+  }
+
   // 매치가 없고 가능한 수가 1개 이상 있는 새 그리드로 통째로 교체한다.
   // 재배치는 특수 잼을 보존하지 않는다(마지막 수단으로만 쓰이는 전체 리셋).
   // cellStates도 전부 idle로 되돌린다(호출 시점에는 보통 이미 전부 idle이지만, 방어적으로 정리한다).

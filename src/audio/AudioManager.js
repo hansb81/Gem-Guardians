@@ -1,9 +1,10 @@
 // Web Audio API 기반 사운드 재생기(외부 라이브러리 없음 - Capacitor WebView에서도 그대로
 // 동작한다). 채널: sfx -> master, 곡별 gain -> bgm -> bgmDuck(팝업 덕킹) -> master -> destination.
 // BGM은 assets/audio/bgm/manifest.json(README.md) - AudioBufferSourceNode 루프, <audio> 태그는 안 쓴다.
-// 설정은 storage(localStorage -> 나중에 Capacitor Preferences)에 sfxVolume/bgmVolume/muted로 저장.
+// 설정은 storage(src/platform/storage.js - 마켓 어댑터 저장소)에 sfxVolume/bgmVolume/muted로 저장.
 // 에셋 로드/디코드가 실패해도 throw하지 않는다 - 소리만 없고 게임은 그대로 진행한다.
 import { storage } from '../platform/storage.js';
+import { platform } from '../platform/index.js';
 
 const DEFAULTS = { sfxVolume: 0.8, bgmVolume: 0.6 };
 const SFX_DIR = 'assets/sfx';
@@ -57,6 +58,9 @@ export class AudioManager {
     this._bgmOpts = { fadeInMs: undefined, crossfadeMs: 800 };
     this._bgmCur = null; // { key, src, gain, startedAt } - 실제로 울리고 있는 곡.
     this._bgmDuck = 1;
+    this._holds = new Map(); // pauseFor 사유 -> 겹친 횟수. 하나라도 있으면 BGM 0, 'ad'면 AudioContext suspend.
+    this._held = false; // _applySuspend가 suspend해 둔 상태인지.
+    this._background = false; // 앱이 백그라운드(lifecycle.onPause) - suspend. 이벤트가 겹쳐 와도 되게 횟수가 아닌 플래그.
   }
 
   // 테스트/외부 주입용. 없으면 첫 playBgm/preloadBgm 때 manifest.json을 받는다.
@@ -259,7 +263,39 @@ export class AudioManager {
     return this.setMuted(!this.muted);
   }
 
-  // 모바일/브라우저 자동재생 정책: 첫 사용자 입력에서 resume, 탭이 숨으면 suspend.
+  // 광고/결제처럼 소리를 멈춰야 하는 동안(토스 심사 - 결제·광고 중 BGM 정지). 사유별로 세므로 겹쳐도 안전하다.
+  // 반드시 같은 사유로 resumeFor를 짝지어 부른다. 'ad'는 AudioContext를 통째로 suspend(효과음 포함 - 광고 자체 소리),
+  // 그 밖(결제 등)은 BGM만 0.
+  pauseFor(reason) {
+    this._holds.set(reason, (this._holds.get(reason) ?? 0) + 1);
+    this._applyGains();
+    this._applySuspend();
+  }
+
+  resumeFor(reason) {
+    const n = (this._holds.get(reason) ?? 0) - 1;
+    if (n > 0) this._holds.set(reason, n);
+    else this._holds.delete(reason);
+    this._applyGains();
+    this._applySuspend();
+  }
+
+  _mustSuspend() {
+    return this._background || this._holds.has('ad');
+  }
+
+  // 백그라운드·광고가 하나라도 있으면 suspend, 둘 다 끝나면 resume(+ 그동안 바뀐 곡 맞추기).
+  // 음소거·볼륨은 gain에 남아 있어 resume만 하면 설정대로 다시 들린다.
+  _applySuspend() {
+    const ctx = this._ctx;
+    const must = this._mustSuspend();
+    if (!ctx || must === this._held) return; // 상태가 바뀔 때만(결제처럼 BGM만 끄는 사유는 건드리지 않는다).
+    this._held = must;
+    if (must) ctx.suspend();
+    else ctx.resume().then(() => this._syncBgm());
+  }
+
+  // 모바일/브라우저 자동재생 정책: 첫 사용자 입력에서 resume, 앱이 백그라운드로 가면(platform.lifecycle) suspend.
   install(target = document) {
     // 리스너를 떼지 않는다 - resume()이 거부되는 입력(사용자 제스처로 인정되지 않는 경우)이
     // 한 번이라도 섞이면 영원히 잠긴 채로 남는다. 이미 running이면 resume()은 no-op.
@@ -268,10 +304,13 @@ export class AudioManager {
     // touch 시퀀스가 touchcancel로 끝나 touchend가 아예 안 올 수 있다. 그래서 pointerup까지 듣는다.
     const unlock = () => this.unlock();
     for (const type of ['pointerdown', 'pointerup', 'touchend', 'keydown']) target.addEventListener(type, unlock);
-    document.addEventListener('visibilitychange', () => {
-      if (!this._ctx) return;
-      if (document.hidden) this._ctx.suspend();
-      else this._ctx.resume().then(() => this._syncBgm());
+    platform.lifecycle.onPause(() => {
+      this._background = true;
+      this._applySuspend();
+    });
+    platform.lifecycle.onResume(() => {
+      this._background = false;
+      this._applySuspend();
     });
   }
 
@@ -279,7 +318,7 @@ export class AudioManager {
   // 직접 불러야 한다 - document 리스너는 캔버스 리스너보다 늦게 돈다.
   unlock() {
     const ctx = this._context();
-    if (!ctx) return;
+    if (!ctx || this._mustSuspend()) return; // 광고 중 탭이 소리를 되살리면 안 된다.
     // 예약된 BGM은 resume()이 끝난 직후 시작한다(호출한 쪽이 이어서 내는 효과음보다 뒤).
     ctx.resume?.()?.then(() => this._syncBgm());
     // iOS는 resume()만으로는 오디오 세션이 안 열린다 - 제스처 안에서 빈 버퍼를 한 번
@@ -316,7 +355,7 @@ export class AudioManager {
     if (!this._ctx) return;
     this.master.gain.value = this.muted ? 0 : 1;
     this.sfx.gain.value = this.sfxVolume;
-    this.bgm.gain.value = this.bgmVolume;
+    this.bgm.gain.value = this._holds.size ? 0 : this.bgmVolume;
   }
 
   _start(key, cfg, step, delayMs, volume) {

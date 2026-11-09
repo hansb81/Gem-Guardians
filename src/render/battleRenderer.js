@@ -3,7 +3,7 @@ import { TOWER_LAYOUT_CONFIG } from '../config/towerLayout.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { pickBackgroundSheetName } from '../config/backgroundSheet.js';
 import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
-import { t } from '../config/i18n.js';
+import { t, tOr } from '../config/i18n.js';
 import { getFontString } from '../config/fonts.js';
 import { pickSummonFrame } from '../battle/summon.js';
 import { ditherPattern, drawItemIconFallback } from './itemBarRenderer.js';
@@ -562,7 +562,7 @@ export class BattleRenderer {
     }
 
     ctx.fillStyle = '#ffffff';
-    ctx.font = getFontString(Math.max(10, barRect.height * 0.6));
+    ctx.font = getFontString(Math.max(9, barRect.height * 0.45));
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
     drawText(ctx, `${Math.ceil(cur)} / ${max}`, gaugeX + gaugeWidth / 2, barRect.y + barRect.height / 2);
@@ -1109,7 +1109,7 @@ export class BattleRenderer {
         const barTopY = this._drawEnemyHealthBar(ctx, uiCenterX, barBottomY, barWidth, enemy, assets, isBoss);
         const iconTopY = this._skillFx.drawStatusIcons(ctx, assets, enemy, uiCenterX, barTopY - 2);
         const nameY = iconTopY - 2;
-        const name = enemy.name ?? enemy.type ?? '';
+        const name = tOr(`names.monster.${enemy.type}`, enemy.name ?? enemy.type ?? '');
         ctx.save();
         ctx.fillStyle = isBoss ? '#ff8a8a' : '#e8e8e8';
         ctx.font = getFontString(isBoss ? 13 : 10, isBoss);

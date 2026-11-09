@@ -1,0 +1,193 @@
+{
+  "_frozen": "레거시 키 동결: dia.0~dia.5, pack.starter - 키 이름을 바꾸거나 다이아 묶음 순서(config/shop.json diaBundles)를 바꾸지 말 것. 저장의 firstBuyUsed(순번)·purchasedOnce·grantedTx(iap:{키}:…)가 이 키로 연결된다. 새 상품은 새 키로 뒤에 추가.",
+  "_doc": "현금(원화) 상품 카탈로그 - docs/platforms.md 2-2. 키 = 상점 상품 id(src/core/shop/shop.js)이자 txId `iap:{키}:{주문id}`의 키. grant = config/shop.json packs grant와 같은 모양({diamonds, items, slot4, adFree}). priceKRW = 표시·결제 가격(임시). ids = 마켓별 스토어 상품 id(toss/android/onestore/ios, 아직 미정 - 콘솔 등록 후 채운다. null이면 그 마켓 빌드에서 숨김). 노출 조건·패스 일정·첫 구매 2배 같은 상점 규칙은 config/shop.json에 남는다. 다이아 묶음 dia.N grant = 기본 다이아 + 보너스(첫 구매 때 기본 다이아만큼 더, shop.json diaBundles[N].bonus). type = consumable(다이아 묶음·반복 팩 - 지급하면 끝) | nonConsumable(광고 제거·4번째 슬롯·스타터 팩 - 기기를 바꾸거나 앱을 다시 깔면 완료 주문으로 다시 지급, 환불되면 회수). 스토어 콘솔에 같은 유형으로 등록해야 한다.",
+  "pack.starter": {
+    "type": "nonConsumable",
+    "grant": {
+      "diamonds": 300,
+      "items": {
+        "hammer": 5,
+        "scythe_h": 3,
+        "scythe_v": 3,
+        "repair": 3,
+        "revive": 1
+      }
+    },
+    "priceKRW": 1200,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.boss": {
+    "type": "consumable",
+    "grant": {
+      "items": {
+        "revive": 2,
+        "hourglass": 3,
+        "barrier": 3,
+        "drum": 3
+      }
+    },
+    "priceKRW": 5900,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.slot4": {
+    "type": "nonConsumable",
+    "grant": {
+      "slot4": true,
+      "items": {
+        "rainbow": 3
+      }
+    },
+    "priceKRW": 4900,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.weekly": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 100
+    },
+    "priceKRW": 5900,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.monthly": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 300
+    },
+    "priceKRW": 11000,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.chapter": {
+    "type": "consumable",
+    "grant": {
+      "items": {
+        "barrier": 3,
+        "hourglass": 2,
+        "booster_bomb": 2
+      }
+    },
+    "priceKRW": 3900,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "pack.adfree": {
+    "type": "nonConsumable",
+    "grant": {
+      "diamonds": 200,
+      "adFree": true
+    },
+    "priceKRW": 6500,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.0": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 60
+    },
+    "priceKRW": 1200,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.1": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 330
+    },
+    "priceKRW": 5900,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.2": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 690
+    },
+    "priceKRW": 12000,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.3": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 1920
+    },
+    "priceKRW": 29000,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.4": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 4250
+    },
+    "priceKRW": 59000,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  },
+  "dia.5": {
+    "type": "consumable",
+    "grant": {
+      "diamonds": 9100
+    },
+    "priceKRW": 119000,
+    "ids": {
+      "toss": null,
+      "android": null,
+      "onestore": null,
+      "ios": null
+    }
+  }
+}

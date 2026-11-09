@@ -1,13 +1,14 @@
 // 진행도/재화 상태. 화면(HUD)과 BattleController가 이 객체 하나만 읽고 쓴다. 저장은
-// storage 인터페이스(지금은 localStorage, 나중에 Capacitor Preferences)로 한다 - docs/balance.md
+// storage(src/platform/storage.js - 마켓 어댑터 저장소)로 한다 - docs/balance.md
 // §8 "저장: 최고 층, 현재 층, 골드, 탑 5개 레벨".
 import { storage } from '../platform/storage.js';
-import { towerLevelCost, maxTowerLevelUps } from '../core/economy/economy.js';
+import { towerLevelCost, maxTowerLevelUps, evenTowerLevelUps } from '../core/economy/economy.js';
 import { normalizeShopSave } from '../core/shop/shop.js';
 import { migrateSave, defaultSkillLevels, SAVE_VERSION } from '../core/inventory/inventory.js';
 import { Inventory } from './inventory.js';
 import { normalizeRanking } from '../ranking/rankingSave.js';
 import { createRng } from '../core/rng.js';
+import { migrateTutorialSave } from '../tutorial/tutorial.js';
 
 // 키 v2: 상점(shop) 추가 때 올린 저장 키. 예전 키(v1)만 있으면 그걸 읽어 v2 키로 저장한다.
 // 저장 형식 버전(saveVersion)은 키와 별개 - 2 = 아이템·장착·예약·젬 스킬이 inv 묶음(docs/inventory.md 2장).
@@ -18,7 +19,8 @@ const TOWER_COUNT = 5;
 function defaults() {
   // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {daysLeft, claimedToday}}, freeClaimedDate, day, offers }
   // (src/core/shop/shop.js defaultShopSave) - config/shop.json을 읽은 뒤 initShop이 채운다.
-  return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1), shop: null };
+  // tutorial = 최초 진입 튜토리얼(docs/tutorial.md) - done이 true가 아니면 1층 진입 때 실행.
+  return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1), shop: null, tutorial: { done: false, version: 1 } };
 }
 
 // 랭킹용 기기 id. 서버 단계에서는 서버가 준 id로 바뀐다(docs/ranking.md 13-2 players).
@@ -37,6 +39,8 @@ class PlayerState {
     if (!Array.isArray(this.towerLevels) || this.towerLevels.length !== TOWER_COUNT) {
       this.towerLevels = Array(TOWER_COUNT).fill(1);
     }
+    // 튜토리얼 필드가 없던 세이브는 플레이 흔적이 있으면 done:true(src/tutorial/tutorial.js migrateTutorialSave).
+    this.tutorial = migrateTutorialSave(saved);
     // 아이템·장착·예약·영구 보유는 전부 여기(src/game/inventory.js). 지갑은 this.gold/diamonds.
     this.inventory = new Inventory(inv, { wallet: this, save: () => this.save() });
     // 랭킹(docs/ranking.md 7-1) - 읽고 쓰는 곳은 src/ranking/rankingService.js(LocalRankingService) 하나.
@@ -55,6 +59,7 @@ class PlayerState {
       shop: this.shop,
       inv: this.inventory.data,
       ranking: this.ranking,
+      tutorial: this.tutorial,
     });
   }
 
@@ -153,6 +158,16 @@ class PlayerState {
     if (levels === 0) return false;
     this.gold -= cost;
     this.towerLevels[index] = newLevel;
+    this.save();
+    return true;
+  }
+
+  // 일괄 강화 - 다섯 석상을 골고루(낮은 레벨부터) 지금 골드만큼 올린다. 한 레벨도 못 올리면 false.
+  levelUpAllEven(balance) {
+    const { levels, cost, count } = evenTowerLevelUps(balance, this.towerLevels, this.gold);
+    if (count === 0) return false;
+    this.gold -= cost;
+    for (let i = 0; i < levels.length; i++) this.towerLevels[i] = levels[i];
     this.save();
     return true;
   }

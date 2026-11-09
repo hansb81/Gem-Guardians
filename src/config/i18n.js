@@ -16,6 +16,15 @@ export function getLocale() {
   return currentLocale;
 }
 
+// 설정 팝업의 언어 버튼이 이 순서대로 돌아가며 고른다.
+export const LOCALE_IDS = Object.keys(LOCALES);
+
+// 데이터(JSON)에서 온 이름용 - 사전에 번역이 없으면 데이터 원문(fallback)을 그대로 쓴다.
+export function tOr(key, fallback) {
+  const dict = LOCALES[currentLocale] ?? LOCALES[DEFAULT_LOCALE];
+  return key.split('.').reduce((obj, part) => obj?.[part], dict) ?? fallback;
+}
+
 // key: 'popup.pause.title' 같은 점 표기 경로. params에 담긴 값으로 '{name}' 플레이스홀더를 치환한다.
 // 키가 없으면(번역 누락) 키 문자열 자체를 돌려줘 화면에서 바로 눈에 띄게 한다.
 export function t(key, params) {

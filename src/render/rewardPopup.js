@@ -37,6 +37,11 @@ export class RewardPopup {
     if (reward) this._queue.push(reward);
   }
 
+  // 뒤로가기 = 확인과 같다(다음 것/닫기).
+  dismiss() {
+    this._queue.shift();
+  }
+
   // 팝업이 떠 있으면 입력을 전부 먹는다. 확인 버튼(또는 카드 밖) = 다음 것/닫기.
   handlePointerDown(x, y) {
     if (!this.active) return false;

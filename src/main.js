@@ -18,13 +18,19 @@ import { setupSfxTestPanel } from './game/sfxTestPanel.js';
 import { audio, bgmForScene } from './audio/AudioManager.js';
 import { ANIMATION_DURATIONS_MS } from './config/animation.js';
 import { LAYOUT_CONFIG } from './config/layout.js';
-import { t } from './config/i18n.js';
+import { t, tOr, setLocale } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
 import { towerAttack, normalFloorReward } from './core/economy/economy.js';
 import { RankingUi } from './game/rankingUi.js';
 import { pressButton } from './render/uiKit.js';
-import { openPrepState, rememberTab, statueRowInfo, hitPrepPopup } from './render/ui/prepPopup.js';
+import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup } from './render/ui/prepPopup.js';
+import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
+import { resolveFloorSpawns } from './core/balance/floorGen.js';
+import { platform } from './platform/index.js';
+import { recoverPending, restore } from './shop/iap.js';
+import { storage } from './platform/storage.js';
 
+setLocale(storage.load('locale') ?? 'ko'); // 설정 팝업의 언어 버튼이 저장한 값.
 const canvas = document.getElementById('game-canvas');
 
 // 자동재생 정책(첫 입력에서 resume) + 탭 숨김 시 suspend. 에셋 로드보다 먼저 걸어 둬야
@@ -100,8 +106,27 @@ function startFade(totalMs, sfxKey, onBlack) {
   audio.play(sfxKey);
 }
 // 나가기: 층을 되감아 둬서 다시 플레이할 때 진행 중이던 전투가 아니라 그 층 처음부터 시작한다.
+// 마켓 리더보드(토스 게임센터)에 일반 모드 최고 층 - 판이 끝날 때(메뉴로·패배)와 앱을 벗어날 때(onPause),
+// 마지막으로 제출에 성공한 층보다 올랐을 때만. 앱을 그냥 닫아도 onPause에서 올라간다.
+let leaderboardBusy = false;
+function submitLeaderboard() {
+  if (!platform.caps.leaderboard || leaderboardBusy) return;
+  const best = playerState.bestFloor;
+  if (best <= (storage.load('leaderboardSubmitted') ?? 0)) return;
+  leaderboardBusy = true;
+  platform.leaderboard
+    .submit(best)
+    .then((ok) => ok && storage.save('leaderboardSubmitted', best))
+    .catch(() => {})
+    .finally(() => {
+      leaderboardBusy = false;
+    });
+}
+platform.lifecycle.onPause(submitLeaderboard);
+
 function startExitToMenu() {
   if (fade) return;
+  submitLeaderboard();
   audio.playBgm(bgmForScene('menu'), { crossfadeMs: 1000 });
   startFade(EXIT_FADE_MS, 'ui_game_exit', () => {
     controller?.retryFloor();
@@ -116,11 +141,11 @@ function startExitToMenu() {
 // 한 칸 쌓고, 닫기 버튼·Esc는 history.back()으로 같은 경로(popstate)를 탄다.
 const SHOP_FADE_MS = 400;
 let shopReturnScene = 'menu'; // 상점을 연 곳 - 정비 팝업(prep)은 그대로 남아 있어 닫으면 그 팝업으로 돌아온다.
-function enterShop(rail = 'items') {
+function enterShop(rail = 'items', hdr = null) {
   if (!controller?.shopConfig) return; // config/shop.json 로드 전/실패 - 상점 없음.
   shopReturnScene = scene === 'game' ? 'game' : 'menu';
   startFade(SHOP_FADE_MS, null, () => {
-    shopScreen.open(rail);
+    shopScreen.open(rail, hdr);
     scene = 'shop';
   });
   history.pushState({ gg: 'shop' }, '');
@@ -191,6 +216,80 @@ let timeScale = 1; // ?dev=1 2배속 토글용.
 let assetsReady = false;
 let keepBoardOnFloorChange = false; // "다음 층" 진행일 때만 true - 퍼즐 보드를 새로 만들지 않는다.
 
+// 최초 진입 튜토리얼(docs/tutorial.md) - config/tutorial.json + 레슨 보드. 진행 중이면 tutorial != null.
+// 단계는 저장하지 않는다 - 층을 나가면(새 battleState) 버리고 다음 진입 때 처음부터.
+let tutorialData = null;
+let tutorial = null;
+Promise.all(['config/tutorial.json', 'assets/ui/tutorial/boards.json'].map((p) => fetch(p).then((r) => r.json())))
+  .then(([config, boards]) => {
+    tutorialData = { config, boards };
+  })
+  .catch((err) => console.error('튜토리얼 데이터 로드 실패 - 튜토리얼 없이 진행:', err));
+
+// 매 게임 프레임 전투 업데이트 전에 - 시작 조건이면 웨이브를 잡아 두고, 석상 소환이 끝나면 시작.
+// 최초 자동 실행 = 1층 + done 아님. 연습 모드(다시 보기) = controller.practice 전투면 항상.
+function tickTutorialStart() {
+  if (!controller || !tutorialData) return;
+  const bs = controller.battleState;
+  if (tutorial && tutorial.battleState !== bs) {
+    tutorial.abort(); // 층을 나감 - 기술 잠금·콤보 등 메모리 상태 원복, 다음엔 처음부터.
+    tutorial = null;
+  }
+  if (tutorial?.finished && !tutorial.practice) tutorial = null; // 연습 모드는 끝나도 메뉴로 나갈 때까지 둔다.
+  if (tutorial || bs.status !== 'active') return;
+  if (!controller.practice && !shouldStartTutorial(playerState.tutorial, controller.floor)) return;
+  bs.holdSpawns = true;
+  if (bs.summon.active || fade) return;
+  // 1층 일반 몬스터 풀의 첫 종류.
+  const firstId = controller.enemies.chapters[0].pool[0];
+  const [enemyStat] = resolveFloorSpawns(controller.balance, controller.enemies, { ...controller.currentFloor, spawns: [firstId] });
+  aim = null;
+  tutorial = new Tutorial({
+    ...tutorialData,
+    gameState,
+    battleState: bs,
+    enemyStat,
+    practice: controller.practice,
+    // 연습 모드는 세이브·보상 없이 메인 메뉴로(나가기와 같은 길 - retryFloor가 원래 층 전투로 되돌린다).
+    onComplete: (rewarded) => (controller.practice ? startExitToMenu() : completeTutorial(playerState, tutorialData.config, rewarded)),
+  });
+}
+
+// 메뉴 설정 > 튜토리얼 다시 보기 - 바로 튜토리얼 전용 전투(1층 데이터)로 들어간다.
+function startTutorialPractice() {
+  if (!controller || !tutorialData || fade) return;
+  controller.startPractice();
+  playGameBgm(1000);
+  startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
+    scene = 'game';
+  });
+}
+
+function tutorialRunning() {
+  return tutorial != null && !tutorial.finished;
+}
+
+// 튜토리얼 중 캔버스 탭 - 팝업 버튼 > 건너뛰기 > info 스텝 넘기기. 레슨 스왑은 PointerInput -> tutorial.swap.
+function handleTutorialPointerDown(x, y) {
+  const ui = renderer.tutorial;
+  ui.touching = true;
+  const buttons = ui.layout.buttons;
+  if (tutorial.popup) {
+    if (!buttons) return;
+    if (pressButton(x, y, buttons.start)) tutorial.confirmDone();
+    else if (pressButton(x, y, buttons.skip)) tutorial.confirmSkip();
+    else if (pressButton(x, y, buttons.keep)) tutorial.closeSkip();
+    return;
+  }
+  if (pressButton(x, y, ui.layout.skip)) {
+    ui.skipPressed = true;
+    tutorial.openSkip();
+    return;
+  }
+  if (tutorial.step?.type === 'info') tutorial.tap(t(tutorial.textKey).length);
+  else if (tutorial.guideSwap && !pointInRect(x, y, renderer.lastLayout?.board)) tutorial.events.push({ type: 'tutorialHintPulse' });
+}
+
 Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceData]) => {
   if (!battleData || !balanceData) return;
   controller = new BattleController({
@@ -253,6 +352,14 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       showReward: (r) => rewardPopup.show(r),
       itemIcons: () => renderer.itemAssets?.icons,
     });
+    // 결제는 됐는데 지급 전에 꺼진 주문(토스 getPendingOrders 등) - 상점 데이터가 준비된 지금 다시 지급한다.
+    if (platform.caps.iap) {
+      const onGrant = (key, orderId) => shopScreen.grantPaid(key, orderId);
+      recoverPending(onGrant).then(() => {
+        // 토스: 복원 버튼이 없고 앱을 지우면 Storage도 지워진다 - 시작할 때 완료 주문으로 비소모성을 되살린다(txId라 중복 없음).
+        if (platform.caps.autoRestore) restore(onGrant, (key, orderId) => shopScreen.revokePaid(key, orderId));
+      });
+    }
   }
 
   // 생성자가 이미 첫 _resetBattleState를 한 번 돌렸지만(그때는 onBattleStateChanged가
@@ -289,6 +396,9 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
     window.__gg = {
       get controller() { return controller; },
       get gameState() { return gameState; },
+      get tutorial() { return tutorial; },
+      startTutorialPractice,
+      back: () => backHandlers.some((h) => h()), // 뒤로가기 버튼 흉내(웹엔 없음).
       playerState,
       renderer,
       ranking,
@@ -368,6 +478,7 @@ function isBoardUpdateBlocked() {
     scene !== 'game' ||
     paused ||
     prep != null ||
+    tutorial?.popup != null ||
     (controller != null && controller.battleState.status !== 'active')
   );
 }
@@ -401,7 +512,8 @@ function playItemFx(id, target) {
 
 function tapItemSlot(slot) {
   if (aim?.slot === slot) {
-    cancelAim();
+    if (aim.confirm) useInstantItem(slot, aim.id);
+    else cancelAim();
     return;
   }
   const id = playerState.inventory.hotbar()[slot];
@@ -415,20 +527,22 @@ function tapItemSlot(slot) {
     return;
   }
   const cfg = controller.itemsConfig.items[id];
-  if (cfg.kind === 'battle' || cfg.target === 'none') {
-    aim = null;
-    if (items.use(id).ok) {
-      audio.play('ui_click');
-      renderer.itemBar.showTip(slot, now);
-    }
-    else {
-      renderer.itemBar.shakeSlot(slot, now);
-      audio.play('gem_swap_fail');
-    }
-    return;
-  }
-  aim = { slot, id, hover: null, first: null, down: false };
+  // 즉시 사용(대상 없음) 아이템은 같은 슬롯을 한 번 더 눌러야 쓴다(확인). 다른 곳 탭 = 취소.
+  const confirm = cfg.kind === 'battle' || cfg.target === 'none';
+  aim = { slot, id, hover: null, first: null, down: false, confirm };
   audio.play('ui_click');
+}
+
+function useInstantItem(slot, id) {
+  aim = null;
+  const now = performance.now();
+  if (controller.items.use(id).ok) {
+    audio.play('ui_click');
+    renderer.itemBar.showTip(slot, now);
+  } else {
+    renderer.itemBar.shakeSlot(slot, now);
+    audio.play('gem_swap_fail');
+  }
 }
 
 function aimPointerDown(cell) {
@@ -528,6 +642,9 @@ function handlePrepPointerDown(x, y) {
     case 'max':
       upgradeStatue(hit.index, true);
       return;
+    case 'all':
+      upgradeAllStatues();
+      return;
     case 'filter':
       audio.play('ui_click');
       renderer.inventoryTab.setFilter(hit.filter);
@@ -550,6 +667,19 @@ function handlePrepPointerDown(x, y) {
       invDrag = { y: hit.by, startScroll: renderer.inventoryTab.scroll, moved: false, id: hit.id };
       return;
   }
+}
+
+// 일괄 강화 - 다섯 석상을 골고루. 오른 석상마다 탑 연출, 팝업 흰 테는 첫 번째 오른 석상.
+function upgradeAllStatues() {
+  if (!controller) return false;
+  const before = playerState.towerLevels.slice();
+  const ok = controller.levelUpAllEven();
+  if (!ok) { audio.play('gem_swap_fail'); return false; }
+  const upped = before.map((l, i) => (playerState.towerLevel(i) > l ? i : -1)).filter((i) => i >= 0);
+  if (scene === 'game') for (const i of upped) renderer.triggerTowerTapFx(controller.battleState.towers[i].id, true, playerState.towerLevel(i));
+  else audio.play('ui_click');
+  if (prep) prep.flash = { index: upped[0], atMs: performance.now(), white: true };
+  return true;
 }
 
 // 석상 강화(1레벨/MAX). 성공하면 그 줄을 card_selected + "+1"·흰 테, 전투 화면이 뒤에 있으면 탑 연출도 같이.
@@ -631,6 +761,12 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
   if (scene === 'title') {
+    // 뒤로가기로 연 종료 확인이 떠 있으면 그 모달 입력만(문 열림 안 함).
+    if (mainMenuScreen.popup) {
+      const r = canvas.getBoundingClientRect();
+      if (mainMenuScreen.handlePointerDown(e.clientX - r.left, e.clientY - r.top) === 'exitApp') platform.lifecycle.exit();
+      return;
+    }
     exitTitle();
     return;
   }
@@ -649,17 +785,36 @@ canvas.addEventListener('pointerdown', (e) => {
       return;
     }
     const action = mainMenuScreen.handlePointerDown(x, y);
-    if (action === 'startNormalGame') {
+    if (action === 'replayTutorial') startTutorialPractice();
+    else if (action === 'startNormalGame') {
       playGameBgm(1000);
       startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
         scene = 'game';
       });
     } else if (action === 'openShop') enterShop();
+    else if (action === 'openShopGold') enterShop('dia', 'goldex');
+    else if (action === 'openShopDia') enterShop('dia');
+    else if (action === 'exitApp') platform.lifecycle.exit();
     return;
   }
 
   if (scene === 'shop') {
     if (shopScreen.handlePointerDown(x, y) === 'exit') requestShopBack();
+    return;
+  }
+
+  // 뒤로가기로 연 "마을로 나갈까요?" 확인(전투 scene 위의 메뉴 모달).
+  if (mainMenuScreen.popup) {
+    if (mainMenuScreen.handlePointerDown(x, y) === 'quitFloor') {
+      prep = null;
+      upgradeHold = null;
+      startExitToMenu(); // 정비 팝업 "마을로"와 같은 길.
+    }
+    return;
+  }
+
+  if (tutorialRunning()) {
+    handleTutorialPointerDown(x, y);
     return;
   }
 
@@ -724,7 +879,7 @@ canvas.addEventListener('pointerdown', (e) => {
         else cancelAim();
         return;
       }
-      const cell = cellAtPoint(x, y);
+      const cell = aim.confirm ? null : cellAtPoint(x, y);
       if (cell) aimPointerDown(cell);
       else cancelAim(); // 보드 밖 탭 = 취소(소모 없음).
       return;
@@ -757,11 +912,12 @@ canvas.addEventListener('pointermove', (e) => {
   // 터치는 누른 동안만, 마우스는 떼고 움직여도 미리보기가 따라온다.
   if (aim) {
     const rect = canvas.getBoundingClientRect();
-    aim.hover = cellAtPoint(e.clientX - rect.left, e.clientY - rect.top);
+    if (!aim.confirm) aim.hover = cellAtPoint(e.clientX - rect.left, e.clientY - rect.top);
     return;
   }
   if (scene === 'menu') {
-    mainMenuScreen.handlePointerMove(e.clientX - canvas.getBoundingClientRect().left);
+    const rect = canvas.getBoundingClientRect();
+    mainMenuScreen.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
     return;
   }
   if (scene === 'shop') {
@@ -776,6 +932,8 @@ canvas.addEventListener('pointermove', (e) => {
 
 // 강화 버튼을 누른 채 손가락/포인터가 캔버스 밖으로 나가거나 뗄 때 연속 강화를 멈춘다.
 window.addEventListener('pointerup', (e) => {
+  renderer.tutorial.touching = false;
+  renderer.tutorial.skipPressed = false;
   invDragEnd();
   ranking.pointerUp();
   if (invPress && !invPress.done) inventorySlotTap(invPress.slot);
@@ -793,6 +951,8 @@ window.addEventListener('pointerup', (e) => {
   if (scene === 'shop') shopScreen.handlePointerUp();
 });
 window.addEventListener('pointercancel', () => {
+  renderer.tutorial.touching = false;
+  renderer.tutorial.skipPressed = false;
   ranking.pointerUp();
   invPress = null;
   invDrag = null;
@@ -811,6 +971,10 @@ canvas.addEventListener(
       ranking.wheel(e.deltaY);
       return;
     }
+    if (scene === 'menu' && mainMenuScreen.handleWheel(e.deltaY)) {
+      e.preventDefault();
+      return;
+    }
     if (inventoryOpen()) {
       e.preventDefault();
       renderer.inventoryTab.setScroll(renderer.inventoryTab.scroll + e.deltaY * 0.5);
@@ -823,12 +987,51 @@ canvas.addEventListener(
   { passive: false }
 );
 
+// 뒤로가기(안드로이드 버튼·토스 backEvent - platform.lifecycle.onBack). 위에서부터 처음 처리한 핸들러에서 멈춘다:
+// 열린 팝업 닫기 -> 게임 중이면 일시정지 팝업 -> 메뉴면 종료 확인 모달. true = 처리함(앱이 닫히지 않는다).
+const backHandlers = [
+  () => fade != null, // 화면 전환 중엔 무시.
+  // 타이틀도 바로 끄지 않고 종료 확인(토스 심사: 종료할 때 확인 모달). 모달이 떠 있으면 닫기.
+  // 문 열림 전환 중엔 무시(삼킴).
+  () => scene === 'title' && (titleScreen.exiting || mainMenuScreen.closePopup() || (platform.caps.exit && openExitConfirm('app'))),
+  () => {
+    if (scene !== 'shop') return false;
+    if (!shopScreen.closeOverlay()) requestShopBack();
+    return true;
+  },
+  () => scene === 'menu' && ranking.isOpen && (ranking.close(), true),
+  () => scene === 'menu' && prep != null && ((prep = null), (upgradeHold = null), true),
+  () => scene === 'menu' && mainMenuScreen.closePopup(),
+  // 메뉴 맨 끝 = 종료 확인. 앱을 스스로 못 닫는 마켓(iOS·웹)은 처리 안 함(OS 기본 동작).
+  () => scene === 'menu' && platform.caps.exit && openExitConfirm('app'),
+  // 토스 심사: 뒤로가기는 "뒤로 가거나 종료" - 아무 반응 없는 화면이 없게 한다.
+  () => scene === 'game' && rewardPopup.active && (rewardPopup.dismiss(), true),
+  () => scene === 'game' && mainMenuScreen.closePopup(),
+  () => {
+    if (scene !== 'game' || !tutorialRunning()) return false;
+    if (tutorial.popup === 'skip') tutorial.closeSkip();
+    else if (tutorial.popup === 'done') tutorial.confirmDone();
+    else tutorial.openSkip(); // 건너뛰기 확인.
+    return true;
+  },
+  () => scene === 'game' && paused && ((paused = false), true), // 일시정지 팝업 닫기(계속).
+  // 층 클리어·패배(결과 팝업·정비 팝업) = 마을로 나갈지 확인.
+  () => scene === 'game' && controller?.battleState.status !== 'active' && openExitConfirm('floor'),
+  () => scene === 'game' && ((paused = true), true),
+];
+function openExitConfirm(kind) {
+  mainMenuScreen.exitKind = kind;
+  mainMenuScreen.popup = 'exit';
+  return true;
+}
+platform.lifecycle.onBack(() => backHandlers.some((h) => h()));
+
 window.addEventListener('keydown', (e) => {
   if (scene === 'shop' && e.code === 'Escape' && !fade) {
     if (!shopScreen.closeOverlay()) requestShopBack();
     return;
   }
-  if (scene !== 'title') return;
+  if (scene !== 'title' || mainMenuScreen.popup) return;
   if (e.code === 'Enter' || e.code === 'Space') {
     e.preventDefault();
     exitTitle();
@@ -842,12 +1045,66 @@ function fitAspectRatio(maxWidth, maxHeight, ratio) {
   return { width: maxWidth, height: maxWidth / ratio };
 }
 
+// 안전영역(노치·홈 바·토스 닫기 버튼 줄)과 배너 광고 자리를 body 안쪽 여백으로 빼고, 남은 칸 가운데에 9:16 캔버스.
+// 캔버스 전체가 insets 안이라 상단 재화바·일시정지 버튼도 insets.top 아래에 온다. 배너가 있으면 캔버스를 위로 붙이고
+// 맨 아래 핫바와 배너 사이를 BANNER_GAP 이상 띄운다(광고 정책: 조작 영역 바로 옆 금지).
+const BANNER_GAP = 8;
+const BANNER_FILL = '#0d0a10';
+// 배너 자리: 배너를 쓰는 빌드이고 광고 제거를 안 샀으면 어느 화면이든 하단에 항상 비워 둔다 - 배너를 켜고 끌 때마다
+// 캔버스 배율이 바뀌면 픽셀아트가 출렁여 보이므로, 배율은 광고 제거 구매·insets 변화(창 크기 포함) 때만 다시 계산한다.
+// 배너가 안 보이는 화면이나 광고가 안 채워진 경우(noFill)엔 이 칸이 BANNER_FILL로 보인다(어댑터가 배너를 이 위에 띄운다).
+let bannerReserved = false;
+let bannerSlot = null; // <div id="banner-slot">
 function resize() {
   const dpr = window.devicePixelRatio || 1;
-  const { width, height } = fitAspectRatio(window.innerWidth, window.innerHeight, LAYOUT_CONFIG.aspectRatio);
+  const ins = platform.layout.getInsets();
+  const slotH = bannerReserved ? platform.ads.getBannerSlotHeight() : 0;
+  const bottom = ins.bottom + (slotH > 0 ? slotH + BANNER_GAP : 0);
+  const body = document.body.style;
+  body.boxSizing = 'border-box';
+  body.padding = `${ins.top}px ${ins.right}px ${bottom}px ${ins.left}px`;
+  body.alignItems = slotH > 0 ? 'flex-start' : 'center';
+  if (slotH > 0) {
+    if (!bannerSlot) {
+      bannerSlot = document.createElement('div');
+      bannerSlot.id = 'banner-slot';
+      bannerSlot.style.cssText = `position:fixed;left:0;right:0;background:${BANNER_FILL};`;
+      document.body.appendChild(bannerSlot);
+    }
+    bannerSlot.style.bottom = `${ins.bottom}px`;
+    bannerSlot.style.height = `${slotH}px`;
+  }
+  if (bannerSlot) bannerSlot.style.display = slotH > 0 ? 'block' : 'none';
+  const { width, height } = fitAspectRatio(
+    Math.max(1, window.innerWidth - ins.left - ins.right),
+    Math.max(1, window.innerHeight - ins.top - bottom),
+    LAYOUT_CONFIG.aspectRatio
+  );
   canvas.style.width = `${width}px`;
   canvas.style.height = `${height}px`;
   renderer.resize(width, height, dpr);
+}
+// 배너를 보일 화면은 메인 메뉴·전투만(토스: 인트로·로딩·컷신 광고 금지 - 타이틀·로딩·문 전환·튜토리얼·상점은 숨김).
+// 페이드 중엔 그대로. 매 프레임 불러도 바뀔 때만 SDK를 부르고, 자리(배율)는 광고 제거가 바뀔 때만 다시 잡는다.
+let bannerShown = false;
+function syncBanner() {
+  // 자리는 배너를 쓰는 빌드면(어댑터 설정) 광고 SDK 준비 전부터 비워 둔다 - 준비가 늦어도 배율이 안 바뀐다.
+  const reserve = platform.ads.getBannerSlotHeight() > 0 && !playerState.inventory.isUnlocked('adFree');
+  if (reserve !== bannerReserved) {
+    bannerReserved = reserve;
+    resize();
+  }
+  const show = reserve && platform.caps.banner && (scene === 'menu' || scene === 'game') && !tutorialRunning();
+  if (show === bannerShown) return;
+  bannerShown = show;
+  if (show) platform.ads.showBanner().catch(() => {}); // noFill(0)이어도 자리는 그대로.
+  else platform.ads.hideBanner();
+}
+// 앱 빌드: 전투 중 백그라운드로 가면 일시정지 팝업(돌아와서 "계속"). 웹은 탭 전환이 잦아 그대로 둔다.
+if (platform.id !== 'web') {
+  platform.lifecycle.onPause(() => {
+    if (scene === 'game' && !prep && !tutorialRunning() && controller?.battleState.status === 'active') paused = true;
+  });
 }
 
 // devicePixelRatio 변화(브라우저 줌, 외부 모니터 이동 등)를 감지해 다시 그린다.
@@ -864,23 +1121,29 @@ function watchDevicePixelRatio() {
 }
 
 window.addEventListener('resize', resize);
+platform.layout.onInsetsChange(resize);
 window.addEventListener('orientationchange', resize);
 watchDevicePixelRatio();
 resize();
 
 new PointerInput(canvas, {
   getBoardRect: () => (renderer.lastLayout ? renderer.lastLayout.board : null),
-  // 눌린 칸 자체가 애니메이션 중이거나(cellStates !== null) 그 칸의 열이 다른 해소로
-  // 잠겨 있으면 입력을 받지 않는다. 드래그 목표 칸은 gameState.trySwap()이 다시 검사한다.
+  // 눌린 칸이 안정 칸이 아니면(자신이나 아래 칸이 애니메이션 중이거나 빈 칸) 입력을
+  // 받지 않는다. 드래그 목표 칸은 gameState.trySwap()이 다시 검사한다.
   // 일시정지/전투 종료 중에는(isBlocked) 입력 자체를 받지 않는다.
   canInteract: (row, col) =>
     !isBlocked() &&
     !aim && // 조준 중엔 스왑 입력을 막는다(보드 탭은 조준이 받는다).
-    gameState.board.cellStates[gameState.board.index(row, col)] === null &&
-    !gameState.board.isColumnLocked(col),
+    (!tutorialRunning() || tutorial.guideSwap != null) && // 튜토리얼은 레슨 스왑 단계에서만.
+    gameState.board.isCellStable(row, col),
   onSelect: () => audio.play('gem_select'),
   onSwap: (r1, c1, r2, c2) => {
     if (isBlocked() || aim) return;
+    if (tutorialRunning()) {
+      // 안내한 두 칸만 - 아니면 tutorial이 손가락 강조(tutorialHintPulse)만 낸다.
+      if (tutorial.swap(r1, c1, r2, c2)) audio.play('gem_swap');
+      return;
+    }
     // trySwap은 매치가 없어 되돌아가는 스왑에도 true를 준다(거절되는 건 인접 아님/잠긴 열 등
     // 아예 받아들여지지 않은 입력뿐) - 스왑음은 유효/무효 모두 내고, 되돌아감은 cellStates의
     // bounce로 가려내 그 절반 지점(= 되돌아가기 시작하는 순간)에 실패음을 낸다.
@@ -922,7 +1185,7 @@ function buildBattleHud() {
   const { balance, battleState } = controller;
   return {
     floor: controller.floor,
-    chapter: controller.currentFloor.chapter,
+    chapter: tOr(`names.chapter.${Math.floor((controller.floor - 1) / 10) % controller.enemies.chapters.length}`, controller.currentFloor.chapter),
     tag: controller.floorTag,
     remainingEnemies: battleState.remainingEnemies,
     totalEnemies: battleState.totalEnemies,
@@ -964,13 +1227,16 @@ function drawPrep(now) {
     const level = playerState.towerLevel(i);
     const atk = towerAttack(balance, level);
     v.totalAttack += atk;
-    v.towers[i] = { color: tower.color, name: tower.name, level, atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
+    v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
   });
+  v.all = statueAllInfo(balance, playerState.towerLevels, playerState.gold);
   renderer.drawPrepPopup(prep, buildItemUi());
   if (prep.flash) prep.flash.white = false; // 흰 테는 1프레임만.
 }
 
+let lastBattleStatus = null;
 function loop(now) {
+  syncBanner();
   const rawDtMs = Math.min(64, now - lastTime);
   const dt = Math.min((now - lastTime) / 1000, MAX_DT_SEC) * timeScale;
   lastTime = now;
@@ -980,6 +1246,7 @@ function loop(now) {
     // 문 열림 전환 끝부분(1250~2200ms)은 메인 메뉴를 그 위에 겹쳐 띄운다.
     const menuAlpha = titleScreen.menuFadeAlpha();
     if (menuAlpha > 0) renderer.drawMainMenu(mainMenuScreen, playerState, now, menuAlpha);
+    else renderer.drawMenuPopup(mainMenuScreen); // 뒤로가기 종료 확인(열려 있을 때만).
     if (titleScreen.isExitDone()) scene = 'menu';
     drawFade(rawDtMs);
     requestAnimationFrame(loop);
@@ -1012,6 +1279,7 @@ function loop(now) {
   processInventoryHold(now);
   // 층 전투 시작(첫 프레임) - 예약 아이템 소모 + 시작 부스터 배치. gameState.update보다 먼저라 입장 셔플이 특수 잼을 같이 옮긴다.
   controller?.beginFloor();
+  tickTutorialStart();
 
   if (!isBoardUpdateBlocked()) {
     // 발동/조합 스프라이트가 아직 재생 중이면 중력/리필을 미룬다(GameState.settleHold 주석 참고).
@@ -1034,6 +1302,9 @@ function loop(now) {
   // BGM 덕킹: 일시정지 0.5배, 승리/패배 팝업 0.4배, 결과 팝업을 닫고 정비 팝업만 남으면 0.7배,
   // 보스 처치 순간(호위가 남아도) 600ms에 걸쳐 0.4배. 다음 층이 시작되면(status active) 1배.
   const bs = controller?.battleState;
+  // 패배한 순간 한 번 - 리더보드 제출(판 종료).
+  if (bs?.status === 'failed' && lastBattleStatus !== 'failed') submitLeaderboard();
+  lastBattleStatus = bs?.status ?? null;
   if (bs) {
     const bossAlive = bs.enemies.some((e) => e.rank === 'boss' && e.state === 'alive');
     if (bossAlive) bossSeen = true;
@@ -1051,11 +1322,12 @@ function loop(now) {
   // 실행된다 - isBlocked() 전체로 막으면 상태가 바뀐 다음 프레임부터 전투 업데이트 자체가
   // 멈춰서 보상이 영원히 계산되지 않는다(이 상태 전환 프레임에는 팝업이 열려 있을 수 없으므로
   // prep 체크를 더해도 이 보상 계산 타이밍에는 영향이 없다).
-  if (!paused && prep == null && controller) {
+  if (!paused && prep == null && controller && !tutorial?.popup) {
     battleBridge.update(gameState);
     // 조준 중엔 전투만 느리게(퍼즐은 정상 속도로 연쇄 마무리).
     controller.update(aim ? dt * controller.itemsConfig.targetingBattleTimeScale : dt);
   }
+  if (tutorialRunning() && !paused && prep == null) tutorial.update(dt * 1000);
 
   // 힌트(입력이 일정 시간 없으면 가능한 수 한 칸을 보여줌)는 이제 GameState가 직접 관리한다
   // (trySwap이 유휴 타이머를 리셋하고, update()가 idleMs를 넘기면 hintCell을 채운다) -
@@ -1065,7 +1337,7 @@ function loop(now) {
       gameState,
       animator,
       controller?.battleState ?? null,
-      gameState.hintCell,
+      tutorialRunning() ? null : gameState.hintCell,
       playerState,
       paused,
       buildBattleHud(),
@@ -1074,6 +1346,11 @@ function loop(now) {
       buildItemUi()
     );
     if (!paused) drawPrep(now);
+    renderer.drawMenuPopup(mainMenuScreen); // 뒤로가기 종료 확인(열려 있을 때만).
+    if (tutorialRunning()) {
+      renderer.drawTutorial(tutorial, now);
+      tutorial.events.length = 0; // 이번 프레임에 그린 이벤트(손가락 강조) 소비.
+    }
     // 보스 첫 처치 보상 - 클리어 보상이 새로 계산된 프레임에 한 번 획득 팝업으로.
     const clear = controller?.lastClearReward;
     if (clear && clear !== shownClearReward) {
@@ -1105,6 +1382,7 @@ Promise.all([
   .then(([assets]) => {
     renderer.setAssets(assets);
     assetsReady = true;
+    renderer.tutorial.load();
     if (new URLSearchParams(location.search).has('sfxtest')) setupSfxTestPanel();
   })
   .catch(() => {

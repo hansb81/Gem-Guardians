@@ -7,3 +7,5 @@ Thumbs.db
 .env
 .claude/settings.local.json
 reports/
+dist/
+*.ait
