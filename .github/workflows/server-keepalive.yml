@@ -1,0 +1,18 @@
+# Supabase 무료 프로젝트가 1주일 무활동으로 멈추지 않게 매일 ping 1회(docs/server.md §13-1, §20-12).
+# ping은 JWT 없이 부르는 함수(DB 한 번만 건드림) - 가짜 사용자를 만들지 않는다.
+# Secrets: SUPABASE_URL (https://<ref>.supabase.co), SUPABASE_ANON_KEY (게이트웨이 apikey 헤더용 공개 키)
+name: server-keepalive
+on:
+  schedule:
+    - cron: "17 3 * * *" # 매일 12:17 KST
+  workflow_dispatch: # Actions 탭 > Run workflow 로 수동 실행
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ping
+        env:
+          URL: ${{ secrets.SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          curl -sf -X POST "$URL/functions/v1/ping" -H "apikey: $KEY" | jq -e .ok

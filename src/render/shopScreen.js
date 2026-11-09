@@ -353,7 +353,7 @@ export class ShopScreen {
       this.changed = true;
       this._dirty = true;
     }
-    return res.ok;
+    return res.ok && { delta: res.delta ?? null }; // 이미 받은 주문(duplicate)은 delta null
   }
 
   // 환불된 비소모성 주문 - 결제로만 얻는 플래그(광고 제거) 회수.
@@ -818,14 +818,15 @@ export class ShopScreen {
       let res = null;
       const onGrant = (productKey, orderId) => {
         res = this._buy(p, tx, 1, `iap:${productKey}:${orderId}`);
-        return res.ok;
+        return res.ok && { delta: res.delta ?? null }; // 참 = 지급 성공, delta는 서버 기록용(src/shop/iap.js)
       };
       purchase(p.id, onGrant).then((r) => {
         audio.resumeFor('purchase');
         if (!r?.ok || !res?.ok) {
           if (this.popup === pop) this.popup = null;
           // 결제 중에 로그인이 필요하다고 나오면(원스토어) 로그인 창으로. 지급 실패 토스트는 _buy가 이미 띄웠다.
-          if (!res && !(r?.reason === 'needLogin' && this._storeGate())) {
+          if (r?.reason === 'verifying') this._showToast(t('shop.toast.verifying')); // iapStrict: 서버 확인 뒤 지급
+          else if (!res && !(r?.reason === 'needLogin' && this._storeGate())) {
             audio.play('ui_purchase_fail');
             this._showToast(t('shop.toast.payFail'));
           }

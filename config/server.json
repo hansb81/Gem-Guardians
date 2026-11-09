@@ -1,0 +1,7 @@
+{
+  "_doc": "docs/server.md §12. enabled:false면 서버 요청 없음(지금 동작 그대로). url/anonKey는 공개값(Supabase 프로젝트 URL + anon 키)만 - service_role 등 비밀값은 절대 여기 넣지 않는다. features는 /hello 응답이 덮어씀. 개발(?dev=1) 패널에서 켜고 끌 수 있다(로컬: url http://127.0.0.1:54321 + supabase status의 anon key).",
+  "enabled": false,
+  "url": "",
+  "anonKey": "",
+  "features": { "attendance": true, "mail": true, "compRanking": false, "iapStrict": false, "adSsv": false }
+}

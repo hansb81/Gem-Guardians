@@ -73,6 +73,11 @@ export function layoutRankingPopup(screenW, screenH, st) {
       y += 44;
     }
   }
+  // 서버 랭킹 오프라인: "오프라인 · 마지막 갱신 N분 전" 한 줄(목록 위).
+  if (!comp && st.offlineText) {
+    out.offline = rect(c.x, y, c.width, 24);
+    y += 28;
+  }
   // 마켓 리더보드 버튼(토스 "토스 랭킹 보기") - 일반 모드 탭, 내 줄 바로 위.
   if (st.tossBoard && !comp) out.tossBoard = rect(c.x, out.mine.y - 50, c.width, 44);
   out.list = rect(c.x, y, c.width, (out.tossBoard ? out.tossBoard.y : out.mine.y) - 6 - y);
@@ -251,6 +256,7 @@ function drawSheet(ctx, assets, st, L) {
   drawTab(ctx, assets, L.tabs[st.tab], st.tab, true, st);
 
   if (st.tab === 'comp') drawCompHeader(ctx, assets, st, L);
+  if (L.offline) label(ctx, st.offlineText, L.offline, C.dim, 11, 'center');
   drawList(ctx, assets, st, L);
   if (L.tossBoard) button(ctx, assets, 'buttons/btn_primary.png', L.tossBoard, t('ranking.tossBoard'), C.bone, 22);
   drawMine(ctx, assets, st, L);

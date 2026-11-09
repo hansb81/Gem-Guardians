@@ -56,6 +56,15 @@ export default function playIap({ platform, cfg, isAndroid, warn }) {
     },
 
     iap: {
+      // 서버 플레이어 id로 RevenueCat 사용자를 맞춘다 - 서버 iap-verify가 이 id로 거래를 찾는다(docs/server.md §7-1).
+      async logIn(appUserId) {
+        if (!platform.caps.iap || !appUserId) return;
+        try {
+          await Purchases.logIn({ appUserID: appUserId });
+        } catch (e) {
+          warn('logIn', e);
+        }
+      },
       async getProducts() {
         const ids = Object.keys(products).filter((k) => !k.startsWith('_')).map(storeIdOf).filter(Boolean);
         if (!platform.caps.iap || ids.length === 0) return [];

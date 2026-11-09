@@ -1,0 +1,36 @@
+# 주 1회 DB 백업(docs/server.md §13-1): supabase db dump -> gpg 대칭 암호화 -> Actions artifact(90일 보관).
+# Secrets: SUPABASE_DB_URL (대시보드 Connect > Session pooler URI, 비밀번호 포함), BACKUP_PASSPHRASE
+# 복원: gpg -d backup-*.tar.gz.gpg | tar xz  ->  psql "$DB_URL" -f roles.sql -f schema.sql -f data.sql
+name: server-backup
+on:
+  schedule:
+    - cron: "0 18 * * 0" # 매주 월 03:00 KST
+  workflow_dispatch:
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: dump
+        env:
+          DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          supabase db dump --db-url "$DB_URL" --role-only -f roles.sql
+          supabase db dump --db-url "$DB_URL" -f schema.sql
+          supabase db dump --db-url "$DB_URL" --data-only --use-copy -f data.sql
+      - name: encrypt
+        env:
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          test -n "$PASS"
+          NAME=backup-$(date -u +%Y%m%d).tar.gz
+          tar czf "$NAME" roles.sql schema.sql data.sql
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$PASS" --symmetric --cipher-algo AES256 -o "$NAME.gpg" "$NAME"
+          rm -f "$NAME" roles.sql schema.sql data.sql
+      - uses: actions/upload-artifact@v4
+        with:
+          name: db-backup
+          path: backup-*.tar.gz.gpg
+          retention-days: 90

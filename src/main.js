@@ -27,8 +27,9 @@ import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup 
 import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
 import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform } from './platform/index.js';
-import { recoverPending, restore } from './shop/iap.js';
+import { recoverPending, restore, syncServerIap } from './shop/iap.js';
 import { storage } from './platform/storage.js';
+import { loadServerConfig, setupServer } from './game/serverUi.js';
 
 setLocale(storage.load('locale') ?? 'ko'); // 설정 팝업의 언어 버튼이 저장한 값.
 const canvas = document.getElementById('game-canvas');
@@ -77,6 +78,7 @@ const ranking = new RankingUi({
   },
 });
 mainMenuScreen.rankingBadge = () => ranking.hasRewardBadge();
+mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
 const shopScreen = new ShopScreen();
 function exitTitle() {
   if (scene !== 'title' || !titleScreen.tapReady) return;
@@ -290,8 +292,12 @@ function handleTutorialPointerDown(x, y) {
   else if (tutorial.guideSwap && !pointInRect(x, y, renderer.lastLayout?.board)) tutorial.events.push({ type: 'tutorialHintPulse' });
 }
 
-Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceData]) => {
+// 게임 서버(docs/server.md S1) - config/server.json enabled:false면 아무 요청 없음.
+let serverUi = { enabled: false, handleMenuAction: () => false, pointerUp: () => {} };
+Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
   if (!battleData || !balanceData) return;
+  const devMode = new URLSearchParams(location.search).get('dev') === '1';
+  serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: devMode }) };
   controller = new BattleController({
     balance: balanceData.balance,
     enemies: balanceData.enemies,
@@ -313,7 +319,11 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
   });
   if (balanceData.ranking) {
     // 참여 보상 골드 = 층 기준가 x 3(config/ranking.json tiers part.goldFloorMul) - 기준가는 상점과 같은 normalFloorReward.
-    ranking.init(balanceData.ranking, { floorGold: () => normalFloorReward(balanceData, playerState.bestFloor) });
+    // 서버 랭킹은 일반 모드만, 마켓 리더보드가 있는 빌드(토스)는 그대로 마켓 리더보드(docs/server.md §9).
+    ranking.init(balanceData.ranking, {
+      floorGold: () => normalFloorReward(balanceData, playerState.bestFloor),
+      server: serverUi.enabled && !platform.caps.leaderboard,
+    });
     // 일반 모드 랭킹 = 클리어한 가장 높은 층(더 높을 때만 갱신, 도달 시각 기록).
     controller.onFloorClear = (floor) => ranking.service.submit('normal', { floor, at: ranking.service.now() });
   }
@@ -359,6 +369,14 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
         // 토스: 복원 버튼이 없고 앱을 지우면 Storage도 지워진다 - 시작할 때 완료 주문으로 비소모성을 되살린다(txId라 중복 없음).
         if (platform.caps.autoRestore) restore(onGrant, (key, orderId) => shopScreen.revokePaid(key, orderId));
       });
+      // 서버(S2): RevenueCat logIn, 환불 회수(hello revoke), 서버 확인 못 한 결제(pendingVerify) 다시 확인.
+      serverUi.ready?.then(() =>
+        syncServerIap({
+          onGrant,
+          onRevoke: (key, orderId) => shopScreen.revokePaid(key, orderId),
+          grantedTx: () => playerState.inventory.data.grantedTx,
+        })
+      );
     }
   }
 
@@ -391,6 +409,7 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       triggerCombo: devTriggerCombo,
       triggerShuffle: () => gameState.shuffleBoard(),
       ranking: ranking.service ? ranking.dev() : null,
+      server: serverUi.devToggle,
     });
     // 개발용 콘솔 훅(?dev=1) - 화면 확인 때 실패/부활 등 상태를 직접 만든다.
     window.__gg = {
@@ -402,6 +421,7 @@ Promise.all([loadBattleData(), loadBalanceData()]).then(([battleData, balanceDat
       playerState,
       renderer,
       ranking,
+      get server() { return serverUi; },
       enterGame: () => {
         playGameBgm(1000); // 실제 진입(플레이 버튼)과 같은 경로.
         scene = 'game';
@@ -795,6 +815,7 @@ canvas.addEventListener('pointerdown', (e) => {
     else if (action === 'openShopGold') enterShop('dia', 'goldex');
     else if (action === 'openShopDia') enterShop('dia');
     else if (action === 'exitApp') platform.lifecycle.exit();
+    else serverUi.handleMenuAction(action);
     return;
   }
 
@@ -936,6 +957,7 @@ window.addEventListener('pointerup', (e) => {
   renderer.tutorial.skipPressed = false;
   invDragEnd();
   ranking.pointerUp();
+  serverUi.pointerUp();
   if (invPress && !invPress.done) inventorySlotTap(invPress.slot);
   invPress = null;
   if (aim?.down) aimPointerUp();
@@ -1262,6 +1284,7 @@ function loop(now) {
     // 메뉴에 있는 동안 1초마다 시즌 넘김 확인 -> 지난 시즌 결과 팝업(다른 팝업이 없을 때).
     ranking.tick(now, !prep && !mainMenuScreen.popup && !fade);
     renderer.drawRankingPopup(ranking, now);
+    renderer.drawRewardPopup(rewardPopup); // 출석·우편 받기
     drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;

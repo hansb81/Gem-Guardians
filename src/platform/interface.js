@@ -11,7 +11,7 @@
  *   ok=true = 결제 + 지급까지 끝남. 어댑터는 인벤토리를 직접 만지지 않고 게임이 넘긴 onGrant 콜백만 부른다(토스
  *   processProductGrant처럼 "지급 성공을 스토어에 알린 뒤에만 완료"). 게임 쪽 지급은 inventory txId `iap:{productKey}:{orderId}`
  *   한 번이라 같은 주문을 여러 번 불러도 두 번 지급되지 않는다.
- * @typedef {(productKey:string, orderId:string) => boolean|Promise<boolean>} OnGrant    지급 성공(또는 이미 지급)이면 true
+ * @typedef {(productKey:string, orderId:string) => any|Promise<any>} OnGrant    지급 성공(또는 이미 지급)이면 참 값(게임은 { delta } - 서버 기록용, 어댑터는 참/거짓만 본다)
  * @typedef {(productKey:string, orderId:string) => void} OnRevoke   환불된 비소모성 주문 - 게임이 회수
  *
  * @typedef {Object} Platform

@@ -28,7 +28,7 @@ const SKILL_BUTTONS = [
   ['대폭발', 'color_color'],
 ];
 
-export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null }) {
+export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null, server = null }) {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:fixed;top:0;left:0;z-index:9999;background:rgba(0,0,0,0.75);color:#fff;' +
@@ -183,6 +183,13 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
   };
   panel.append(effectsBtn, immuneBtn, logPre);
   if (ranking) appendRankingDev(panel, ranking);
+  // 게임 서버 켜기/끄기(config/server.json enabled를 이 기기에서만 덮어씀) - 바꾸면 새로고침.
+  if (server) {
+    const b = document.createElement('button');
+    b.textContent = server.label();
+    b.onclick = () => server.toggle();
+    panel.append(b);
+  }
 
   document.body.appendChild(panel);
 }

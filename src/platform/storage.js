@@ -5,7 +5,7 @@
 // initStorage 전(node 테스트 등)에는 메모리에만 있고 아무 데도 쓰지 않는다.
 
 // 읽을 키 전부 - 새 키를 쓰면 여기에 추가해야 다음 실행 때 읽힌다(platform.storage에 키 목록 API가 없다).
-const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'leaderboardSubmitted'];
+const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'leaderboardSubmitted', 'devServer', 'pendingVerify'];
 // 전체 데이터 초기화: 이 값을 올리면 모든 접속자의 저장 데이터가 다음 실행 때 한 번 비워진다.
 const DATA_EPOCH = 1;
 const FLUSH_MS = 300;

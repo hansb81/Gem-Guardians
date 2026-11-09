@@ -2,6 +2,7 @@
 // 메인 메뉴에서만 열린다: 봉인 원석(crystal) -> open(), 메뉴에 들어올 때 tick()이 지난 시즌 정산 -> 결과 팝업.
 // 닉네임 입력은 캔버스 위에 HTML input을 잠깐 겹친다(모바일 키보드) - 팝업을 닫거나 저장하면 지운다.
 import { createRankingService } from '../ranking/rankingService.js';
+import { ServerRankingService } from '../ranking/serverRankingService.js';
 import { isSettling, splitRemain } from '../ranking/season.js';
 import { isValidNickname } from '../ranking/rankingSave.js';
 import { hitRankingPopup, scrollToMeValue } from '../render/ui/rankingPopup.js';
@@ -31,9 +32,11 @@ export class RankingUi {
     this._loadSeq = 0;
   }
 
-  init(config, { floorGold }) {
+  // server = 서버 랭킹(일반 모드) 사용 - config/server.json enabled이고 마켓 리더보드(토스)가 없을 때(main.js).
+  init(config, { floorGold, server = false }) {
     this.config = config;
-    this.service = createRankingService({ player: this.player, config, floorGold });
+    const opts = { player: this.player, config, floorGold };
+    this.service = server ? new ServerRankingService(opts) : createRankingService(opts);
   }
 
   get isOpen() {
@@ -83,6 +86,8 @@ export class RankingUi {
     if (seq !== this._loadSeq || this.state !== st) return;
     st.data = { normal: { ...nt, me: nm }, comp: { ...ct, me: cm } };
     st.loaded = true;
+    // 서버가 기기 닉네임을 거절해 비웠으면 바로 다시 고르게(이유 한 줄과 함께).
+    if (this.service.nickResetReason && st.sub == null) this._openNick(true);
   }
 
   // 매 프레임(메뉴). 1초마다 시즌 넘김 확인 -> 새 결과가 있으면 결과 팝업(아직 안 본 것만).
@@ -120,6 +125,8 @@ export class RankingUi {
     st.entries = d.entries ?? [];
     st.total = d.total ?? 0;
     st.unavailable = !!d.unavailable;
+    // 서버 랭킹 오프라인 - 마지막으로 받은 순위표 + 몇 분 전인지.
+    st.offlineText = d.offlineAt ? t('ranking.offlineAgo', { n: Math.max(0, Math.floor((Date.now() - d.offlineAt) / 60e3)) }) : null;
     st.me = d.me ?? null;
     st.history = r.comp.history;
     st.pending = r.comp.pending;
@@ -265,7 +272,9 @@ export class RankingUi {
   _openNick(first) {
     const p = this.player.ranking.profile;
     this.state.sub = 'nick';
-    this.state.nick = { first, draft: p.nickname, statue: p.statue || this.defaultStatue(), err: null, valid: isValidNickname(p.nickname), domInput: false };
+    const reset = { taken: 'errTaken', badword: 'errBad' }[this.service.nickResetReason] ?? null;
+    if (this.service.nickResetReason) this.service.nickResetReason = null;
+    this.state.nick = { first, draft: p.nickname, statue: p.statue || this.defaultStatue(), err: reset, valid: isValidNickname(p.nickname), domInput: false };
     this._createInput();
   }
 
@@ -279,6 +288,9 @@ export class RankingUi {
     const res = await this.service.saveProfile({ nickname: n.draft, statue: n.statue });
     if (!res.ok || !this.state) {
       audio.play('gem_swap_fail');
+      // 서버 판정(중복·금칙어·연결 없음)은 입력 칸 아래 빨간 줄로.
+      const err = { taken: 'errTaken', badword: 'errBad', offline: 'errOffline' }[res.reason];
+      if (err && this.state?.nick === n) n.err = err;
       return;
     }
     audio.play('ui_click');

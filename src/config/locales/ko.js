@@ -42,6 +42,7 @@ export const ko = {
         '현재 사용 중인 외부 라이브러리는 없습니다.',
       ],
     },
+    deleteData: { title: '데이터 삭제', body: '서버의 출석·우편·랭킹 기록을 지울까요?', ok: '삭제', cancel: '취소' },
     attendance: { title: '출석 체크', body: '콘텐츠 자리 (추후 결정)' },
     event: { title: '이벤트', body: '콘텐츠 자리 (추후 결정)' },
     mail: { title: '우편함', body: '콘텐츠 자리 (추후 결정)' },
@@ -332,12 +333,23 @@ export const ko = {
     toast: {
       poorGold: '골드가 부족해요', poorDia: '다이아가 부족해요', toGoldex: '골드 교환', toDia: '다이아 충전',
       bought: '{name} ×{n} 구매', unlocked: '{name} 해금', levelUp: '{name} Lv {lv}', maxLevel: '이미 최대 레벨이에요', already: '이미 구매했어요',
-      tomorrow: '내일 다시 받을 수 있어요', gone: '지금은 살 수 없는 상품이에요', payFail: '결제가 완료되지 않았어요', restored: '구매 {n}건을 복원했어요', restoreNone: '복원할 구매가 없어요', got: '{what} 받음', cap: '최대 999개까지 가질 수 있어요',
+      tomorrow: '내일 다시 받을 수 있어요', gone: '지금은 살 수 없는 상품이에요', payFail: '결제가 완료되지 않았어요', verifying: '결제 확인 중이에요. 잠시 후 다시 열어 주세요', restored: '구매 {n}건을 복원했어요', restoreNone: '복원할 구매가 없어요', got: '{what} 받음', cap: '최대 999개까지 가질 수 있어요',
       // 원스토어 빌드: 결제 전에 서비스 앱 로그인/설치가 필요할 때(platform.iap.getStoreStatus).
       store_needLogin: '원스토어 앱 로그인이 필요해요', storeBtn_needLogin: '로그인',
       store_needUpdate: '원스토어 앱 설치가 필요해요', storeBtn_needUpdate: '설치',
       store_unavailable: '원스토어에 연결하지 못했어요', storeBtn_unavailable: '다시 시도', storeOk: '원스토어에 연결됐어요',
     },
+  },
+  // 게임 서버(docs/server.md) - 출석·우편·플레이어 코드.
+  net: {
+    loading: '불러오는 중…',
+    needNet: '연결이 필요해요',
+    error: '잠시 후 다시 시도해 주세요',
+    already: '이미 받았어요',
+    recovered: '받지 못한 보상을 받았어요',
+    att: { day: '{n}일', claim: '받기', claimed: '받음', tomorrow: '내일 또 와요' },
+    mail: { empty: '우편이 없어요', claim: '받기', claimed: '받음' },
+    about: { code: '플레이어 코드 {code}', noCode: '플레이어 코드 (연결 안 됨)', copied: '복사했어요', delete: '내 데이터 삭제 요청', deleted: '삭제했어요', deleteFail: '삭제하지 못했어요 - 연결을 확인해 주세요' },
   },
   ranking: {
     title: '랭킹',
@@ -371,6 +383,7 @@ export const ko = {
     listFoot: '1~{n}위까지 보여요 · 참가 {total}명',
     offline: '온라인 랭킹 준비 중',
     offlineHint: '지금은 내 기록만 보여요',
+    offlineAgo: '오프라인 · 마지막 갱신 {n}분 전',
     partCrit: '1판 이상',
     tier: { r1: '1위', r2: '2위', r3: '3위', r10: '4~10위', r50: '11~50위', p1: '상위 1%', p5: '상위 5%', p10: '상위 10%', p30: '상위 30%', p50: '상위 50%', part: '참여' },
     reward: { diamonds: '다이아', gold: '골드' },
@@ -380,6 +393,7 @@ export const ko = {
     nick: {
       title: '랭킹에 쓸 이름', titleEdit: '이름 바꾸기', label: '닉네임', rule: '2~10자 · 한글·영문·숫자', statue: '대표 석상', save: '저장',
       placeholder: '이름 입력', errShort: '2자 이상 써 주세요', errLong: '10자까지 쓸 수 있어요', errChar: '한글·영문·숫자만 쓸 수 있어요',
+      errTaken: '이미 쓰는 이름이에요', errBad: '쓸 수 없는 단어가 있어요', errOffline: '연결이 필요해요',
       later: '나중에 랭킹 내 줄의 연필 버튼으로 바꿀 수 있어요',
     },
   },

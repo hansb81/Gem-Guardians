@@ -1,0 +1,12 @@
+{
+  "_doc": "docs/server.md §8-1 출석 7일판 반복(빠져도 안 끊김, 7일째 큰 보상 후 1일로). 판정·지급은 서버 - 이 표는 server/supabase/functions/_shared/attendance.ts 와 같아야 한다(tests/attendance.test.js가 확인). 숫자는 임시 - 주당 다이아 95개는 상점 다이아 가격과 맞춰 밸런스 작업 때 확정(쑹 2026-11-09).",
+  "days": [
+    { "diamonds": 10 },
+    { "items": { "dye": 1 } },
+    { "diamonds": 15 },
+    { "items": { "hammer": 1 } },
+    { "diamonds": 20 },
+    { "items": { "shuffle": 1 } },
+    { "diamonds": 50, "items": { "rainbow": 1 } }
+  ]
+}

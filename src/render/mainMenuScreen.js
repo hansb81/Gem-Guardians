@@ -38,6 +38,7 @@ const COLORS = {
   purple: '#7a3cae',
   blue: '#386cbc',
   redLight: '#ec6a6a',
+  dim: '#a59cb2', // 보조 글자(characters.hex)
   overlay: 'rgba(13, 10, 16, 0.75)',
   title: '#ffe14a', // 메뉴 팝업 제목(인게임 HUD 제목 #f2d264와 다름).
 };
@@ -69,7 +70,7 @@ const POPUP_SIZES = {
   settings: [400, 496],
   help: [480, 820],
   about: [480, 820],
-  attendance: [400, 180],
+  attendance: [400, 180], // 서버가 켜져 있으면 ATT 높이(_popupCardBasis)
   event: [400, 180],
   mail: [400, 180],
   exit: [400, 240],
@@ -116,6 +117,16 @@ const HELP = {
 
 // 게임 정보 팝업(카드 왼쪽 위 기준, 카드 480x820). 본문은 locale menu.about.body 한 쪽을 위아래로 스크롤한다.
 const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13, lineH: 24, headSize: 16, headH: 40 };
+// 서버가 켜져 있으면 게임 정보 아래에 플레이어 코드(길게 누르면 복사)와 데이터 삭제 요청 버튼(docs/server.md §10, §14-3).
+const ABOUT_NET = { viewBottom: 680, code: [30, 692, 420, 40], del: [90, 744, 300, 46] };
+
+// 출석(7일판) - 카드 왼쪽 위 기준. 1줄 4칸 + 2줄 3칸, 아래 받기 버튼.
+const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], claim: [100, 318, 200, 50] };
+// 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼.
+// shortcut: 스크롤 없이 최근 MAIL.rows통만 보임 - 전체 우편을 처음 보내기 전에 스크롤 추가(쑹 2026-11-09).
+const MAIL = { y: 92, rowH: 72, rows: 6, claim: [272, 10, 92, 44] };
+const PLACEHOLDER = '#5a5266'; // 아이템 아이콘이 아직 안 불렸을 때 자리
+const TOAST = { y: 730, ms: 3000 };
 
 // slider_track manifest의 fill = { x: 2, y: 2, h: 4, padRight: 2 } 원본 px -> 화면 2배.
 const TRACK_FILL = { x: 4, y: 4, h: 8, padRight: 4 };
@@ -169,7 +180,14 @@ export class MainMenuScreen {
     this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
     this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._helpImages = {}; // 이름 -> 로드 상태(도움말을 처음 열 때 그 쪽 그림만 불러온다).
-    this.mailBadge = () => false; // 우편 시스템이 생기면 "읽지 않은 우편 있음"에 연결.
+    this.mailBadge = () => false; // main.js: 서버가 켜져 있으면 "안 받은 우편 있음"
+    this.attendanceBadge = () => true; // main.js: 서버가 켜져 있으면 "오늘 받을 수 있음"
+    // 서버(출석·우편·플레이어 코드) - main.js가 채운다. null = 서버 꺼짐(출석·우편은 예전 자리 팝업).
+    // { att: { status, busy } | null, mail: { list, reason, busy } | null, playerCode: () => string|null } - 기능 스위치가 꺼진 것은 null
+    this.server = null;
+    this.aboutNotice = null; // { key, until } 플레이어 코드 줄에 잠깐 띄우는 글(복사했어요 등)
+    this.itemIcons = () => null; // main.js: renderer.itemAssets.icons(아이템 팩, 하단 바와 같은 그림)
+    this._toast = null; // { text, until } 메뉴 한 줄 알림 - until은 메뉴에 처음 그려질 때 정한다
     this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
@@ -215,8 +233,25 @@ export class MainMenuScreen {
     ctx.imageSmoothingEnabled = false;
     this._drawBackground(ctx, offsetX, offsetY, scale, nowMs);
     this._drawUi(ctx, playerState);
+    this._drawToast(ctx, nowMs);
     if (this.popup) this._drawPopup(ctx, width, height);
     ctx.restore();
+  }
+
+  // 메뉴 한 줄 알림(예: 받지 못한 보상 복구). 타이틀에서 불려도 메뉴가 보일 때부터 TOAST.ms 동안.
+  showToast(text) {
+    this._toast = { text, until: null };
+  }
+
+  _drawToast(ctx, nowMs) {
+    const tt = this._toast;
+    if (!tt) return;
+    tt.until ??= nowMs + TOAST.ms;
+    if (nowMs >= tt.until) {
+      this._toast = null;
+      return;
+    }
+    this._text(ctx, tt.text, BASIS_W / 2, TOAST.y, { size: 15, align: 'center', color: COLORS.title });
   }
 
   // 메뉴 밖(전투 scene)에서 종료 확인 모달만 위에 덮어 그린다 - 입력도 같은 handlePointerDown으로 받는다.
@@ -305,8 +340,8 @@ export class MainMenuScreen {
   _drawUi(ctx, playerState) {
     const layout = this._layout();
     this._drawCurrencyBar(ctx, playerState);
-    // 출석/이벤트는 받을 보상이 있다고 보고 배지를 띄운다(보상 상태가 생기면 여기에 연결).
-    this._drawIconButton(ctx, 'attendance', layout.attendance, COLORS.gold, true);
+    // 이벤트는 받을 보상이 있다고 보고 배지를 띄운다(보상 상태가 생기면 여기에 연결).
+    this._drawIconButton(ctx, 'attendance', layout.attendance, COLORS.gold, this.attendanceBadge());
     this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, true);
     this._drawIconButton(ctx, 'mail', layout.mail, COLORS.bone, this.mailBadge());
     this._drawIconButton(ctx, 'settings', layout.settings, COLORS.bg3, false);
@@ -381,7 +416,9 @@ export class MainMenuScreen {
   // 팝업 카드(basis 540x960 가운데 정렬) - 종류별로 크기가 다르다.
   _popupCardBasis() {
     const [w, h0] = POPUP_SIZES[this.popup] ?? [400, 200];
-    const h = this.popup === 'settings' && platform.caps.haptics ? h0 + HAPTICS_EXTRA_H : h0;
+    let h = this.popup === 'settings' && platform.caps.haptics ? h0 + HAPTICS_EXTRA_H : h0;
+    if (this.server?.att && this.popup === 'attendance') h = ATT.claim[1] + ATT.claim[3] + 32;
+    if (this.server?.mail && this.popup === 'mail') h = MAIL.y + MAIL.rows * MAIL.rowH + 24;
     return [(BASIS_W - w) / 2, (BASIS_H - h) / 2, w, h];
   }
 
@@ -413,7 +450,110 @@ export class MainMenuScreen {
     else if (this.popup === 'help') this._drawHelpPopup(ctx, card);
     else if (this.popup === 'about') this._drawAboutPopup(ctx, card);
     else if (this.popup === 'exit') this._drawExitPopup(ctx, card);
+    else if (this.popup === 'attendance' && this.server?.att) this._drawAttendancePopup(ctx, card);
+    else if (this.popup === 'mail' && this.server?.mail) this._drawMailPopup(ctx, card);
     else this._drawPlaceholderPopup(ctx, card);
+  }
+
+  // ---- 서버 팝업(출석·우편) ----
+
+  // 서버 응답 상태 한 줄(불러오는 중 / 연결이 필요해요 / 잠시 후 다시). 그린 게 있으면 true.
+  _drawNetState(ctx, [cx, cy, cw], loaded, reason) {
+    if (loaded && !reason) return false;
+    const key = !loaded ? 'net.loading' : reason === 'offline' ? 'net.needNet' : 'net.error';
+    this._text(ctx, t(key), cx + cw / 2, cy + 160, { size: 15, align: 'center' });
+    return true;
+  }
+
+  // 보상 묶음 -> 줄 목록 ['다이아 10', '무지개 1'].
+  _bundleLines(b) {
+    const out = [];
+    if (b?.gold) out.push(`${t('reward.gold')} ${b.gold}`);
+    if (b?.diamonds) out.push(`${t('reward.diamonds')} ${b.diamonds}`);
+    for (const [id, n] of Object.entries(b?.items ?? {})) out.push(`${t(`item.name.${id}`)} ${n}`);
+    return out;
+  }
+
+  // 보상 아이콘(32x32 자리): 골드·다이아는 UI 팩, 아이템은 아이템 팩(14x14 -> x2, 가운데). 못 그리면 회색 자리.
+  _bundleIcon(ctx, b, bx, by) {
+    const icon = b?.diamonds ? 'icons/diamond.png' : b?.gold ? 'icons/gold.png' : null;
+    if (icon && this._sprite(ctx, icon, bx, by)) return;
+    const st = icon ? null : this.itemIcons()?.get(Object.keys(b?.items ?? {})[0]);
+    if (uiReady(st)) {
+      const { offsetX, offsetY, k } = this._transform;
+      const w = st.img.width * ASSET_SCALE;
+      const h = st.img.height * ASSET_SCALE;
+      ctx.drawImage(st.img, offsetX + (bx + (32 - w) / 2) * k, offsetY + (by + (32 - h) / 2) * k, w * k, h * k);
+      return;
+    }
+    const r = this._toScreen([bx, by, 32, 32]);
+    ctx.fillStyle = PLACEHOLDER;
+    ctx.fillRect(r.x, r.y, r.width, r.height);
+  }
+
+  _attCell(card, i) {
+    const row = i < 4 ? 0 : 1;
+    const n = row ? 3 : 4;
+    const col = row ? i - 4 : i;
+    const x0 = (card[2] - (n * ATT.cellW + (n - 1) * ATT.gap)) / 2;
+    return [card[0] + x0 + col * (ATT.cellW + ATT.gap), card[1] + ATT.rowY[row], ATT.cellW, ATT.cellH];
+  }
+
+  _drawAttendancePopup(ctx, card) {
+    const s = this.server.att.status;
+    if (this._drawNetState(ctx, card, !!s, s && !s.ok ? s.reason : null)) return;
+    const todayIdx = s.claimedToday ? -1 : s.days; // 오늘 받을 칸(0부터)
+    s.rewards.forEach((b, i) => {
+      const r = this._attCell(card, i);
+      if (!this._nine(ctx, 'panels/panel_inset.png', r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
+      this._text(ctx, t('net.att.day', { n: i + 1 }), r[0] + r[2] / 2, r[1] + 14, { size: 11, align: 'center', color: COLORS.title });
+      this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 16, r[1] + 26);
+      this._bundleLines(b).forEach((line, j) => this._text(ctx, line, r[0] + r[2] / 2, r[1] + 70 + j * 14, { size: 10, align: 'center' }));
+      if (i < s.days) {
+        const sr = this._toScreen(r);
+        ctx.fillStyle = COLORS.overlay;
+        ctx.fillRect(sr.x, sr.y, sr.width, sr.height);
+        this._text(ctx, t('net.att.claimed'), r[0] + r[2] / 2, r[1] + r[3] / 2, { size: 15, align: 'center', color: COLORS.title });
+      } else if (i === todayIdx) {
+        const sr = this._toScreen(r);
+        ctx.strokeStyle = COLORS.title;
+        ctx.lineWidth = Math.max(2, 2 * this._transform.k);
+        ctx.strokeRect(sr.x, sr.y, sr.width, sr.height);
+      }
+    });
+    const can = !s.claimedToday && !this.server.att.busy;
+    const r = [card[0] + ATT.claim[0], card[1] + ATT.claim[1], ATT.claim[2], ATT.claim[3]];
+    const down = this._pressed === 'attClaim';
+    const img = can ? `buttons/btn_primary${down ? '_pressed' : ''}.png` : 'buttons/btn_secondary.png';
+    if (!this._nine(ctx, img, r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
+    this._text(ctx, t(s.claimedToday ? 'net.att.tomorrow' : 'net.att.claim'), r[0] + r[2] / 2, r[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+  }
+
+  _mailRows(card) {
+    const list = this.server.mail.list ?? [];
+    return list.slice(0, MAIL.rows).map((m, i) => {
+      const row = [card[0] + 24, card[1] + MAIL.y + i * MAIL.rowH, card[2] - 48, MAIL.rowH - 8];
+      return { m, row, btn: [row[0] + MAIL.claim[0] - 24, row[1] + MAIL.claim[1], MAIL.claim[2], MAIL.claim[3]] };
+    });
+  }
+
+  _drawMailPopup(ctx, card) {
+    const ms = this.server.mail;
+    if (this._drawNetState(ctx, card, !!ms.list, ms.list ? null : ms.reason)) return;
+    if (!ms.list.length) {
+      this._text(ctx, t('net.mail.empty'), card[0] + card[2] / 2, card[1] + 160, { size: 15, align: 'center' });
+      return;
+    }
+    const loc = getLocale();
+    for (const { m, row, btn } of this._mailRows(card)) {
+      if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
+      this._text(ctx, m.title?.[loc] || m.title?.ko || '', row[0] + 12, row[1] + 20, { size: 13 });
+      this._text(ctx, this._bundleLines(m.bundle).join(', '), row[0] + 12, row[1] + 44, { size: 11, color: COLORS.dim });
+      const down = this._pressed === `mail:${m.id}`;
+      const img = m.claimed || ms.busy ? 'buttons/btn_secondary.png' : `buttons/btn_primary${down ? '_pressed' : ''}.png`;
+      if (!this._nine(ctx, img, btn)) this._panel(ctx, btn, COLORS.bg2, COLORS.bg3);
+      this._text(ctx, t(m.claimed ? 'net.mail.claimed' : 'net.mail.claim'), btn[0] + btn[2] / 2, btn[1] + btn[3] / 2 + (down ? 2 : 0), { size: 13, align: 'center' });
+    }
   }
 
   _drawPlaceholderPopup(ctx, [cx, cy, cw]) {
@@ -465,7 +605,8 @@ export class MainMenuScreen {
 
   // 로케일 키 - 종료 확인은 종류(exitKind)마다 문구가 다르다.
   _popupKey() {
-    return this.popup === 'exit' && this.exitKind === 'floor' ? 'quitFloor' : this.popup;
+    if (this.popup !== 'exit') return this.popup;
+    return { floor: 'quitFloor', deleteData: 'deleteData' }[this.exitKind] ?? 'exit';
   }
 
   _drawExitPopup(ctx, [cx, cy, cw]) {
@@ -514,7 +655,8 @@ export class MainMenuScreen {
   _drawAboutPopup(ctx, card) {
     const [cx, cy, cw] = card;
     const lines = this._aboutLines(ctx);
-    const viewH = ABOUT.viewBottom - ABOUT.viewY;
+    const bottom = this._aboutBottom();
+    const viewH = bottom - ABOUT.viewY;
     let contentH = 0;
     for (const l of lines) contentH += l.head ? ABOUT.headH : ABOUT.lineH;
     this._aboutScroll = Math.max(0, Math.min(this._aboutScroll, contentH - viewH));
@@ -527,13 +669,33 @@ export class MainMenuScreen {
     let y = cy + ABOUT.viewY - this._aboutScroll;
     for (const l of lines) {
       const h = l.head ? ABOUT.headH : ABOUT.lineH;
-      if (y + h > cy + ABOUT.viewY && y < cy + ABOUT.viewBottom) {
+      if (y + h > cy + ABOUT.viewY && y < cy + bottom) {
         if (l.head) this._text(ctx, l.head, cx + cw / 2, y + h / 2 + 4, { size: ABOUT.headSize, color: HUD_CONFIG.text.title, align: 'center' });
         else this._text(ctx, l.text, cx + ABOUT.bodyX, y + h / 2, { size: ABOUT.textSize });
       }
       y += h;
     }
     ctx.restore();
+    if (this.server) this._drawAboutNet(ctx, card);
+  }
+
+  _aboutBottom() {
+    return this.server ? ABOUT_NET.viewBottom : ABOUT.viewBottom;
+  }
+
+  // 플레이어 코드(서버 id 앞 8자 - 문의 대응용, 길게 누르면 복사) + 내 데이터 삭제 요청.
+  _drawAboutNet(ctx, [cx, cy, cw]) {
+    const code = this.server.playerCode();
+    const notice = this.aboutNotice && performance.now() < this.aboutNotice.until ? t(this.aboutNotice.key) : null;
+    const c = ABOUT_NET.code;
+    if (!this._nine(ctx, 'panels/panel_inset.png', [cx + c[0], cy + c[1], c[2], c[3]])) this._panel(ctx, [cx + c[0], cy + c[1], c[2], c[3]], COLORS.bg2, COLORS.bg3);
+    const text = notice ?? (code ? t('net.about.code', { code }) : t('net.about.noCode'));
+    this._text(ctx, text, cx + cw / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
+    const d = ABOUT_NET.del;
+    const r = [cx + d[0], cy + d[1], d[2], d[3]];
+    const down = this._pressed === 'deleteData';
+    if (!this._nine(ctx, `buttons/btn_danger${down ? '_pressed' : ''}.png`, r)) this._panel(ctx, r, COLORS.bg2, COLORS.redLight);
+    this._text(ctx, t('net.about.delete'), r[0] + r[2] / 2, r[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
   }
 
   // 본문을 { head } / { text } 줄 목록으로 자른다. '{versionLine}'은 GAME_INFO로 채운다.
@@ -658,7 +820,8 @@ export class MainMenuScreen {
       if (!pressButton(x, y, this._toScreen(layout[id]))) continue;
       this._pressed = id;
       this.popup = id;
-      return null;
+      // 서버가 켜져 있으면 main.js가 출석 상태·우편 목록을 새로 받는다.
+      return this.server?.[id === 'attendance' ? 'att' : id] ? `open:${id}` : null;
     }
     // 받침대·원석은 누를 때 소리·연출 없이 눌림만 - 영역 안에서 떼야 열린다(handlePointerUp). 두 영역은 안 겹친다.
     if (pointInRect(x, y, this._toScreen(this._altar().hitArea_screenPx))) this._pressed = 'altar';
@@ -669,7 +832,8 @@ export class MainMenuScreen {
   // 뒤로가기(main.js 핸들러 스택): 열린 팝업을 X와 같은 규칙으로 닫는다. 닫았으면 true.
   closePopup() {
     if (!this.popup) return false;
-    this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null;
+    if (this.popup === 'exit' && this.exitKind === 'deleteData') this.popup = 'about';
+    else this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null;
     this._drag = null;
     return true;
   }
@@ -703,10 +867,20 @@ export class MainMenuScreen {
     }
 
     if (this.popup === 'about') {
-      const view = [card[0], card[1] + ABOUT.viewY, card[2], ABOUT.viewBottom - ABOUT.viewY];
+      const view = [card[0], card[1] + ABOUT.viewY, card[2], this._aboutBottom() - ABOUT.viewY];
       if (pointInRect(x, y, this._toScreen(view))) {
         this._drag = { scrollFromY: y, scrollStart: this._aboutScroll };
         return null;
+      }
+      if (this.server) {
+        const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+        if (pointInRect(x, y, at(ABOUT_NET.code))) return 'playerCodeDown'; // main.js: 0.5초 누르고 있으면 복사
+        if (pressButton(x, y, at(ABOUT_NET.del))) {
+          this._pressed = 'deleteData';
+          this.exitKind = 'deleteData';
+          this.popup = 'exit'; // 확인 모달(종료 확인과 같은 틀)
+          return null;
+        }
       }
     }
 
@@ -747,11 +921,32 @@ export class MainMenuScreen {
       const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
       if (pressButton(x, y, hit(EXIT.cancel), 'cancel')) {
         this._pressed = 'exitCancel';
-        this.popup = null;
+        this.popup = this.exitKind === 'deleteData' ? 'about' : null;
       } else if (pressButton(x, y, hit(EXIT.ok))) {
         this._pressed = 'exitOk';
-        this.popup = null;
-        return this.exitKind === 'floor' ? 'quitFloor' : 'exitApp'; // main.js: 마을로 / platform.lifecycle.exit()
+        this.popup = this.exitKind === 'deleteData' ? 'about' : null;
+        // main.js: 마을로 / me-delete / platform.lifecycle.exit()
+        return { floor: 'quitFloor', deleteData: 'deleteData' }[this.exitKind] ?? 'exitApp';
+      }
+      return null;
+    }
+
+    if (this.popup === 'attendance' && this.server?.att) {
+      const r = [card[0] + ATT.claim[0], card[1] + ATT.claim[1], ATT.claim[2], ATT.claim[3]];
+      const s = this.server.att.status;
+      if (s?.ok && !s.claimedToday && !this.server.att.busy && pressButton(x, y, this._toScreen(r), 'none')) {
+        this._pressed = 'attClaim';
+        return 'attClaim';
+      }
+      return null;
+    }
+
+    if (this.popup === 'mail' && this.server?.mail) {
+      if (this.server.mail.busy) return null;
+      for (const { m, btn } of this._mailRows(card)) {
+        if (m.claimed || !pressButton(x, y, this._toScreen(btn), 'none')) continue;
+        this._pressed = `mail:${m.id}`;
+        return `mailClaim:${m.id}`;
       }
       return null;
     }
