@@ -8,6 +8,7 @@ import { getFontString } from '../config/fonts.js';
 import { pickSummonFrame } from '../battle/summon.js';
 import { ditherPattern, drawItemIconFallback } from './itemBarRenderer.js';
 import { SkillFx } from './skillFx.js';
+import { MonsterFx, isBigMonster } from './monsterFx.js';
 
 // tower.color 값('red'|'blue'|'yellow'|'green'|'purple')은 GEM_TYPES의 id와 같은 이름을
 // 쓰므로 그대로 색상표로 재사용한다(하드코딩 회피).
@@ -28,6 +29,8 @@ const RANK_OUTLINE = {
 };
 
 const ENEMY_LANE_COUNT = 3;
+// 지속 피해 틱(enemyHit.source) - 밀림 없이 번쩍임만. 화상 같은 새 지속 피해가 생기면 여기에 추가.
+const DOT_SOURCES = new Set(['poison']);
 // assets/gems/palette.hex의 색 단계 - 분노의 북 중 투사체를 "한 단계 밝은 색"으로 그릴 때 각 픽셀을 다음 단계로 바꾼다
 // (마지막 단계는 그대로). 회색 5단계 + 파랑/보라/빨강/금/초록 4단계씩.
 const PALETTE_RAMPS = [
@@ -125,6 +128,8 @@ export class BattleRenderer {
     this._frame = 0; // 결계 테두리 2프레임 교대용 카운터
     this._brightProjectiles = new Map(); // color -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
     this._seenRevives = new WeakSet(); // 이미 파편을 뿌린 wallRevived 이벤트
+    this._monsterFx = new MonsterFx(); // 몬스터 타격·사망(assets/effects/monster)
+    this._fxBattle = null; // 새 전투면 남은 사망 연출을 버린다
   }
 
   // 투사체 시트를 팔레트 한 단계 밝은 색으로 바꾼 캔버스(처음 한 번만 만들어 캐시).
@@ -159,6 +164,10 @@ export class BattleRenderer {
   draw(ctx, rect, battleState, now, assets, hud, paused = false, itemIcons = null) {
     if (!battleState) return;
     this._frame += 1;
+    if (battleState !== this._fxBattle) {
+      this._fxBattle = battleState;
+      this._monsterFx.reset();
+    }
 
     // 모래시계 정지 중 - 걷기 프레임을 정지 시작 시각에 고정한다(멈춘 적만).
     const frozen = !!battleState.frozen;
@@ -179,6 +188,7 @@ export class BattleRenderer {
 
     const layout = this._computeLayout(rect);
     const towers = battleState.towers || [];
+    this._dev = { layout, assets, now }; // devShoot용(마지막 프레임)
 
     const bg = this._drawBackground(ctx, layout.content, assets, bgNow, hud?.floor ?? 1);
 
@@ -203,6 +213,7 @@ export class BattleRenderer {
     this._updateTowerAnimations(battleState, layout, towers, assets, now);
     this._drawTowers(ctx, layout.towerArea, towers, assets, now, hud, bg, battleState.summon, rect);
     this._drawTowerProjectiles(ctx, assets, now, battleState);
+    this._monsterFx.drawSprites(ctx, assets, now, assets?.enemySpriteRules?.displayScale ?? 2);
     this._drawEventOverlays(ctx, layout, battleState, assets);
     this._drawFloorStartBanner(ctx, layout.track, now);
   }
@@ -902,6 +913,25 @@ export class BattleRenderer {
     }
   }
 
+  // 개발용(?dev=1 H/K 키): 맨 앞 몬스터에게 석상 투사체 1발 - 실제 사격과 같은 투사체 -> resolveTowerAttack 경로.
+  // kill이면 남은 HP만큼, 아니면 1. 석상 색은 쏠 때마다 차례로 바꾼다.
+  devShoot(battleState, kill = false) {
+    const d = this._dev;
+    const target = battleState?.enemies?.filter((e) => e.state === 'alive').sort((a, b) => b.progress - a.progress)[0];
+    const towers = battleState?.towers ?? [];
+    if (!d || !target || towers.length === 0) return false;
+    this._devTurn = ((this._devTurn ?? -1) + 1) % towers.length;
+    const tower = towers[this._devTurn];
+    const from = this.towerLaunchPoint(d.layout.towerArea, towers, tower.id, d.assets);
+    const st = this._skillFx.enemyState(target);
+    const to = { x: st.frontX ?? this._enemyPixelPos(d.layout.track, target).x, y: st.bodyY ?? this._enemyPixelPos(d.layout.track, target).y };
+    if (!from) return false;
+    this._spawnTowerProjectile(tower, from, to, d.now, {
+      targetEnemyId: target.id, towerId: tower.id, color: tower.color, damage: kill ? Math.ceil(target.currentHealth) : 1, fromModifier: true,
+    });
+    return true;
+  }
+
   _spawnTowerProjectile(tower, from, to, now, hitEvent) {
     const speed = tower.stats?.projectileSpeed ?? DEFAULT_PROJECTILE_SPEED;
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
@@ -931,6 +961,12 @@ export class BattleRenderer {
       const t = (now - p.startMs) / p.durationMs;
       if (t >= 1) {
         if (p.hitEvent) {
+          // 맞은 점 = 몬스터 앞쪽 가장자리·몸 가운데(지난 프레임 위치). 이미 죽은 목표면 아무것도 안 그린다.
+          const target = battleState.enemies?.find((e) => e.id === p.hitEvent.targetEnemyId && e.state === 'alive');
+          if (target) {
+            const st = this._skillFx.enemyState(target);
+            this._monsterFx.hit(p.color, st.frontX ?? p.toX, st.bodyY ?? p.toY, now);
+          }
           this._skillFx.onTowerHit(battleState, p.hitEvent, now);
           battleState.resolveTowerAttack(p.hitEvent);
         }
@@ -986,7 +1022,7 @@ export class BattleRenderer {
   // enemy.rank별 그리기 배율. 엘리트는 늘 spriteRules.eliteScale, 보스는 "이미지가 작으면만
   // 키운다"(docs/balance.md §4) - frameH는 실제 로드된 프레임의 네이티브 높이(px).
   _rankScale(rank, frameH, rules) {
-    if (rank === 'elite') return rules.eliteScale ?? 1.25;
+    if (rank === 'elite') return rules.eliteScale ?? 1.5;
     if (rank === 'boss') {
       const small = rules.bossScaleIfSmall;
       if (small && frameH != null && frameH <= small.maxFrameH) return small.scale;
@@ -1002,24 +1038,24 @@ export class BattleRenderer {
     const displayScale = rules.displayScale ?? 2;
     const walkFrameMs = rules.frameMs?.walk ?? 110;
     const knockMs = assets?.skillManifest?.skills?.line?.knockbackMs ?? 120;
+    const hitFx = assets?.monsterFxManifest?.hit ?? {};
+    const flashMs = hitFx.flashMs ?? 70;
+    const hitKnockMs = hitFx.knockbackMs ?? 80;
+    const hitKnockPx = (hitFx.knockbackPx ?? 1) * displayScale; // 원본 1px = 화면 배율만큼
+
+    this._monsterFx.drawDying(ctx, assets, now); // 죽어 가는 몸은 살아 있는 몬스터 뒤에
 
     for (const enemy of enemies) {
       const pos = this._enemyPixelPos(track, enemy);
       const outline = RANK_OUTLINE[enemy.rank];
 
-      const dieEvent = events.find((e) => e.type === 'enemyDie' && e.enemyId === enemy.id);
+      const dead = enemy.state === 'dead'; // 로직은 이미 처리됨 - 그림만 MonsterFx로 넘기고 여기선 안 그린다
       const hitEvent = events.find((e) => e.type === 'enemyHit' && e.enemyId === enemy.id);
       const wallHitEvent = events.find((e) => e.type === 'wallDamaged' && e.sourceEnemyId === enemy.id);
 
-      // 사망 = 3번 깜빡이다 사라짐(docs/balance.md §4) - 선형 페이드 대신 on/off 토글.
-      if (dieEvent) {
-        const t = clamp(dieEvent.elapsedMs / dieEvent.durationMs, 0, 1);
-        if (Math.floor(t * 6) % 2 === 1) continue; // 꺼진 구간 - 아무것도 그리지 않음.
-      }
-
-      // 피격 = 짧게 밀림(뒤로 2px, 감쇠), 성벽 공격 = 앞으로 2px 튀어나갔다 복귀.
+      // 피격 = 원본 1px 뒤로 밀렸다 knockbackMs에 복귀(README) - 지속 피해 틱(독)은 번쩍임만. 성벽 공격 = 앞으로 2px 튀어나갔다 복귀.
       let shiftX = 0;
-      if (hitEvent) shiftX += 2 * (1 - clamp(hitEvent.elapsedMs / hitEvent.durationMs, 0, 1));
+      if (hitEvent && !dead && !DOT_SOURCES.has(hitEvent.source)) shiftX += Math.round(hitKnockPx * Math.max(0, 1 - hitEvent.elapsedMs / hitKnockMs));
       if (wallHitEvent) shiftX -= 2 * Math.sin(clamp(wallHitEvent.elapsedMs / wallHitEvent.durationMs, 0, 1) * Math.PI);
       const fxState = this._skillFx.enemyState(enemy);
       const knockX = this._skillFx.knockOffset(fxState, now, knockMs); // 가시 넉백(렌더 오프셋만).
@@ -1063,46 +1099,48 @@ export class BattleRenderer {
         const uiBackTrim = (flip ? uiFrame.leftTrim : uiFrame.rightTrim) ?? 0;
         const visibleWidth = Math.max(0, uiW - (uiFrontTrim + uiBackTrim) * uiScale);
         uiCenterX = pos.x + visibleWidth / 2;
-        if (outline) {
-          ctx.shadowColor = outline;
-          ctx.shadowBlur = Math.max(2, h * 0.04);
+        if (dead) {
+          // 마지막 프레임 그대로(반전 포함) 재 흩어짐 - 위치는 밀림을 뺀 자리.
+          const restX = drawX - shiftX + knockX;
+          this._monsterFx.die(enemy, {
+            id: enemy.id, img: frame.img, flip, scale, sx: Math.round(restX - w / 2), sy: Math.round(pos.y - h),
+            footX: uiCenterX + knockX, footY: pos.y, bodyY: pos.y - visualHeight / 2, big: isBigMonster(frameW, frameH, enemy.rank),
+          }, now, assets);
+        } else {
+          if (outline) {
+            ctx.shadowColor = outline;
+            ctx.shadowBlur = Math.max(2, h * 0.04);
+          }
+          ctx.imageSmoothingEnabled = false;
+          ctx.translate(drawX, pos.y);
+          if (flip) ctx.scale(-1, 1);
+          // 맞은 직후 flashMs 동안 번쩍 버전(flashMap, 프레임별 캐시).
+          const img = hitEvent && hitEvent.elapsedMs < flashMs ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
+          ctx.drawImage(img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
         }
-        ctx.imageSmoothingEnabled = false;
-        ctx.translate(drawX, pos.y);
-        if (flip) ctx.scale(-1, 1);
-        ctx.drawImage(frame.img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
       } else {
         const shapeSize = baseShapeSize * this._rankScale(enemy.rank, null, rules);
         visualHeight = shapeSize;
-        if (outline) {
-          ctx.shadowColor = outline;
-          ctx.shadowBlur = Math.max(2, shapeSize * 0.08);
+        if (dead) {
+          this._monsterFx.die(enemy, { id: enemy.id, img: null, footX: drawX, footY: pos.y, bodyY: pos.y - shapeSize / 2, big: enemy.rank === 'boss' }, now, assets);
+        } else {
+          if (outline) {
+            ctx.shadowColor = outline;
+            ctx.shadowBlur = Math.max(2, shapeSize * 0.08);
+          }
+          this._drawEnemyFallback(ctx, enemy, drawX, pos.y - shapeSize / 2, shapeSize);
         }
-        this._drawEnemyFallback(ctx, enemy, drawX, pos.y - shapeSize / 2, shapeSize);
       }
       ctx.restore();
       uiCenterX += knockX;
+      fxState.frontX = pos.x + shiftX; // 투사체가 맞는 점(앞쪽 가장자리)
       fxState.footX = uiCenterX;
       fxState.footY = pos.y;
       fxState.bodyX = uiCenterX;
       fxState.bodyY = pos.y - visualHeight / 2;
       fxState.headY = pos.y - visualHeight;
 
-      if (hitEvent) {
-        // 피격 1프레임 흰색 플래시.
-        const t = clamp(hitEvent.elapsedMs / hitEvent.durationMs, 0, 1);
-        if (t < 1 / 6) {
-          ctx.save();
-          ctx.globalAlpha = 0.8;
-          ctx.fillStyle = '#ffffff';
-          ctx.beginPath();
-          ctx.arc(drawX, pos.y - visualHeight / 2, visualHeight * 0.4, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.restore();
-        }
-      }
-
-      if (!dieEvent) {
+      if (!dead) {
         const isBoss = enemy.rank === 'boss';
         const barBottomY = pos.y - visualHeight - 2; // README: 바 아래쪽이 머리보다 화면 2px 위.
         const barWidth = baseShapeSize * (isBoss ? 1.8 : 1.3);

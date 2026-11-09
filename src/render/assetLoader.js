@@ -110,7 +110,7 @@ export function tintSheet(img, maskColors, ramp) {
 // onProgress(loadedCount, totalCount)를 받아 로드 진행률을 알려준다.
 // 반환값: CanvasRenderer.setAssets()에 그대로 꽂아 쓸 수 있는 형태.
 export async function loadAssets(onProgress) {
-  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest] = await Promise.all([
+  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest, monsterFxManifest] = await Promise.all([
     fetchJson('assets/manifest.json'),
     fetchJson('assets/gems/manifest.json'),
     fetchJson('src/config/effects.json'),
@@ -128,6 +128,7 @@ export async function loadAssets(onProgress) {
     fetchJson('assets/skills/manifest.json'),
     fetchJson('assets/ui/shop/manifest.json'),
     fetchJson('assets/ui/ranking/manifest.json'),
+    fetchJson('assets/effects/monster/manifest.json'),
   ]);
 
   const jobs = [];
@@ -257,6 +258,11 @@ export async function loadAssets(onProgress) {
     jobs.push({ bucket: 'skillAnim', key, src: `assets/skills/${anim.sheet}`, anim });
   }
 
+  // 몬스터 타격·사망 이펙트(assets/effects/monster) - hit_{색}, death_smoke_s/l, death_soul. 루프 없음.
+  for (const [key, anim] of Object.entries(monsterFxManifest.anims ?? {})) {
+    jobs.push({ bucket: 'monsterFx', key, src: `assets/effects/monster/${anim.sheet}`, anim });
+  }
+
   const gemImages = new Map();
   const gemAnims = new Map();
   const enemySprites = new Map(); // monster id -> 프레임 state[](순서대로, 로드 완료 순서가 아니라 anim.frames 순서).
@@ -272,6 +278,7 @@ export async function loadAssets(onProgress) {
   const bgPlinths = new Map();
   const summonAnims = new Map();
   const skillAnims = new Map();
+  const monsterFxAnims = new Map();
   let gemColorImage = null;
 
   const total = jobs.length;
@@ -359,6 +366,8 @@ export async function loadAssets(onProgress) {
           for (const [color, ramp] of Object.entries(tint.ramps)) entry.tinted[color] = tintSheet(state.img, tint.maskColors, ramp);
         }
         skillAnims.set(job.key, entry);
+      } else if (job.bucket === 'monsterFx') {
+        monsterFxAnims.set(job.key, { ...job.anim, state });
       } else if (job.bucket === 'summonAnim') {
         summonAnims.set(job.key, { state, frameW: job.anim.frameW, frameH: job.anim.frameH, frames: job.anim.frames });
       }
@@ -404,6 +413,9 @@ export async function loadAssets(onProgress) {
     // 젬 기술 이펙트(assets/skills/manifest.json) - battleRenderer의 SkillFx가 skills/colorEffects 규칙을 읽는다.
     skillManifest,
     skillAnims,
+    // 몬스터 타격·사망(assets/effects/monster/README.md) - battleRenderer가 hit/death 타이밍·flashMap을 읽는다.
+    monsterFxManifest,
+    monsterFxAnims,
     // manifest.tileSize/bodySize/drawScale은 잼과 같은 규격(assets/obstacles/README.md) -
     // manifest 로드 실패 시에도 fallback 도형만 그리면 되므로 기본값을 그대로 둔다.
     obstacleTileSize: obstacleManifest.tileSize ?? 48,

@@ -1,0 +1,179 @@
+{
+  "version": 1,
+  "imageSmoothing": false,
+  "scale": "몬스터와 같은 정수 배율로 그린다",
+  "flashMap": {
+    "0c1838": "386cbc",
+    "1c3a76": "8cc4ee",
+    "386cbc": "e8dcc0",
+    "8cc4ee": "e8dcc0",
+    "220e38": "7a3cae",
+    "48206e": "c48ce6",
+    "7a3cae": "e8dcc0",
+    "c48ce6": "e8dcc0",
+    "3a0814": "b82a3c",
+    "741426": "ec6a6a",
+    "b82a3c": "e8dcc0",
+    "ec6a6a": "e8dcc0",
+    "3a2808": "c28a20",
+    "7a5212": "f2d264",
+    "c28a20": "e8dcc0",
+    "f2d264": "e8dcc0",
+    "0c2814": "3a8a3c",
+    "1c5228": "9cd872",
+    "3a8a3c": "e8dcc0",
+    "9cd872": "e8dcc0",
+    "221c2b": "655a74",
+    "3b3347": "e8dcc0",
+    "655a74": "e8dcc0",
+    "e8dcc0": "e8dcc0",
+    "8a5a4a": "d4a88c",
+    "d4a88c": "e8dcc0",
+    "0d0a10": "0d0a10"
+  },
+  "hit": {
+    "flashMs": 70,
+    "knockbackPx": 1,
+    "knockbackMs": 80,
+    "rule": "투사체가 닿은 점(몬스터 몸 가운데쯤)에 hit_{석상 색}. 같은 순간 몬스터를 flashMs 동안 뼈색 실루엣(#e8dcc0, 외곽선 유지)으로 그리고(flashMap: 픽셀 색 -> 2단계 밝은 같은 계열 색, 외곽선 유지) knockbackPx(원본 픽셀)만큼 뒤로 밀었다가 knockbackMs에 돌아옴. 데미지 숫자는 기존 UI 폰트."
+  },
+  "death": {
+    "flashMs": 70,
+    "dissolveMs": 700,
+    "ash": [
+      "#655a74",
+      "#3b3347",
+      "#221c2b"
+    ],
+    "flash": "#e8dcc0",
+    "smokeAtMs": 60,
+    "soulAtMs": 200,
+    "rule": "마지막 타격 순간: hit_{색} + flashMs 번쩍 -> 이어서 dissolve(README JS, 마지막 프레임의 픽셀로) dissolveMs. smokeAtMs에 발밑 death_smoke_s(32px 이하 몬스터) / _l(큰 몬스터), soulAtMs에 몸 가운데에서 death_soul. 다 끝나면 몬스터 제거."
+  },
+  "anims": {
+    "hit_red": {
+      "sheet": "sheets/hit_red.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 5,
+      "frameMs": [
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 260,
+      "loop": false,
+      "anchor": "center"
+    },
+    "hit_blue": {
+      "sheet": "sheets/hit_blue.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 5,
+      "frameMs": [
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 260,
+      "loop": false,
+      "anchor": "center"
+    },
+    "hit_green": {
+      "sheet": "sheets/hit_green.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 5,
+      "frameMs": [
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 260,
+      "loop": false,
+      "anchor": "center"
+    },
+    "hit_yellow": {
+      "sheet": "sheets/hit_yellow.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 5,
+      "frameMs": [
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 260,
+      "loop": false,
+      "anchor": "center"
+    },
+    "hit_purple": {
+      "sheet": "sheets/hit_purple.png",
+      "frameW": 32,
+      "frameH": 32,
+      "frames": 5,
+      "frameMs": [
+        40,
+        40,
+        50,
+        60,
+        70
+      ],
+      "durationMs": 260,
+      "loop": false,
+      "anchor": "center"
+    },
+    "death_smoke_s": {
+      "sheet": "sheets/death_smoke_s.png",
+      "frameW": 32,
+      "frameH": 16,
+      "frames": 6,
+      "frameMs": [
+        60,
+        70,
+        80,
+        90,
+        100,
+        110
+      ],
+      "durationMs": 510,
+      "loop": false,
+      "anchor": "bottom-center"
+    },
+    "death_smoke_l": {
+      "sheet": "sheets/death_smoke_l.png",
+      "frameW": 64,
+      "frameH": 24,
+      "frames": 6,
+      "frameMs": [
+        60,
+        70,
+        80,
+        90,
+        100,
+        110
+      ],
+      "durationMs": 510,
+      "loop": false,
+      "anchor": "bottom-center"
+    },
+    "death_soul": {
+      "sheet": "sheets/death_soul.png",
+      "frameW": 16,
+      "frameH": 32,
+      "frames": 8,
+      "frameMs": 80,
+      "durationMs": 640,
+      "loop": false,
+      "anchor": "bottom-center"
+    }
+  }
+}

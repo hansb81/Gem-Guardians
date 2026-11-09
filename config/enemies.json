@@ -16,7 +16,8 @@
    "game": "right",
    "_doc": "원본이 보는 방향. 적은 왼쪽으로 걸으므로 right면 좌우 반전해서 그림. other 팩은 실제 이미지 보고 확인 필요"
   },
-  "eliteScale": 1.25,
+  "eliteScale": 1.5,
+  "_eliteScaleDoc": "displayScale(2) x eliteScale = 화면 배율. 정수여야 픽셀이 고르다(1.5 -> 3배, 보스 작은 그림 1.5 -> 3배).",
   "bossScaleIfSmall": {
    "maxFrameH": 24,
    "scale": 1.5,

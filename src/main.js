@@ -411,6 +411,11 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
       ranking: ranking.service ? ranking.dev() : null,
       server: serverUi.devToggle,
     });
+    // 개발용 키(?dev=1): H = 맨 앞 몬스터에게 석상 투사체 1발(피해 1), K = 남은 HP만큼(처치) - 몬스터 타격·사망 이펙트 확인.
+    window.addEventListener('keydown', (e) => {
+      if (scene !== 'game' || (e.code !== 'KeyH' && e.code !== 'KeyK')) return;
+      renderer._battleRenderer.devShoot(controller?.battleState, e.code === 'KeyK');
+    });
     // 개발용 콘솔 훅(?dev=1) - 화면 확인 때 실패/부활 등 상태를 직접 만든다.
     window.__gg = {
       get controller() { return controller; },

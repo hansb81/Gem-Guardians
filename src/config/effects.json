@@ -66,8 +66,7 @@
     "_note_cellDetonate": "cellDetonate 이펙트엔 cell만 있고 cause/color가 없다(core 변경 금지) - cause별로 나누지 않고 단일 키로 묶어 흰색 고정 파편만 낸다. 실제 '순서에 맞춰 터짐'은 이 파티클이 cellDetonate가 뜨는 바로 그 틱에 스폰되는 것으로 충분히 달성된다.",
     "cellDetonate": { "particles": { "count": 4, "life": 220, "speed": 110, "size": 3 } },
     "towerAttack": { "particles": { "count": 5, "life": 200, "speed": 120, "size": 3 } },
-    "enemyHit": { "particles": { "count": 8, "life": 220, "speed": 150, "size": 3 } },
-    "enemyDie": { "particles": { "count": 16, "life": 380, "speed": 200, "size": 4 } },
+    "_note_enemyHitDie": "몬스터 피격·사망 파티클은 없앰 - assets/effects/monster(hit_{색}·번쩍·재 흩어짐, src/render/monsterFx.js)가 대신한다.",
     "wallDamaged": {
       "particles": { "count": 10, "life": 260, "speed": 150, "size": 3 }
     },
