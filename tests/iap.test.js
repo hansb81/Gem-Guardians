@@ -7,11 +7,20 @@ import { IapService } from '../src/net/services.js';
 import { platform } from '../src/platform/index.js';
 import { storage } from '../src/platform/storage.js';
 import { withVerify, syncServerIap } from '../src/shop/iap.js';
+import { floorGoldTable } from '../tools/gen_floor_gold.mjs';
 
 const read = (p) => JSON.parse(readFileSync(new URL(p, import.meta.url), 'utf8'));
 
 test('상품표: config와 서버 사본이 같다', () => {
   assert.deepEqual(read('../server/supabase/functions/_shared/products.json'), read('../config/products.json'));
+});
+
+test('랭킹표(구간·보상 켜기): config와 서버 사본이 같다', () => {
+  assert.deepEqual(read('../server/supabase/functions/_shared/ranking.json'), read('../config/ranking.json'));
+});
+
+test('층별 골드 기준표: 서버 사본 == 지금 밸런스 config로 계산한 값(다르면 node tools/gen_floor_gold.mjs)', () => {
+  assert.deepEqual(read('../server/supabase/functions/_shared/floor_gold.json').gold, floorGoldTable());
 });
 
 // 서버 켜짐 + 가짜 verify. answers = verify가 차례로 돌려줄 값.

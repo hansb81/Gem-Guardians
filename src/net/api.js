@@ -87,7 +87,9 @@ export async function initNet(config, { override = null, legacyId = '', appVersi
 }
 
 export async function sayHello(legacyId = '', appVersion = '') {
-  const res = await call('hello', { platform: PLATFORM_ID, appVersion, legacyId });
+  // 토스: getAnonymousKey(토스 사용자 키) - 서버는 해시로만 남긴다. 실패면 null(서버는 기존 값 유지, 다음 실행 때 다시).
+  const tossKey = PLATFORM_ID === 'toss' ? await platform.identity.getAnonymousKey?.().catch(() => null) ?? null : undefined;
+  const res = await call('hello', { platform: PLATFORM_ID, appVersion, legacyId, tossKey });
   net.on = !!res.ok;
   if (res.ok) {
     net.hello = res;

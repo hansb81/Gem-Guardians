@@ -74,3 +74,12 @@ test('NEED_LOGIN이면 상점 안내 상태 -> fixStoreStatus가 로그인 화�
   assert.equal(await iap.fixStoreStatus(), false);
   assert.equal(iap.getStoreStatus(), 'needUpdate');
 });
+
+test('developerPayload = 상품키|서버 플레이어 id 앞 8자(logIn 전이면 빈 칸) - 서버 iap-verify가 비교', async () => {
+  const { iap, calls } = setup({ purchase: () => ({ code: 0, purchases: [buy('os_dia_60', 'P1')] }) });
+  await iap.purchase('dia.0', () => true);
+  assert.equal(calls.find(([m]) => m === 'purchase')[1].developerPayload, 'dia.0|');
+  iap.logIn('0123abcd-ffff-4fff-8fff-ffffffffffff');
+  await iap.purchase('dia.0', () => true);
+  assert.equal(calls.filter(([m]) => m === 'purchase')[1][1].developerPayload, 'dia.0|0123abcd');
+});

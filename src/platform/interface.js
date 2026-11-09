@@ -27,7 +27,7 @@
  *   storeLinks = 평가하기·업데이트 안내 링크를 보낼 마켓(자기 마켓만 - 원스토어 심사는 다른 마켓 링크 금지). null = 링크 없음.
  * @property {() => Promise<void>} init
  * @property {{ get(key:string):Promise<string|null>, set(key:string, str:string):Promise<void>, remove(key:string):Promise<void> }} storage
- * @property {{ getUserId():Promise<string> }} identity
+ * @property {{ getUserId():Promise<string>, getAnonymousKey?():Promise<string|null> }} identity  getAnonymousKey = 토스만(실패 null)
  * @property {{ getProducts():Promise<Product[]>, purchase(productKey:string, onGrant:OnGrant):Promise<PurchaseResult>,
  *              restore(onGrant:OnGrant, onRevoke:OnRevoke):Promise<PurchaseResult[]>, recoverPending(onGrant:OnGrant):Promise<PurchaseResult[]>,
  *              getStoreStatus():null|'needLogin'|'needUpdate'|'unavailable', fixStoreStatus():Promise<boolean> }} iap

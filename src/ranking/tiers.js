@@ -4,7 +4,7 @@
 // 순위 정렬: 값 큰 순, 같으면 먼저 낸 사람(at 작은 쪽)이 위.
 export const compareEntries = (a, b) => b.value - a.value || a.at - b.at;
 
-export const pctOf = (rank, total) => Math.max(1, Math.ceil((rank / total) * 100));
+export const pctOf = (rank, total) => Math.max(1, Math.ceil((rank * 100) / total));
 
 // 순위 구간과 비율 구간이 겹치면 더 좋은 쪽 하나만 = 표 위쪽부터 처음 맞는 것.
 export function tierOf(tiers, rank, total) {

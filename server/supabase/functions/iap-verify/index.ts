@@ -1,9 +1,10 @@
 // POST /iap-verify {store, productKey, orderId, purchaseToken?} -> 마켓 확인 -> purchases 기록 -> { ok, txId, bundle }.
 // play|ios = RevenueCat REST(app_user_id = 이 플레이어 id, 기기가 Purchases.logIn으로 맞춤). 못 찾으면 pending + notFound
-// (반영 지연 - 기기가 10초 뒤 한 번 더). 같은 주문을 다른 플레이어가 보내면 owner + server_log warn.
+// (반영 지연 - 기기가 10초 뒤 한 번 더). onestore = 원스토어 V7 구매 조회 + developerPayload, toss = 주문 상태 조회(mTLS).
+// 같은 주문을 다른 플레이어가 보내면 owner + server_log warn.
 import { fail, handle, must } from "../_shared/http.ts";
 import { findRcTx, notify, notifyText, product, STORES, storeProductId } from "../_shared/iap.ts";
-import { verifyOneStore, verifyToss } from "../_shared/stores.ts";
+import { onestorePayloadOk, verifyOneStore, verifyToss } from "../_shared/stores.ts";
 
 const RC_API = "https://api.revenuecat.com/v1/subscribers/";
 
@@ -28,9 +29,18 @@ handle("iap-verify", async ({ uid, body, db }) => {
   if (store === "dev") {
     if (Deno.env.get("DEV_IAP") !== "true") return fail("badStore");
     status = "verified";
-  } else if (store === "onestore" || store === "toss") {
-    const r = store === "onestore" ? await verifyOneStore(spid ?? "", token ?? orderId) : await verifyToss(orderId);
-    if (r.status === "notImplemented") return fail("notImplemented");
+  } else if (store === "onestore") {
+    // 원스토어 어댑터는 purchaseToken을 orderId로 보낸다.
+    if (!spid) return fail("unknownProduct");
+    const r = await verifyOneStore(spid, token ?? orderId);
+    ({ status, raw } = r);
+    // deno-lint-ignore no-explicit-any
+    if (status === "verified" && !onestorePayloadOk((raw as any)?.developerPayload, productKey, uid)) {
+      status = "invalid";
+      await db.from("server_log").insert({ source: "iap-verify", level: "warn", body: { uid, store, orderId, reason: "payload", raw } });
+    }
+  } else if (store === "toss") {
+    ({ status, raw } = await verifyToss(orderId, spid));
   } else {
     if (!spid) return fail("unknownProduct");
     const res = await fetch(RC_API + encodeURIComponent(uid), {

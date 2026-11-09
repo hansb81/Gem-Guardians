@@ -236,9 +236,50 @@ server_log (id bigserial, at timestamptz default now(), source text, level text,
 
 Cloudflare Worker 1개(`toss-proxy`)에 토스 인증서를 mTLS 바인딩으로 넣고, Supabase가 비밀 헤더로 이 Worker를 부르게 함. 무료 구간 안. 토스 출시는 Play·원스토어 다음이라 그때 결정해도 늦지 않습니다.
 
+> **2026-11-09 시험 결과: B안 필요 없음.** Edge Function에서 `Deno.createHttpClient({ cert, key })`로 mTLS 확인 사이트(certauth.cryptomix.com)를 불러 클라이언트 인증서가 서버에 도착하는 것을 확인(Supabase Edge Runtime 1.77.9 / Deno 2.1.4). 시험 함수는 지움.
+
 ### 7-5. 웹
 
 결제 없음(caps.iap=false). 서버는 랭킹·출석만.
+
+### 7-6. S3·S4 켜기 전에 넣을 값 (쑹이 따라 할 순서)
+
+프로젝트 주소 = `https://jzpjqfbpqzghprqbqexp.supabase.co` (아래 `<ref>` = `jzpjqfbpqzghprqbqexp`).
+
+**1단계 — cron 비밀값 만들기**
+비밀번호 관리자에서 임의 문자열(40자 정도, 영문·숫자)을 하나 만들어 `GemGuardians CRON_SECRET`으로 저장. 2·3단계에 같은 값을 두 번 넣습니다.
+
+**2단계 — Supabase Secrets (Edge Function이 읽는 값)**
+대시보드 → Edge Functions → **Secrets** → Add new secret, 한 줄씩:
+
+| 이름 | 값 |
+|---|---|
+| `CRON_SECRET` | 1단계 값 |
+| `ONESTORE_CLIENT_ID`, `ONESTORE_CLIENT_SECRET` | 원스토어 개발자센터 → 앱 → 라이선스 관리 |
+| `ONESTORE_ENV` | 처음엔 `test`(검증 서버), 출시 때 `prod` |
+| `TOSS_MTLS_CERT`, `TOSS_MTLS_KEY` | 앱인토스 콘솔 → 개발 → mTLS 인증서 zip의 `_public.crt` / `_private.key` **파일 내용 전체**(`-----BEGIN`부터 `END-----`까지) |
+
+여러 줄짜리 인증서가 대시보드 칸에 잘 안 들어가면 Git Bash에서:
+`npx supabase secrets set --project-ref <ref> TOSS_MTLS_CERT="$(cat 이름_public.crt)" TOSS_MTLS_KEY="$(cat 이름_private.key)"`
+
+**3단계 — Supabase Vault (pg_cron이 함수 주소·비밀값을 읽는 곳)**
+대시보드 → SQL Editor → New query → 아래를 붙이고 두 번째 줄 따옴표 안을 1단계 값으로 바꾼 뒤 Run:
+```sql
+select vault.create_secret('https://jzpjqfbpqzghprqbqexp.supabase.co', 'project_url');
+select vault.create_secret('여기에 1단계 값', 'cron_secret');
+```
+확인: `select name from vault.decrypted_secrets;` → `project_url`, `cron_secret` 두 줄.
+값을 바꿀 때(같은 이름으로 create 하면 오류): `select vault.update_secret((select id from vault.secrets where name = 'cron_secret'), '새 값');` — 2단계 `CRON_SECRET`도 같이 바꿔야 함.
+
+**4단계 — 확인 (마이그레이션 반영 뒤)**
+- `select jobname, schedule from cron.job;` → `onestore-voided`(0 19 * * *), `toss-recheck`(17 * * * *), `comp-settle`(31 15 * * 0) 포함.
+- 손으로 한 번: `select public.cron_call('settle');` → 몇 초 뒤
+  `select at, source, level, body from server_log where source like 'cron-%' order by id desc limit 5;` → `cron-settle` / `info` 줄이 보이면 연결 성공.
+  `warning: vault project_url/cron_secret 없음`이 나오면 3단계, `server_log`에 아무것도 없으면 2단계 `CRON_SECRET`이 3단계 값과 다른지 확인.
+- `onestore`·`toss`는 2단계 마켓 값을 넣은 뒤에만 돌리기(원스토어는 `ONESTORE_ENV=test`부터).
+
+**5단계 — AdMob (보상형 광고 배치를 정한 뒤)**
+AdMob 콘솔 → 앱 → 광고 단위(보상형) → 서버 측 확인 → URL `https://jzpjqfbpqzghprqbqexp.supabase.co/functions/v1/webhook-admob-ssv` → 확인(Verify URL) → 저장.
 
 ---
 
@@ -271,6 +312,7 @@ Cloudflare Worker 1개(`toss-proxy`)에 토스 인증서를 mTLS 바인딩으로
 - 일반 모드 `rank/normal`: 서버가 이전 값보다 높을 때만 갱신 + **층 상승 속도 상한**(예: 가입 후 경과 시간 대비 최대 층) 넘으면 `hidden=true`로 숨김.
 - 토스: 토스 리더보드(보드 1개)를 그대로 쓰고, 우리 서버 랭킹에는 **토스 사용자를 넣지 않음**(v1). 토스 안에서 우리 랭킹 팝업은 "토스 랭킹 보기" 버튼만 동작.
 - 정산 cron(월 00:00 KST = 일 15:00 UTC), 보상 지급은 `claims`의 `rank:{seasonId}`로 통일.
+- 참여 보상 골드(`goldFloorMul`) = 배수 × 그 시즌 최고 판 층의 골드 기준가. 서버 표 `functions/_shared/floor_gold.json`(1~300층, 넘으면 300층 값)은 `node tools/gen_floor_gold.mjs`로 생성 — 밸런스 config를 바꾸고 다시 안 돌리면 `tests/iap.test.js`가 실패(§22 C3-5).
 
 ---
 
@@ -399,7 +441,7 @@ Cloudflare Worker 1개(`toss-proxy`)에 토스 인증서를 mTLS 바인딩으로
 
 ## 17. 확인 필요 (불확실)
 
-1. Supabase Edge Function(Deno)에서 클라이언트 인증서(mTLS)로 외부 호출 가능한지 → S1에서 시험. 안 되면 §7-4.
+1. ~~Supabase Edge Function(Deno)에서 클라이언트 인증서(mTLS)로 외부 호출 가능한지~~ → **됨**(2026-11-09, §7-4).
 2. RevenueCat 웹훅이 무료 구간에 포함되는지, 현재 요금 구조.
 3. 원스토어·토스 결제/환불 **서버 푸시 알림** 유무 (문서에서 못 찾음 → 지금 설계는 매일 조회).
 4. 토스 광고 SDK 보상 서버 확인 지원 여부, 토스 심사에서 외부 API 도메인 신고 필요 여부.
@@ -455,3 +497,44 @@ Cloudflare Worker 1개(`toss-proxy`)에 토스 인증서를 mTLS 바인딩으로
 | 위험 | transactionIdentifier = store_transaction_id 가정 | 첫 내부 테스트 실결제 1건으로 확인(purchases 줄이 verified가 되는지) |
 | 위험 | products.json ids 전부 null | Play 콘솔에서 상품 만든 뒤 채우고 `_shared/products.json`에도 복사 |
 | 위험 | 워크플로 미실행 | Actions 탭에서 수동 실행(Run workflow)으로 한 번씩 확인 |
+
+## 21. 프롬프트 B-fix 결과 판정 (2026-11-09)
+
+| # | 내용 | 판정 |
+|---|---|---|
+| 1 | ping = IP(해시) 호출 횟수 쿼리 1번 (select 1 대신) | **수용** (DB 활동이라 깨우기 효과 같음) |
+| 2 | onGrant가 true 대신 { delta } 반환 | **수용 + 확인:** 토스 `processProductGrant`에는 객체가 아니라 **boolean true**를 넘겨야 함. 확인 완료: 모든 어댑터가 `!!`로 변환 |
+| 3 | iap-granted 한 건씩 {txId, bundle} | **수용** (복구 여러 건은 여러 번 호출) |
+
+## 22. 프롬프트 C 결과 판정 (2026-11-09)
+
+**C1 원스토어**
+| # | 내용 | 판정 |
+|---|---|---|
+| 1 | 주문번호 = purchaseToken, 환불도 토큰으로 맞춤 | **수용 + 보완:** 원스토어 콘솔·문의에서 쓰는 `purchaseId`도 purchases.raw와 별도 칸(`store_order_ref`)에 저장해 콘솔과 대조 가능하게 |
+| 2 | payload `상품키\|id8`, 로그인 전 결제는 뒤 칸 비어도 통과 | **수용** |
+| 3~4 | payload 불일치·NoSuchData → invalid(재확인 시 바뀔 수 있음), purchaseState 1 → refunded | **수용** |
+| 5 | pg_cron → cron-jobs 함수 하나가 원스토어·토스·정산 담당, Vault 값 2개 필요 | **수용.** 쑹이 Vault 값 넣기(docs/server.md §7-6) |
+| 6 | 토큰 메모리 캐시 | **수용** |
+
+**C2 토스**
+| # | 내용 | 판정 |
+|---|---|---|
+| 1 | Supabase에서 바로 mTLS (Worker 불필요) | **수용** — §17-1 해결 |
+| 2 | sku 불일치 → invalid | **수용** (좋음) |
+| 3 | 상태별 처리 | **수용** |
+| 4 | 매시간 100건, 주문당 하루 1회 | **수용** |
+| 5 | getAnonymousKey 실패 시 로컬 UUID 해시가 저장됨 | **변경:** 실패하면 `toss_key_hash`를 **보내지 않음(null)**, 다음 실행 때 다시 시도. 가짜 값이 들어가면 토스 사용자 판정(C3-9)이 틀어짐 |
+
+**C3 경쟁 랭킹·광고**
+| # | 내용 | 판정 |
+|---|---|---|
+| 1 | 시즌당 고정 시드 | **수용** (주간 같은 퍼즐 = 공정·검증 가능) |
+| 2 | 점수 상한 임시값 | **수용**, 경쟁 모드 규칙 정할 때 확정 |
+| 3 | 정산 일 15:31 UTC, 놓친 주 다음에 같이 | **수용** |
+| 4 | 닉네임 있고 밴·삭제 아닌 사람만 | **수용** |
+| 5 | 참여 보상 골드 뺌 | **결정 필요 → 추천:** 상품표처럼 **층별 골드 기준표를 서버 `_shared`에 복사**(밸런스 config와 다르면 테스트 실패)하고, 서버가 comp_best의 층으로 계산. 쑹이 원하면 대신 고정 보상(예: 다이아 소량)으로 단순화 |
+| 6 | rank-top/rank-me에 mode:'comp' | **수용** |
+| 7~8 | 광고 배치 표 비어 있음, 한도는 배치별 | **수용** (보상형 광고 배치 기획 때 채움) |
+| 9 | 토스 광고 = 기기 판정 + 토스 키 해시 있는 사용자만 | **수용** (보상 가치 낮게 유지) |
+| 10 | 게임 쪽 연결 안 함 | **수용** (경쟁 모드·광고 배치 기획 후) |

@@ -401,6 +401,14 @@ verify_jwt = false
 [functions.ping]
 verify_jwt = false
 
+# pg_cron(public.cron_call)이 부른다 - 함수 안에서 x-cron-secret == CRON_SECRET 확인.
+[functions.cron-jobs]
+verify_jwt = false
+
+# Google AdMob SSV 콜백 - 함수 안에서 ECDSA 서명 확인.
+[functions.webhook-admob-ssv]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

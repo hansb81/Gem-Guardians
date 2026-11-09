@@ -3,8 +3,8 @@
 // 흐름: 결제 성공 -> 게임 onGrant(productKey, purchaseToken) -> 지급이 성공한 뒤에만 소모성 consume / 비소모성 acknowledge.
 // 3일 안에 consume/acknowledge를 안 하면 원스토어가 자동 환불한다 - 실패하면 구매가 스토어에 "미처리"로 남으므로
 // 시작·onResume·실패 30초 뒤에 queryPurchases로 다시 훑는다(스토어 목록이 곧 재시도 큐, txId라 이중 지급 없음).
-// TODO(서버 검증): 지금은 클라이언트 지급. 서버(랭킹 서버)가 생기면 settle()의 onGrant 전에 purchaseToken을
-// iap-apis.onestore.net(OAuth client_credentials) 구매 확인 API로 검증하고, 지급도 서버로 옮긴다.
+// 서버 확인: 게임이 넘긴 onGrant가 iap-verify(원스토어 V7 구매 조회 + developerPayload)를 먼저 부른다(src/shop/iap.js).
+// developerPayload = `${productKey}|${서버 플레이어 id 앞 8자}`(서버 로그인 전이면 뒤 칸 빔) - 원스토어 제한 200byte.
 import { registerPlugin } from '@capacitor/core';
 import products from '../../../../config/products.json' with { type: 'json' };
 import onestoreCfg from '../../../../config/platform.onestore.json' with { type: 'json' };
@@ -34,6 +34,7 @@ export default function onestoreIap({ platform, warn, plugin = OneStoreIap, conf
   let busy = false; // 결제 창이 떠 있는 동안(앱이 pause/resume된다) 자동 훑기를 막는다 - 같은 구매를 두 곳에서 지급하지 않게.
   let lastOnGrant = null; // 게임이 recoverPending으로 넘긴 onGrant - onResume·재시도 훑기에 쓴다.
   let retryTimer = null;
+  let payloadPlayer = ''; // logIn(서버 플레이어 id) 앞 8자
 
   const track = (r) => {
     if (r.code === NEED_LOGIN) status = 'needLogin';
@@ -66,7 +67,6 @@ export default function onestoreIap({ platform, warn, plugin = OneStoreIap, conf
     const productKey = keyOfStoreId(p.productId);
     if (!productKey || p.purchaseState !== PURCHASED) return { ok: false, productKey, reason: 'notPurchased' };
     const orderId = p.purchaseToken;
-    // TODO(서버 검증): 여기서 purchaseToken 검증(iap-apis.onestore.net) 후 지급.
     if (!(await onGrant(productKey, orderId))) {
       retryLater();
       return { ok: false, productKey, orderId, reason: 'grantFailed' };
@@ -88,6 +88,10 @@ export default function onestoreIap({ platform, warn, plugin = OneStoreIap, conf
   }
 
   const iap = {
+    // hello 뒤 syncServerIap가 부른다(play.js의 RevenueCat logIn과 같은 자리).
+    logIn(playerId) {
+      payloadPlayer = String(playerId ?? '').slice(0, 8);
+    },
     async getProducts() {
       const ids = Object.keys(catalog).filter((k) => !k.startsWith('_')).map(storeIdOf).filter(Boolean);
       if (!platform.caps.iap || ids.length === 0 || !(await ensure())) return [];
@@ -105,7 +109,7 @@ export default function onestoreIap({ platform, warn, plugin = OneStoreIap, conf
       if (!(await ensure())) return { ok: false, productKey, reason: status }; // 'needLogin'이면 상점이 로그인 창을 연다.
       busy = true;
       try {
-        const r = track(await call('purchase', { productId: storeId, type: INAPP, developerPayload: productKey }));
+        const r = track(await call('purchase', { productId: storeId, type: INAPP, developerPayload: `${productKey}|${payloadPlayer}` }));
         if (r.code !== OK) {
           // 이미 보유 = 예전 결제가 consume 안 된 채 남아 있다 -> 훑어서 마무리(지급은 txId라 중복 없음).
           if (r.code === ITEM_ALREADY_OWNED) retryLater();
@@ -135,7 +139,7 @@ export default function onestoreIap({ platform, warn, plugin = OneStoreIap, conf
     },
 
     // 비소모성만 다시 지급(재설치 등) - queryPurchases(INAPP)에 남아 있는 것 = 보유 중. 환불되면 목록에서 빠진다.
-    // shortcut: 환불 회수(onRevoke)는 안 한다 - 보유 목록만 있고 환불 목록이 없다. 서버 검증이 생기면 그쪽 환불 조회로.
+    // 환불 회수는 여기서 안 한다 - 서버 cron이 원스토어 환불 목록으로 refunded 표시 -> hello revoke(src/shop/iap.js).
     async restore(onGrant) {
       if (!platform.caps.iap) return [];
       const list = await queryInapp();

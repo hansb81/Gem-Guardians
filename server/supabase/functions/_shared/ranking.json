@@ -1,0 +1,26 @@
+{
+  "_doc": "docs/ranking.md 5·7장. 시즌 = 매주 resetDay(1=월) resetHourKst시 KST(UTC+9 고정) 초기화. 숫자는 전부 임시(밸런스 때 확정).",
+  "resetDay": 1,
+  "resetHourKst": 0,
+  "settleWarnMin": 10,
+  "fakeBoard": true,
+  "fakeCount": 1000,
+  "rewardsEnabled": false,
+  "compUnlocked": false,
+  "topLimit": 100,
+  "nextTierStep": 10,
+  "historyMax": 8,
+  "tiers": [
+    { "id": "r1", "rank": 1, "rewards": { "diamonds": 500, "items": { "rainbow": 5 } }, "frame": "crown_gold" },
+    { "id": "r2", "rank": 2, "rewards": { "diamonds": 400, "items": { "rainbow": 3 } }, "frame": "crown_silver" },
+    { "id": "r3", "rank": 3, "rewards": { "diamonds": 300, "items": { "rainbow": 2 } }, "frame": "crown_bronze" },
+    { "id": "r10", "rank": 10, "rewards": { "diamonds": 200, "items": { "revive": 1 } }, "frame": "gold" },
+    { "id": "r50", "rank": 50, "rewards": { "diamonds": 150 } },
+    { "id": "p1", "pct": 1, "rewards": { "diamonds": 120 } },
+    { "id": "p5", "pct": 5, "rewards": { "diamonds": 80 } },
+    { "id": "p10", "pct": 10, "rewards": { "diamonds": 60 } },
+    { "id": "p30", "pct": 30, "rewards": { "diamonds": 40 } },
+    { "id": "p50", "pct": 50, "rewards": { "diamonds": 25 } },
+    { "id": "part", "pct": 100, "rewards": { "diamonds": 10, "goldFloorMul": 3 } }
+  ]
+}

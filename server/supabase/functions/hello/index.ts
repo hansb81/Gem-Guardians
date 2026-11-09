@@ -1,4 +1,4 @@
-// POST /hello {platform, appVersion, legacyId} -> players 생성/갱신, 서버 시각·KST 날짜, 받을 것 개수, features.
+// POST /hello {platform, appVersion, legacyId, tossKey?} -> players 생성/갱신, 서버 시각·KST 날짜, 받을 것 개수, features.
 import { handle, must } from "../_shared/http.ts";
 import { kstDate } from "../_shared/kst.ts";
 import { visibleMail } from "../_shared/mail.ts";
@@ -10,6 +10,11 @@ handle("hello", async ({ uid, body, db }) => {
   const row: Record<string, unknown> = { id: uid, last_seen_at: new Date().toISOString() };
   if (PLATFORMS.includes(body.platform as string)) row.platform = body.platform;
   if (typeof body.legacyId === "string" && body.legacyId.length <= 64) row.legacy_id = body.legacyId;
+  // 토스: getAnonymousKey 값은 해시로만 보관(같은 토스 사용자 찾기·문의 대응용, §5).
+  if (body.platform === "toss" && typeof body.tossKey === "string" && body.tossKey && body.tossKey.length <= 256) {
+    const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body.tossKey));
+    row.toss_key_hash = [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
   must(await db.from("players").upsert(row));
   const { count } = await db.from("claims").select("tx_id", { count: "exact", head: true })
     .eq("player_id", uid).is("granted_at", null);

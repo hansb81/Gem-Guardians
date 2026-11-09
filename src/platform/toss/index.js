@@ -86,6 +86,15 @@ function fullScreen(adGroupId) {
 
 const interstitial = fullScreen(cfg.ads.interstitial);
 const rewarded = fullScreen(cfg.ads.rewarded);
+
+async function anonymousKey() {
+  try {
+    if (supported(User.getAnonymousKey)) return (await User.getAnonymousKey())?.hash || null;
+  } catch (e) {
+    warn('User.getAnonymousKey', e);
+  }
+  return null;
+}
 let banner = null; // attachBanner 결과({ destroy })
 
 const backCbs = [];
@@ -150,15 +159,11 @@ const platform = {
   },
 
   identity: {
+    // 토스 사용자 키(hash) 또는 null(실패). 서버 hello의 tossKey는 이것만 쓴다 - 가짜 값이면 토스 사용자 판정이 틀어짐(§22 C2-5).
+    getAnonymousKey: anonymousKey,
     async getUserId() {
-      try {
-        if (supported(User.getAnonymousKey)) {
-          const res = await User.getAnonymousKey();
-          if (res?.hash) return res.hash;
-        }
-      } catch (e) {
-        warn('User.getAnonymousKey', e);
-      }
+      const key = await anonymousKey();
+      if (key) return key;
       console.warn('[toss] getAnonymousKey 실패 - 로컬 UUID로 대신한다(기기 바꾸면 이어지지 않음)');
       return web.identity.getUserId();
     },
