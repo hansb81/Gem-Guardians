@@ -1,5 +1,7 @@
 // 특수 잼의 생성 규칙(매치 그룹 -> 종류 + 생성 칸)과 발동 규칙(종류 -> 영향 칸,
 // 연쇄 발동)을 다룬다. 브라우저 API 사용 금지, 순수 로직.
+import { EMPTY } from './board.js';
+
 export const SPECIAL_KIND = {
   LINE: 'line',
   BOMB: 'bomb',
@@ -318,13 +320,16 @@ function shuffleInPlace(cells, rng) {
   return cells;
 }
 
-// 박스 잼의 "랜덤 count개" 대상: 안정 칸(board.isCellStable)이고 excludeKeys에
+// 박스 잼의 "랜덤 count개" 대상: 그 칸 자체가 쉬는 중(cellState 없음, 빈 칸 아님)이고 excludeKeys에
 // 없는 칸만 풀로 써서 seed RNG로 섞어 최대 count개 뽑는다(모자라면 있는 만큼만).
+// 아래 칸이 터지는 중이어도 고른다 - 고르면 armed가 걸려 그 열의 낙하(canSettleColumn)가 멈추므로
+// 터지기 전에 움직이지 않는다. (isCellStable로 거르면 박스+컬러처럼 보드 곳곳이 armed일 때 대상이 바닥난다.)
 export function pickRandomIdleCells(board, count, excludeKeys = new Set()) {
   const pool = [];
   for (let r = 0; r < board.rows; r++) {
     for (let c = 0; c < board.cols; c++) {
-      if (!board.isCellStable(r, c)) continue;
+      const i = board.index(r, c);
+      if (board.cellStates[i] !== null || board.grid[i] === EMPTY) continue;
       const cell = { row: r, col: c };
       if (excludeKeys.has(keyOf(cell))) continue;
       pool.push(cell);

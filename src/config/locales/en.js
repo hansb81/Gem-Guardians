@@ -42,7 +42,7 @@ export const en = {
     },
     deleteData: { title: 'Delete Data', body: 'Delete your server attendance, mail and ranking records?', ok: 'Delete', cancel: 'Cancel' },
     attendance: { title: 'Daily Attendance', body: 'Content placeholder (TBD)' },
-    event: { title: 'Event', body: 'Content placeholder (TBD)' },
+    event: { title: 'Event', body: 'New events are coming soon', ad: 'Ad' },
     mail: { title: 'Mailbox', body: 'Content placeholder (TBD)' },
     help: {
       title: "Help",
@@ -219,7 +219,7 @@ export const en = {
   popup: {
     pause: { title: 'Paused', desc: 'Battle and puzzle are paused.' },
     win: { title: 'FLOOR CLEAR', desc: 'All enemies on this floor defeated.', descGold: '+{total} Gold!' },
-    lose: { title: 'DEFEATED', desc: 'The wall has fallen.' },
+    lose: { title: 'DEFEATED', desc: 'The wall has fallen.', adFail: "Couldn't load the ad" },
     prep: {
       title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Prepare' },
       status: { floorClear: 'Get ready for the next floor', defeat: 'Get ready to retry', village: 'Best: Floor {best}' },
@@ -239,6 +239,9 @@ export const en = {
     button: {
       resume: 'Resume',
       restart: 'Restart',
+      adContinue: 'Watch ad to continue',
+      freeContinue: 'Continue for free',
+      adLoading: 'Loading…',
       exit: 'Exit',
       next: 'Next Floor',
       revive: 'Revive',

@@ -879,7 +879,10 @@ export class GameState {
     } else if (trigger.kind === 'colorSwap') {
       this._resolveColorSwapStep(resolution, trigger.data, 1);
     } else if (trigger.kind === 'boxSwap') {
-      this._resolveBoxSwapStep(resolution, trigger.data, 1);
+      const { boxCell, targetCell } = trigger.data;
+      const swapKeys = new Set([keyOf(boxCell), keyOf(targetCell)]);
+      const relevant = this._findIdleMatches().filter((group) => group.cells.some((cell) => swapKeys.has(keyOf(cell))));
+      this._resolveBoxSwapStep(resolution, trigger.data, 1, relevant);
     } else {
       // 'match': 스왑 애니메이션이 재생되는 동안(최대 ANIMATION_DURATIONS_MS.swap만큼) 다른
       // 열에서 동시에 진행 중인 독립적인 해소가 이 매치 그룹과 무관한 곳에 새 매치를 만들어
@@ -995,8 +998,8 @@ export class GameState {
   //   체인으로 나중에 자기 효과를 발동).
   // - 변환(라인+컬러/폭탄+컬러/박스+라인/박스+폭탄/박스+컬러): 같은 색 일반 잼을 모두
   //   라인/폭탄/박스로 바꾸는 specialTransform 이펙트 하나 + 변환된 칸들을 등장 순서 *
-  //   transformStepMs 뒤에 "자기 효과 직행"으로 예약(박스+컬러는 변환된 칸 자체는 터지지 않고,
-  //   대신 랜덤 (변환 개수 x 2)개가 모든 변환이 끝난 시각부터 박스 규칙으로 터진다).
+  //   transformStepMs 뒤에 "자기 효과 직행"으로 예약(박스+컬러는 같은 색 기존 특수 잼도 변환 없이
+  //   그 뒤 차례로 자기 효과를 예약한다).
   _resolveComboStep(resolution, comboSeed, cascadeIndex) {
     const { board } = this;
     const { comboKind, a, b, ref, specialA, specialB, colorA, colorB } = comboSeed;
@@ -1059,13 +1062,19 @@ export class GameState {
         break;
       }
       case COMBO_KIND.BOX_COLOR: {
+        // 같은 색 일반 잼은 박스로 바뀌어 각자 발동(랜덤 2개)하고 사라진다. 같은 색의 다른 특수
+        // 잼은 바뀌지 않고, 같은 차례 줄에 이어서 자기 효과로 터진다.
         const boxColor = specialA.kind === SPECIAL_KIND.BOX ? colorA : colorB;
-        transformPlan = {
-          kind: SPECIAL_KIND.BOX,
-          cells: plainCellsOfColor(board, boxColor),
-          noActivate: true,
-          color: boxColor,
-        };
+        const swapped = new Set([keyOf(a), keyOf(b)]);
+        const chainCells = [];
+        for (let r = 0; r < board.rows; r++) {
+          for (let c = 0; c < board.cols; c++) {
+            if (board.get(r, c) === boxColor && board.getSpecial(r, c) && !swapped.has(keyOf({ row: r, col: c }))) {
+              chainCells.push({ row: r, col: c });
+            }
+          }
+        }
+        transformPlan = { kind: SPECIAL_KIND.BOX, cells: plainCellsOfColor(board, boxColor), chainCells };
         break;
       }
       default:
@@ -1112,6 +1121,7 @@ export class GameState {
       specials: [specialA, specialB],
       gemColors: [colorA, colorB],
       affected: [...plan.values()].map(({ row, col }) => ({ row, col })),
+      chainCells: transformPlan?.chainCells ?? [], // 박스+컬러: 바뀌지 않고 차례대로 터지는 같은 색 특수 잼.
       cascadeIndex,
       durationMs: ANIMATION_DURATIONS_MS.comboActivate,
     });
@@ -1137,36 +1147,10 @@ export class GameState {
         });
       }
       transformDelays = computeSequentialDelays(
-        transformedCells.length,
+        transformedCells.length + (transformPlan.chainCells?.length ?? 0),
         DETONATION_CONFIG.transformStepMs,
         DETONATION_CONFIG.maxDetonationMs
       );
-
-      if (transformPlan.noActivate) {
-        // 박스+컬러: 변환된 잼은 터지지 않고 남는다(plan에 넣지 않는다). (변환 개수 x 2)개의
-        // 랜덤 잼이, 모든 변환이 끝나는 시각부터 박스 규칙(등장 순서대로 150ms 간격)으로 대신 터진다.
-        const lastTransformEndMs = transformDelays.length ? transformDelays[transformDelays.length - 1] : 0;
-        const exclude = new Set([...plan.keys(), ...transformedCells.map(keyOf)]);
-        const extra = pickRandomIdleCells(board, transformedCells.length * 2, exclude);
-        if (extra.length > 0) {
-          this._pushEffect({
-            type: 'specialActivate',
-            kind: SPECIAL_KIND.BOX,
-            direction: null,
-            position: ref,
-            color: transformPlan.color,
-            affected: extra,
-            cascadeIndex,
-            durationMs: ANIMATION_DURATIONS_MS.specialActivate,
-          });
-        }
-        const extraDelays = computeSequentialDelays(extra.length, DETONATION_CONFIG.boxStepMs, DETONATION_CONFIG.maxDetonationMs);
-        extra.forEach((cell, i) => {
-          plan.set(keyOf(cell), { row: cell.row, col: cell.col, armedMs: lastTransformEndMs + extraDelays[i], cause: 'box' });
-        });
-        this._damageObstacles(resolution, extra, cascadeIndex, 'specialEffect');
-        transformedCells = []; // 자기 효과 직행 스케줄을 걸지 않는다(터지지 않으므로).
-      }
     }
 
     // 점수는 각 칸이 실제로 'clearing'으로 커밋되는 시점에 _commitCellClear가 매긴다
@@ -1181,6 +1165,11 @@ export class GameState {
       this._armCell(resolution, { row: cell.row, col: cell.col }, transformDelays[i], 'transform', cascadeIndex, {
         forceSelfEffect: true,
       });
+    });
+    // 박스+컬러의 같은 색 기존 특수 잼: 변환 줄 뒤 차례로 자기 효과(원래 특수 잼이라 cause는 chain).
+    (transformPlan?.chainCells ?? []).forEach((cell, i) => {
+      const ms = transformDelays[transformedCells.length + i];
+      this._armCell(resolution, cell, ms, 'chain', cascadeIndex, { forceSelfEffect: true });
     });
   }
 
@@ -1215,17 +1204,23 @@ export class GameState {
 
   // 박스 잼 <-> 일반 잼 스왑: 상대 잼 + 박스 잼이 지워지고, idle 칸 중 랜덤 2개가 등장 순서대로
   // 150ms 간격으로 추가로 지워진다. 랜덤 칸이 특수 잼이면 체인으로 나중에 자기 효과를 발동한다.
-  _resolveBoxSwapStep(resolution, { boxCell, targetCell }, cascadeIndex) {
+  // 스왑으로 매치(matches)도 생겼으면 그 매치도 일반 매치처럼 지우고 특수 잼을 만든다(박스 효과와 함께).
+  _resolveBoxSwapStep(resolution, { boxCell, targetCell }, cascadeIndex, matches = []) {
     const { board } = this;
     resolution.chainActivated = new Set([keyOf(boxCell)]);
     resolution.protectedKeys = new Set();
-    const extra = pickRandomIdleCells(board, 2, new Set([keyOf(boxCell), keyOf(targetCell)]));
+    const plan = new Map();
+    if (matches.length > 0) this._planMatchGroups(resolution, matches, cascadeIndex, [targetCell, boxCell], plan);
+
+    plan.set(keyOf(boxCell), { row: boxCell.row, col: boxCell.col, armedMs: 0, cause: 'box' });
+    // 상대 잼이 매치로 특수 잼 생성 칸이 됐으면 지우지 않는다.
+    if (!resolution.protectedKeys.has(keyOf(targetCell))) {
+      plan.set(keyOf(targetCell), { row: targetCell.row, col: targetCell.col, armedMs: 0, cause: 'box' });
+    }
+    const exclude = new Set([...plan.keys(), ...resolution.protectedKeys, keyOf(targetCell)]);
+    const extra = pickRandomIdleCells(board, 2, exclude);
     this._damageObstacles(resolution, extra, cascadeIndex, 'specialEffect');
     const delays = computeSequentialDelays(extra.length, DETONATION_CONFIG.boxStepMs, DETONATION_CONFIG.maxDetonationMs);
-
-    const plan = new Map();
-    plan.set(keyOf(boxCell), { row: boxCell.row, col: boxCell.col, armedMs: 0, cause: 'box' });
-    plan.set(keyOf(targetCell), { row: targetCell.row, col: targetCell.col, armedMs: 0, cause: 'box' });
     extra.forEach((cell, i) => {
       plan.set(keyOf(cell), { row: cell.row, col: cell.col, armedMs: delays[i], cause: 'box' });
     });
@@ -1237,7 +1232,7 @@ export class GameState {
       position: boxCell,
       color: null,
       gemColor: board.get(boxCell.row, boxCell.col), // 특수 잼 자신의 색 - 전투 기술 색(docs/skills.md).
-      affected: [...plan.values()].map(({ row, col }) => ({ row, col })),
+      affected: [...plan.values()].filter((e) => e.cause === 'box').map(({ row, col }) => ({ row, col })),
       cascadeIndex,
       durationMs: ANIMATION_DURATIONS_MS.specialActivate,
     });
@@ -1250,10 +1245,16 @@ export class GameState {
   // 매치에 낀 기존 특수 잼은 "일반 매치 제거"와 같은 0 지연으로 캐치되지만, 특수 잼이므로
   // _armCell이 자동으로 체인(캐치 후 +200ms, 그 시점 보드 상태로 자기 효과 계산)으로 처리한다.
   _resolveMatchStep(resolution, matches, cascadeIndex, swapCells) {
-    const { board } = this;
     resolution.chainActivated = new Set();
-
     const plan = new Map();
+    this._planMatchGroups(resolution, matches, cascadeIndex, swapCells, plan);
+    this._beginClear(resolution, plan, cascadeIndex);
+  }
+
+  // 매치 그룹 칸을 plan에 넣고, 인접 방해요소 피해 + 특수 잼 생성(생성 칸은 plan에서 빼고
+  // resolution.protectedKeys로 보호)을 적용한다. _resolveMatchStep과 박스 스왑+매치가 같이 쓴다.
+  _planMatchGroups(resolution, matches, cascadeIndex, swapCells, plan) {
+    const { board } = this;
     for (const group of matches) {
       for (const cell of group.cells) {
         plan.set(keyOf(cell), { row: cell.row, col: cell.col, armedMs: 0, cause: 'match' });
@@ -1314,8 +1315,6 @@ export class GameState {
         durationMs: ANIMATION_DURATIONS_MS.specialCreate,
       });
     }
-
-    this._beginClear(resolution, plan, cascadeIndex);
   }
 
   // "제거 예약" = plan(Map<key, {row, col, armedMs, cause}>)의 각 칸을 armed(또는 즉시 clearing)
@@ -1344,7 +1343,14 @@ export class GameState {
     const { board } = this;
     const idx = board.index(cell.row, cell.col);
     const key = keyOf(cell);
-    if (board.cellStates[idx] !== null) return; // 다른 Resolution이 이미 점유 - 건너뛴다.
+    const held = board.cellStates[idx];
+    if (held !== null) {
+      // 자기 차례를 기다리던 특수 잼이 먼저 맞으면 지금 발동시키고 원래 차례는 없앤다(한 번만 발동).
+      if (held.phase === 'armed' && held.pendingSelfEffect && held.resolutionId === resolution.id) {
+        held.durationMs = Math.min(held.durationMs, held.elapsedMs + Math.max(armedMs, 0));
+      }
+      return; // 다른 Resolution이 이미 점유 - 건너뛴다.
+    }
     if (resolution.protectedKeys.has(key)) return; // 이번 단계에서 막 생성된 특수 잼 칸 - 건너뛴다.
 
     const special = board.getSpecial(cell.row, cell.col);

@@ -1150,7 +1150,6 @@ export class CanvasRenderer {
   _spawnSpecialFx(effect, board) {
     const { kind, position, affected } = effect;
     const step = effect.cascadeIndex ?? 1;
-    if (kind === 'box' && effect.color != null) return; // box+color 조합 전용 경로 - 손대지 않는다(animator.js 참고).
 
     if (kind === 'line') {
       const stepMs = this.assets?.effectFxManifest?.line?.stepMs ?? 30;
@@ -1169,7 +1168,7 @@ export class CanvasRenderer {
         const segKey = `line_${effect.direction === 'vertical' ? 'v' : 'h'}_${seg}_${targetColorId}`;
         const end = fireAtMs + Math.max(this._effectAnimDurationMs(`pop_${targetColorId}`, 270), this._effectAnimDurationMs(segKey, 320));
         maxEnd = Math.max(maxEnd, end);
-        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, fireAtMs, seg });
+        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, special: this._cellSpecial(board, cell.row, cell.col), fireAtMs, seg });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
       const cues = [{ at: 0, key: 'line_fire' }, ...targets.map((tg) => ({ at: tg.fireAtMs, key: 'gem_pop', step }))];
@@ -1184,7 +1183,7 @@ export class CanvasRenderer {
         const targetColorId = this._cellColorId(board, cell.row, cell.col);
         const end = hitMs + this._effectAnimDurationMs(`pop_${targetColorId}`, 270);
         maxEnd = Math.max(maxEnd, end);
-        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, fireAtMs: hitMs });
+        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, special: this._cellSpecial(board, cell.row, cell.col), fireAtMs: hitMs });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
       const cues = [{ at: 0, key: 'bomb_explode' }, ...targets.map(() => ({ at: hitMs, key: 'gem_pop', step }))];
@@ -1200,7 +1199,7 @@ export class CanvasRenderer {
         const end = cfg.hitMs + Math.max(this._effectAnimDurationMs(`pop_${targetColorId}`, 270), this._effectAnimDurationMs(`box_hit_${colorId}`, 220));
         maxEnd = Math.max(maxEnd, end);
         const seed = ((cell.row * 97 + cell.col * 31 + position.row * 13 + position.col * 7 + 1) * 2654435761) >>> 0;
-        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, seed, boltCache: null });
+        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, special: this._cellSpecial(board, cell.row, cell.col), seed, boltCache: null });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
       // 번개가 꽂히는 순간(cfg.hitMs)마다 box_zap + 그 칸의 pop.
@@ -1220,7 +1219,7 @@ export class CanvasRenderer {
         const arriveAtMs = waveStartMs + flightMs;
         const end = arriveAtMs + Math.max(this._effectAnimDurationMs(`pop_${targetColorId}`, 270), this._effectAnimDurationMs(`color_mark_${targetColorId}`, 200));
         maxEnd = Math.max(maxEnd, end);
-        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, flightMs });
+        targets.push({ row: cell.row, col: cell.col, colorId: targetColorId, special: this._cellSpecial(board, cell.row, cell.col), flightMs });
         this._specialFxReserved.add(`${cell.row},${cell.col}`);
       }
       // charge(발동 순간) -> color_origin이 터지며 wisp가 날아가는 프레임에 burst -> 도착마다 hit.
@@ -1239,6 +1238,11 @@ export class CanvasRenderer {
       colorId: this._cellColorId(board, row, col),
       special: board.cellStates[idx]?.special ?? board.specials[idx] ?? null,
     };
+  }
+
+  // 그 칸의 특수 종류(core가 이미 지운 칸도 cellState에 남은 값) - fx가 터지기 전 잼을 얼려 그릴 때 쓴다.
+  _cellSpecial(board, row, col) {
+    return this._comboGemAt(board, row, col).special;
   }
 
   // _spawnSpecialFx와 같은 입력(specialActivate 모양)으로 fx를 만들고 재생만 delayMs 늦춘다
@@ -1265,10 +1269,27 @@ export class CanvasRenderer {
   // 변환형 조합: core는 변환 직후(등장 순서 * DETONATION_CONFIG.transformStepMs = 40ms)에
   // 바로 specialActivate를 낸다 - 순서와 간격은 core 그대로 두고, 리드인+캐리어(불씨/번개)
   // 연출이 끝날 때까지 그 발동의 "그리기"만 통째로 늦춘다(보드 데이터는 그대로).
-  // revealAtMs: 칸("r,c") -> 조합 시작부터 불씨/번개가 도착하는 시각. 그 전까지는 변환된 특수 잼을
-  // 그리지 않는다(도착하는 순간 그림만 바뀐다).
-  _deferComboChain(cells, delayMs, revealAtMs) {
-    this._comboChainDelay = { cells: new Set(cells.map((c) => `${c.row},${c.col}`)), delayMs, revealAtMs };
+  // carrier: 불씨/번개를 나르는 fx. revealAtMs: 칸("r,c") -> carrier 나이 기준 도착 시각. 도착 전엔
+  // carrier가 원래 잼을, 도착 후엔 연쇄 fx가 이어받을 때까지 carrier가 변환된 특수 잼을 그린다
+  // (둘이 같은 시계로 넘겨받아야 빈 프레임 - 깜빡임 - 이 없다).
+  // stepMs: cells 순서(core의 발동 순서)마다 그리기를 더 늦추는 간격.
+  _deferComboChain(cells, delayMs, revealAtMs, stepMs = 0, carrier = null) {
+    const order = new Map(cells.map((c, i) => [`${c.row},${c.col}`, i]));
+    this._comboChainDelay = { cells: new Set(order.keys()), order, delayMs, stepMs, revealAtMs, carrier };
+  }
+
+  // 아직 터지기 전인 fx 대상 칸이면, 그 칸에 닿기까지 남은 시간(ms). 아니면 0.
+  _pendingHitMs(row, col) {
+    let wait = 0;
+    for (const fx of this._specialFx) {
+      for (const t of fx.targets) {
+        if (t.row !== row || t.col !== col) continue;
+        const hitAt =
+          fx.kind === 'box' ? (t.hitMs ?? fx.cfg.hitMs) : fx.kind === 'color' ? fx.waveStartMs + t.flightMs : t.fireAtMs ?? 0;
+        wait = Math.max(wait, hitAt - fx.ageMs);
+      }
+    }
+    return wait;
   }
 
   // flightMs를 바꾼 뒤(컬러+컬러의 무지개 물결) 수명과 소리 일정을 다시 계산한다.
@@ -1429,38 +1450,27 @@ export class CanvasRenderer {
       case 'bomb_color':
       case 'box_color': {
         // 무지개 불씨가 같은 색 잼마다 날아가 닿는 순간 특수 잼 그림으로 바뀐다(번쩍임 없음).
-        if (transformCells.length === 0) break;
-        const [fx] = this._spawnDelayedFx({ kind: 'color', direction: null, position: ref, color: null, affected: [ref, ...transformCells], cascadeIndex }, board, swapMs);
+        // 박스+컬러의 chainCells(같은 색 기존 특수 잼)는 바뀌지 않고 불씨를 맞은 뒤 차례대로 터진다.
+        const chainCells = effect.chainCells ?? [];
+        const carried = [...transformCells, ...chainCells];
+        if (carried.length === 0) break;
+        const [fx] = this._spawnDelayedFx({ kind: 'color', direction: null, position: ref, color: null, affected: [ref, ...carried], cascadeIndex }, board, swapMs);
         if (!fx) break;
+        const chainKeys = new Set(chainCells.map((c) => `${c.row},${c.col}`));
         let lastArriveMs = 0;
         const revealAtMs = new Map();
         for (const target of fx.targets) {
+          const key = `${target.row},${target.col}`;
           target.transform = true;
+          target.revealSpecial = target.special; // 닿은 뒤 연쇄 fx가 이어받을 때까지 이 그림을 그린다.
+          if (!chainKeys.has(key)) target.special = null; // 변환 칸은 불씨가 닿기 전까지 일반 잼으로 보인다.
           const arriveMs = fx.waveStartMs + target.flightMs;
-          revealAtMs.set(`${target.row},${target.col}`, swapMs + arriveMs);
+          revealAtMs.set(key, arriveMs);
           lastArriveMs = Math.max(lastArriveMs, arriveMs);
         }
-        const chainAtMs = swapMs + lastArriveMs + chainGapMs;
-        if (effect.comboKind !== 'box_color') {
-          this._deferComboChain(transformCells, chainAtMs, revealAtMs);
-          break;
-        }
-        // 박스+컬러: 변환된 박스는 터지지 않고, 하나씩 번개 2갈래를 쏜다. core는 ref에서
-        // (변환 수 x 2)개를 한 번에 터뜨리는 specialActivate 하나만 내므로(_spawnSpecialFx가
-        // 건너뛴다), 그 대상을 박스마다 2개씩 나눠 렌더러가 직접 fx를 만든다.
-        const boxAct = gameState.effects.find(
-          (e) => e.type === 'specialActivate' && e.kind === 'box' && e.color != null && e.cascadeIndex === cascadeIndex
-        );
-        const extra = boxAct?.affected ?? [];
-        transformCells.forEach((cell, i) => {
-          const pair = extra.slice(i * 2, i * 2 + 2);
-          if (pair.length === 0) return;
-          this._spawnDelayedFx(
-            { kind: 'box', direction: null, position: cell, color: null, affected: [cell, ...pair], cascadeIndex },
-            board,
-            chainAtMs + i * boxColorStepMs
-          );
-        });
+        // 박스+컬러는 박스마다 번개가 따로 보이도록 차례마다 boxColorStepMs를 더 띄운다.
+        const stepMs = effect.comboKind === 'box_color' ? boxColorStepMs : 0;
+        this._deferComboChain(carried, swapMs + lastArriveMs + chainGapMs, revealAtMs, stepMs, fx);
         break;
       }
 
@@ -1475,13 +1485,15 @@ export class CanvasRenderer {
         const revealAtMs = new Map();
         fx.targets.forEach((target, i) => {
           target.transform = true;
+          target.revealSpecial = target.special;
+          target.special = null; // 번개가 닿기 전까지 일반 잼으로 보인다.
           target.startMs = fx.cfg.startMs + i * boxLineStepMs;
           target.hitMs = fx.cfg.hitMs + i * boxLineStepMs;
-          revealAtMs.set(`${target.row},${target.col}`, swapMs + target.hitMs);
+          revealAtMs.set(`${target.row},${target.col}`, target.hitMs);
           lastHitMs = Math.max(lastHitMs, target.hitMs);
         });
         fx.totalLifeMs += Math.max(0, fx.targets.length - 1) * boxLineStepMs;
-        this._deferComboChain(transformCells, swapMs + lastHitMs + boxChainGapMs, revealAtMs);
+        this._deferComboChain(transformCells, swapMs + lastHitMs + boxChainGapMs, revealAtMs, 0, fx);
         break;
       }
 
@@ -1589,7 +1601,7 @@ export class CanvasRenderer {
   // 줄 잼 발동(README #2) - 잼(얼려두기) -> pop -> line 세그먼트 -> origin 순으로 그린다.
   _drawLineFx(rect, fx, nowMs) {
     for (const target of fx.targets) {
-      if (fx.ageMs < target.fireAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+      if (fx.ageMs < target.fireAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.special);
     }
     const axis = fx.direction === 'vertical' ? 'v' : 'h';
     for (const target of fx.targets) {
@@ -1605,7 +1617,7 @@ export class CanvasRenderer {
   // 폭탄 발동(README #3) - 잼 -> pop -> 폭탄 스프라이트(폭탄이 pop보다 위) 순.
   _drawBombFx(rect, fx, nowMs) {
     for (const target of fx.targets) {
-      if (fx.ageMs < target.fireAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+      if (fx.ageMs < target.fireAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.special);
     }
     for (const target of fx.targets) {
       if (fx.ageMs < target.fireAtMs) continue;
@@ -1624,7 +1636,8 @@ export class CanvasRenderer {
     const { cfg } = fx;
     const hitOf = (target) => target.hitMs ?? cfg.hitMs;
     for (const target of fx.targets) {
-      if (fx.ageMs < hitOf(target)) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+      if (fx.ageMs < hitOf(target)) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.special);
+      else if (target.transform && !target.handoff) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.revealSpecial);
     }
     for (const target of fx.targets) {
       if (fx.ageMs < hitOf(target) || target.transform) continue;
@@ -1649,7 +1662,8 @@ export class CanvasRenderer {
   _drawColorFx(rect, fx, nowMs) {
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
-      if (fx.ageMs < arriveAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+      if (fx.ageMs < arriveAtMs) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.special);
+      else if (target.transform && !target.handoff) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.revealSpecial);
     }
     for (const target of fx.targets) {
       const arriveAtMs = fx.waveStartMs + target.flightMs;
@@ -1813,7 +1827,7 @@ export class CanvasRenderer {
       // 아직 시작 전(_spawnDelayedFx로 미룬 조합 연쇄) - 그 칸들의 잼만 얼려 그려서, core가
       // 이미 지워버린 자리에 구멍이 보이지 않게 한다(README 점4와 같은 "그리기만 지연").
       if (fx.ageMs < 0) {
-        for (const target of fx.targets) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs);
+        for (const target of fx.targets) this._drawFrozenGemAt(rect, target.row, target.col, target.colorId, nowMs, target.special);
         if (fx.originGem && fx.ageMs >= (fx.originRevealAge ?? -Infinity)) {
           this._drawFrozenGemAt(rect, fx.row, fx.col, fx.originGem.colorId, nowMs, fx.originGem.special);
         }
@@ -1977,12 +1991,20 @@ export class CanvasRenderer {
         if (chain?.cells.has(key)) {
           chain.cells.delete(key);
           if (chain.cells.size === 0) this._comboChainDelay = null;
-          const revealMs = chain.revealAtMs?.get(key);
-          for (const fx of this._spawnDelayedFx(effect, gameState.board, chain.delayMs, { freezeOrigin: true })) {
-            if (revealMs != null) fx.originRevealAge = revealMs - chain.delayMs;
+          const revealAge = chain.revealAtMs?.get(key);
+          const delayMs = chain.delayMs + (chain.order.get(key) ?? 0) * chain.stepMs;
+          const { carrier } = chain;
+          const handed = carrier?.targets.find((t) => `${t.row},${t.col}` === key);
+          if (handed) handed.handoff = true;
+          for (const fx of this._spawnDelayedFx(effect, gameState.board, delayMs, { freezeOrigin: true })) {
+            // carrier가 도착하는 바로 그 프레임부터 그린다(이미 도착했으면 즉시).
+            if (revealAge != null && carrier) fx.originRevealAge = -delayMs + (revealAge - carrier.ageMs);
           }
         } else {
-          this._spawnSpecialFx(effect, gameState.board);
+          // 연쇄로 터진 특수 잼은, 그 칸을 칠 연출(번개·줄기 등)이 아직 안 닿았으면 닿을 때까지 그리기만 미룬다.
+          const holdMs = this._pendingHitMs(effect.position.row, effect.position.col);
+          if (holdMs > 0) this._spawnDelayedFx(effect, gameState.board, holdMs, { freezeOrigin: true });
+          else this._spawnSpecialFx(effect, gameState.board);
         }
       } else if (effect.type === 'comboActivate') {
         this._spawnComboFx(effect, gameState);
@@ -2694,7 +2716,17 @@ export class CanvasRenderer {
     const audioBlockH = kind === 'pause' ? headH * 0.62 : 0;
     // 일시정지 = 인게임 설정 - 튜토리얼 다시 보기는 비활성 버튼 + 안내만(연습 모드는 메인 메뉴 설정에서, docs/tutorial.md 5장).
     const replayBlockH = kind === 'pause' ? headH * 0.34 : 0;
-    const cardHeight = headH + audioBlockH + replayBlockH;
+    // 패배 팝업 버튼(위에서부터): 부활(깃털) / 광고 보고 이어하기(docs/ads.md 2장) / 재도전 - 세로로 쌓는다(카드가 그만큼 길어짐).
+    const btnGap = 8;
+    const btnHeight = Math.max(32, headH * 0.22);
+    const loseButtons = [];
+    if (kind === 'lose') {
+      if (itemUi?.canRevive) loseButtons.push(['revive', t('popup.button.revive')]);
+      if (itemUi?.adContinue) loseButtons.push(['adContinue', t(itemUi.adBusy ? 'popup.button.adLoading' : itemUi.adContinue === 'free' ? 'popup.button.freeContinue' : 'popup.button.adContinue')]);
+      loseButtons.push(['restart', t('popup.button.restart')]);
+    }
+    const stackH = Math.max(0, loseButtons.length - 1) * (btnHeight + btnGap);
+    const cardHeight = headH + audioBlockH + replayBlockH + stackH;
     const cardX = (width - cardWidth) / 2;
     const cardY = (height - cardHeight) / 2;
 
@@ -2703,15 +2735,15 @@ export class CanvasRenderer {
     const TITLES = {
       pause: { text: t('popup.pause.title'), color: cfg.pauseColor, desc: t('popup.pause.desc') },
       win: { text: t('popup.win.title'), color: cfg.winColor, desc: winDesc },
-      lose: { text: t('popup.lose.title'), color: cfg.loseColor, desc: t('popup.lose.desc') },
+      lose: { text: t('popup.lose.title'), color: cfg.loseColor, desc: performance.now() < (itemUi?.adFailUntil ?? 0) ? t('popup.lose.adFail') : t('popup.lose.desc') },
     };
     // 액션 순서의 첫 항목이 강조(primary) 버튼. 클리어는 "다음 층"을 눌러 진행한다(실패는
     // "다시 하기"로 같은 층을 재도전 - docs/balance.md §1·§3).
     const BUTTONS = {
       pause: [['resume', t('popup.button.resume')], ['restart', t('popup.button.restart')], ['exit', t('popup.button.exit')]],
       win: [['next', t('popup.button.next')]],
-      // 부활(docs/items.md C3)은 보유·층당 1회일 때만 버튼이 보인다(main.js canRevive).
-      lose: itemUi?.canRevive ? [['revive', t('popup.button.revive')], ['restart', t('popup.button.restart')]] : [['restart', t('popup.button.restart')]],
+      // 부활(docs/items.md C3)·광고 이어하기는 main.js continueState 판정대로.
+      lose: loseButtons,
     };
 
     ctx.save();
@@ -2751,14 +2783,15 @@ export class CanvasRenderer {
     if (replayBlockH > 0) this._drawDisabledReplay(cardX + 14, cardY + headH * 0.6 + audioBlockH + 6, cardWidth - 28, replayBlockH - 6);
 
     const buttons = BUTTONS[kind];
-    const btnGap = 8;
-    const btnWidth = (cardWidth - 24 - btnGap * (buttons.length - 1)) / buttons.length;
-    const btnHeight = Math.max(32, headH * 0.22);
-    const btnY = cardY + cardHeight - 16 - btnHeight;
+    const vertical = kind === 'lose';
+    const btnWidth = vertical ? cardWidth - 24 : (cardWidth - 24 - btnGap * (buttons.length - 1)) / buttons.length;
     const rects = {};
 
     buttons.forEach(([action, label], i) => {
-      const bx = cardX + 12 + i * (btnWidth + btnGap);
+      const bx = vertical ? cardX + 12 : cardX + 12 + i * (btnWidth + btnGap);
+      const btnY = vertical ? cardY + cardHeight - 16 - btnHeight - (buttons.length - 1 - i) * (btnHeight + btnGap) : cardY + cardHeight - 16 - btnHeight;
+      const disabled = action === 'adContinue' && itemUi?.adBusy; // 불러오는 중 - 반투명, 터치 판정 없음.
+      if (disabled) ctx.globalAlpha = 0.5;
       const isPrimary = i === 0;
       const isGold = action === 'revive'; // 부활은 btn_gold + 깃털 아이콘(docs/items.md C3).
 
@@ -2790,11 +2823,25 @@ export class CanvasRenderer {
         if (uiReady(icon)) ctx.drawImage(icon.img, ix, iy, iconSize, iconSize);
         else drawItemIconFallback(ctx, 'revive', ix, iy, iconSize);
         labelX += iconSize / 2;
+      } else if (action === 'adContinue' && itemUi.adContinue === 'ad') {
+        // 재생 아이콘(새 PNG 없이 코드 삼각형, 팔레트 #f2d264).
+        const s = Math.round(btnHeight * 0.36);
+        const ix = Math.round(bx + 12);
+        const iy = Math.round(btnY + btnHeight / 2);
+        ctx.fillStyle = '#f2d264';
+        ctx.beginPath();
+        ctx.moveTo(ix, iy - s / 2);
+        ctx.lineTo(ix + s * 0.87, iy);
+        ctx.lineTo(ix, iy + s / 2);
+        ctx.closePath();
+        ctx.fill();
+        labelX += s / 2;
       }
       ctx.fillStyle = textColor;
       ctx.font = getFontString(Math.max(11, btnHeight * 0.32), true);
       drawText(ctx, label, labelX, btnY + btnHeight / 2);
-      rects[action] = { x: bx, y: btnY, width: btnWidth, height: btnHeight };
+      ctx.globalAlpha = 1;
+      if (!disabled) rects[action] = { x: bx, y: btnY, width: btnWidth, height: btnHeight };
     });
 
     ctx.restore();

@@ -272,7 +272,7 @@ const platform = {
 
   ads: {
     showInterstitial: async () => (platform.caps.ads ? (await interstitial.show()).shown : false),
-    showRewarded: async () => (platform.caps.rewarded ? { rewarded: (await rewarded.show()).rewarded } : { rewarded: false }),
+    showRewarded: async () => (platform.caps.rewarded ? rewarded.show() : { rewarded: false, shown: false }),
     // 배너는 게임이 비워 둔 하단 자리(#banner-slot) 안에 붙인다 - 높이 102 고정.
     async showBanner() {
       if (!platform.caps.banner) return 0;

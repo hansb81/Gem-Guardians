@@ -16,7 +16,7 @@
     "priceKRW": 1200,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_starter",
       "onestore": null,
       "ios": null
     }
@@ -120,7 +120,7 @@
     "priceKRW": 1200,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_0",
       "onestore": null,
       "ios": null
     }

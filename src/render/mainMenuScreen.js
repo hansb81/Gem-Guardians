@@ -71,10 +71,16 @@ const POPUP_SIZES = {
   help: [480, 820],
   about: [480, 820],
   attendance: [400, 180], // 서버가 켜져 있으면 ATT 높이(_popupCardBasis)
-  event: [400, 180],
+  event: [520, 640], // 폭 520 = 360dp 폰에서 320dp 배너(basis 480)+여백이 들어가게. 이벤트 목록은 스크롤, 광고 칸은 아래 고정.
   mail: [400, 180],
   exit: [400, 240],
 };
+// 이벤트 팝업 광고 칸(docs/ads.md 3장): 안내 문구 아래 "광고" 라벨 + 테두리 칸. 칸 = 320x50dp 배너가 들어갈 basis 크기 + 여백 pad.
+// 칸 양옆·바로 위에는 버튼을 두지 않는다(AdMob: 버튼 옆 배너 금지) - 닫기 버튼(오른쪽 위)과는 100 이상 떨어져 있다.
+// 칸은 카드 아랫변에서 bottom만큼 위, 라벨은 칸 위 labelGap.
+const EVENT_AD = { labelGap: 12, pad: 4, bottom: 24, bannerW: 320, bannerH: 50, minCanvasCss: 340 };
+// 이벤트 목록(배너 줄) - viewY부터 광고 라벨 위 gap까지 보이고 그 안에서 스크롤.
+const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12 };
 // 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
 const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 468, 320, 46] };
 const HAPTICS_EXTRA_H = 56;
@@ -178,6 +184,9 @@ export class MainMenuScreen {
     this._helpPage = 0;
     this._helpWrap = null; // { key, lines } - 쪽·배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
+    this._eventScroll = 0; // 이벤트 목록 스크롤(basis px).
+    // 이벤트 목록 [{ id, title: { ko, en } }] - 이벤트 API가 생기면 main.js가 채운다(docs/server.md §19-11).
+    this.events = [];
     this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._helpImages = {}; // 이름 -> 로드 상태(도움말을 처음 열 때 그 쪽 그림만 불러온다).
     this.mailBadge = () => false; // main.js: 서버가 켜져 있으면 "안 받은 우편 있음"
@@ -186,6 +195,8 @@ export class MainMenuScreen {
     // { att: { status, busy } | null, mail: { list, reason, busy } | null, playerCode: () => string|null } - 기능 스위치가 꺼진 것은 null
     this.server = null;
     this.aboutNotice = null; // { key, until } 플레이어 코드 줄에 잠깐 띄우는 글(복사했어요 등)
+    this.popupAd = () => false; // main.js: 이벤트 팝업에 광고 칸을 그릴지(caps.popupBanner + 광고 제거 없음)
+    this.popupAdDebug = () => false; // main.js: 테스트 광고면 배너 목표 위치 테두리(실기기 위치 확인용)
     this.itemIcons = () => null; // main.js: renderer.itemAssets.icons(아이템 팩, 하단 바와 같은 그림)
     this._toast = null; // { text, until } 메뉴 한 줄 알림 - until은 메뉴에 처음 그려질 때 정한다
     this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
@@ -556,8 +567,84 @@ export class MainMenuScreen {
     }
   }
 
-  _drawPlaceholderPopup(ctx, [cx, cy, cw]) {
+  _drawPlaceholderPopup(ctx, card) {
+    if (this.popup === 'event') return this._drawEventPopup(ctx, card);
+    const [cx, cy, cw] = card;
     this._text(ctx, t(`menu.${this.popup}.body`), cx + cw / 2, cy + 110, { size: 13, align: 'center' });
+  }
+
+  // 이벤트 목록 보기 영역(basis) - 광고 칸이 있으면 그 라벨 위까지.
+  _eventView(card) {
+    const [cx, cy, cw, ch] = card;
+    const bottom = this.popupAd() ? this._adSlotBasis(card)[1] - EVENT_AD.labelGap - EVENT_LIST.gap : cy + ch - EVENT_AD.bottom;
+    return [cx + EVENT_LIST.side, cy + EVENT_LIST.viewY, cw - EVENT_LIST.side * 2, bottom - cy - EVENT_LIST.viewY];
+  }
+
+  // 이벤트 배너 줄은 보기 영역 안에서만 스크롤되고, 광고 칸은 그 아래 제자리(배너 좌표가 스크롤과 무관).
+  _drawEventPopup(ctx, card) {
+    const view = this._eventView(card);
+    const list = this.events;
+    if (!list.length) {
+      this._text(ctx, t('menu.event.body'), view[0] + view[2] / 2, view[1] + view[3] / 2, { size: 13, align: 'center' });
+    } else {
+      const step = EVENT_LIST.rowH + EVENT_LIST.rowGap;
+      this._eventScroll = Math.max(0, Math.min(this._eventScroll, list.length * step - EVENT_LIST.rowGap - view[3]));
+      const sv = this._toScreen(view);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(sv.x, sv.y, sv.width, sv.height);
+      ctx.clip();
+      const loc = getLocale();
+      for (let i = 0; i < list.length; i++) {
+        const y = view[1] + i * step - this._eventScroll;
+        if (y + EVENT_LIST.rowH < view[1] || y > view[1] + view[3]) continue;
+        const row = [view[0], y, view[2], EVENT_LIST.rowH];
+        // shortcut: 배너 그림 없이 제목 글자만 - 이벤트 배너 이미지가 생기면 여기서 그림을 그린다.
+        if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
+        this._text(ctx, list[i].title?.[loc] || list[i].title?.ko || '', row[0] + row[2] / 2, y + EVENT_LIST.rowH / 2, { size: 15, align: 'center' });
+      }
+      ctx.restore();
+    }
+    if (!this.popupAd()) return;
+    const [cx, , cw] = card;
+    const slot = this._adSlotBasis(card);
+    this._text(ctx, t('menu.event.ad'), cx + cw / 2, slot[1] - EVENT_AD.labelGap, { size: 11, align: 'center', color: '#655a74', outline: false });
+    if (!this._nine(ctx, 'panels/panel_inset.png', slot)) this._panel(ctx, slot, '#221c2b', '#3b3347');
+    if (this.popupAdDebug()) {
+      // 배너가 뜰 자리(칸 가운데 320x50 CSS px) - 실기기에서 네이티브 배너와 어긋나는지 눈으로 비교.
+      const r = this._toScreen(slot);
+      ctx.strokeStyle = '#ff3df2';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(r.x + r.width / 2 - EVENT_AD.bannerW / 2 + 0.5, r.y + r.height / 2 - EVENT_AD.bannerH / 2 + 0.5, EVENT_AD.bannerW - 1, EVENT_AD.bannerH - 1);
+    }
+  }
+
+  // 광고 칸 크기(basis) - 320x50 CSS px 배너 + 여백. 폭은 카드 안(좌우 12)으로 자른다(그러면 배너는 안 띄운다).
+  _adSlotSize(cardW) {
+    const k = this._transform?.k ?? 1;
+    return [Math.min(EVENT_AD.bannerW / k + EVENT_AD.pad * 2, cardW - 24), EVENT_AD.bannerH / k + EVENT_AD.pad * 2];
+  }
+
+  _adSlotBasis([cx, cy, cw, ch]) {
+    const [w, h] = this._adSlotSize(cw);
+    return [cx + (cw - w) / 2, cy + ch - EVENT_AD.bottom - h, w, h];
+  }
+
+  // 이벤트 팝업 배너를 띄울 화면 CSS px {x, y, width, height}(칸 가운데 320x50) - 배너 좌표 계산은 여기 한 곳.
+  // basis -> 캔버스 좌표(_toScreen, CSS 단위라 devicePixelRatio는 이미 빠져 있음) -> 캔버스 화면 위치(getBoundingClientRect).
+  // 칸이 없거나, 배너가 칸에 안 들어가거나, 화면 밖이거나, 캔버스 폭 < minCanvasCss면 null(빈 칸만).
+  adBannerCss(canvas) {
+    if (this.popup !== 'event' || !this.popupAd() || !this._transform) return null;
+    const box = canvas.getBoundingClientRect();
+    if (box.width < EVENT_AD.minCanvasCss || !canvas.clientWidth) return null;
+    const s = box.width / canvas.clientWidth;
+    const r = this._toScreen(this._adSlotBasis(this._popupCardBasis()));
+    const { bannerW: w, bannerH: h } = EVENT_AD;
+    if (r.width * s < w || r.height * s < h) return null;
+    const x = Math.round(box.left + (r.x + r.width / 2) * s - w / 2);
+    const y = Math.round(box.top + (r.y + r.height / 2) * s - h / 2);
+    if (x < 0 || y < 0 || x + w > window.innerWidth || y + h > window.innerHeight) return null;
+    return { x, y, width: w, height: h };
   }
 
   // 슬라이더 한 줄의 홈/채움/손잡이 위치(basis). 터치 판정과 그리기가 같은 값을 쓴다.
@@ -726,8 +813,9 @@ export class MainMenuScreen {
 
   // 게임 정보가 열려 있으면 휠로 스크롤하고 true(main.js가 기본 동작을 막는다).
   handleWheel(deltaY) {
-    if (this.popup !== 'about') return false;
-    this._aboutScroll += deltaY * 0.5; // 범위는 그릴 때 자른다.
+    const key = this.popup === 'about' ? '_aboutScroll' : this.popup === 'event' ? '_eventScroll' : null;
+    if (!key) return false;
+    this[key] += deltaY * 0.5; // 범위는 그릴 때 자른다.
     return true;
   }
 
@@ -820,6 +908,7 @@ export class MainMenuScreen {
       if (!pressButton(x, y, this._toScreen(layout[id]))) continue;
       this._pressed = id;
       this.popup = id;
+      this._eventScroll = 0;
       // 서버가 켜져 있으면 main.js가 출석 상태·우편 목록을 새로 받는다.
       return this.server?.[id === 'attendance' ? 'att' : id] ? `open:${id}` : null;
     }
@@ -866,10 +955,15 @@ export class MainMenuScreen {
       }
     }
 
+    if (this.popup === 'event' && pointInRect(x, y, this._toScreen(this._eventView(card)))) {
+      this._drag = { scrollFromY: y, scrollStart: this._eventScroll, key: '_eventScroll' };
+      return null;
+    }
+
     if (this.popup === 'about') {
       const view = [card[0], card[1] + ABOUT.viewY, card[2], this._aboutBottom() - ABOUT.viewY];
       if (pointInRect(x, y, this._toScreen(view))) {
-        this._drag = { scrollFromY: y, scrollStart: this._aboutScroll };
+        this._drag = { scrollFromY: y, scrollStart: this._aboutScroll, key: '_aboutScroll' };
         return null;
       }
       if (this.server) {
@@ -981,7 +1075,7 @@ export class MainMenuScreen {
 
   handlePointerMove(x, y) {
     if (!this._drag || !this._transform) return;
-    if (this._drag.scrollFromY != null) this._aboutScroll = this._drag.scrollStart - (y - this._drag.scrollFromY) / this._transform.k;
+    if (this._drag.scrollFromY != null) this[this._drag.key] = this._drag.scrollStart - (y - this._drag.scrollFromY) / this._transform.k;
     else this._applySliderAt(x, this._drag.geom);
   }
 

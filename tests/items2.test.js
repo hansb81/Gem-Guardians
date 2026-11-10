@@ -507,3 +507,31 @@ test('장착은 hotbar 그룹만, 예약 토글은 preFloor 그룹만(재고 필
   assert.equal(inv.setReserve('booster_bomb', false).ok, true);
   assert.equal(inv.data.loadout.preFloor.booster_bomb, false);
 });
+
+test('광고 이어하기: 깃털 없이 같은 효과, 층당 1회를 깃털과 공유, 다음 층에 리셋', () => {
+  const controller = makeController();
+  controller.devSetFloor(1);
+  playerState.inventory.data.items.revive = 1;
+  controller.retryFloor();
+  const bs = controller.battleState;
+  assert.equal(controller.adContinue(), false, '실패 전엔 안 됨');
+  bs.applyObstacleWallDamage(1);
+  assert.equal(controller.adContinueLeft(), 1);
+  assert.equal(controller.adContinue(), true);
+  assert.equal(bs.status, 'active');
+  assert.equal(bs.wallHealth, Math.round(bs.wallMaxHealth * ITEMS.items.revive.pct));
+  assert.equal(bs._freeze.normal, ITEMS.items.revive.freezeSec);
+  assert.equal(playerState.inventory.data.items.revive, 1, '깃털은 차감 안 함');
+  bs.applyObstacleWallDamage(1);
+  assert.equal(controller.canRevive(), false, '광고로 이어했으면 깃털도 숨김');
+  assert.equal(controller.adContinueLeft(), 0);
+  assert.equal(controller.adContinue(), false);
+
+  controller.retryFloor();
+  controller.battleState.applyObstacleWallDamage(1);
+  assert.equal(controller.revive(), true, '깃털 먼저');
+  controller.battleState.applyObstacleWallDamage(1);
+  assert.equal(controller.adContinueLeft(), 0, '깃털을 썼으면 광고도 숨김');
+  controller.retryFloor();
+  assert.equal(controller.adContinueLeft(), 1, '층이 바뀌면 리셋');
+});

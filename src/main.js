@@ -30,6 +30,8 @@ import { platform } from './platform/index.js';
 import { recoverPending, restore, syncServerIap } from './shop/iap.js';
 import { storage } from './platform/storage.js';
 import { loadServerConfig, setupServer } from './game/serverUi.js';
+import { showRewarded } from './game/ads.js';
+import { continueOptions, recordUse } from './game/adContinue.js';
 
 setLocale(storage.load('locale') ?? 'ko'); // 설정 팝업의 언어 버튼이 저장한 값.
 const canvas = document.getElementById('game-canvas');
@@ -79,6 +81,9 @@ const ranking = new RankingUi({
 });
 mainMenuScreen.rankingBadge = () => ranking.hasRewardBadge();
 mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
+// 이벤트 팝업 광고 칸(docs/ads.md 3장) - 배너를 띄울 수 있고 광고 제거가 없을 때만 칸을 그린다.
+mainMenuScreen.popupAd = () => platform.caps.popupBanner && !playerState.inventory.isUnlocked('adFree');
+mainMenuScreen.popupAdDebug = () => platform.adTesting;
 const shopScreen = new ShopScreen();
 function exitTitle() {
   if (scene !== 'title' || !titleScreen.tapReady) return;
@@ -200,7 +205,7 @@ let shownClearReward = null;
 // 아이템 조준(docs/items.md 0장) - { slot, id, hover, first, down } | null. 조준 중엔 전투만
 // targetingBattleTimeScale배속, 스왑 입력은 막는다. itemUi는 렌더에 넘기는 표시용 묶음(매 프레임 같은 객체 재사용).
 let aim = null;
-const itemUi = { items: null, config: null, equipped: null, counts: null, aim: null, preFloor: null, canRevive: false, goldMul: 1, inventory: null, bestFloor: 1, invSel: null, hasShop: false };
+const itemUi = { items: null, config: null, equipped: null, counts: null, aim: null, preFloor: null, canRevive: false, adContinue: null, adBusy: false, adFailUntil: 0, goldMul: 1, inventory: null, bestFloor: 1, invSel: null, hasShop: false };
 // 하단 바·패배 팝업·인벤토리 탭이 보는 장착/개수/예약 - inventory가 바뀔 때만 다시 읽는다(onChange).
 function refreshInventoryUi() {
   const inv = playerState.inventory;
@@ -436,6 +441,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
         if (tab) prep.tab = tab;
       },
       shopScreen,
+      mainMenuScreen, // 예: __gg.mainMenuScreen.events = [{ id: 1, title: { ko: "테스트" } }]
     };
   }
 }).catch((err) => {
@@ -858,6 +864,8 @@ canvas.addEventListener('pointerdown', (e) => {
       if (action === 'resume') paused = false;
       else if (action === 'revive') {
         if (!controller?.revive()) audio.play('gem_swap_fail');
+      } else if (action === 'adContinue') {
+        startAdContinue();
       } else if (action === 'restart' && controller?.battleState.status === 'failed') {
         // 부활 안 함 = 정비 팝업(패배). 아래 "재도전"/"마을로"가 나가는 길.
         openPrep('defeat');
@@ -1130,8 +1138,23 @@ function syncBanner() {
 // 앱 빌드: 전투 중 백그라운드로 가면 일시정지 팝업(돌아와서 "계속"). 웹은 탭 전환이 잦아 그대로 둔다.
 if (platform.id !== 'web') {
   platform.lifecycle.onPause(() => {
-    if (scene === 'game' && !prep && !tutorialRunning() && controller?.battleState.status === 'active') paused = true;
+    if (scene === 'game' && !prep && !tutorialRunning() && !adBusy && controller?.battleState.status === 'active') paused = true;
   });
+}
+
+// 이벤트 팝업 배너(docs/ads.md 3장) - 하단 배너(syncBanner)와 별개. 매 프레임 "지금 띄울 위치"를 구해 바뀔 때만 SDK를 부른다:
+// 팝업 열림 = show, 닫힘·다른 팝업·씬 전환·백그라운드 = hide, 복귀·resize = 다시 계산해 show.
+let appHidden = false;
+platform.lifecycle.onPause(() => (appHidden = true));
+platform.lifecycle.onResume(() => (appHidden = false));
+let popupBanner = null; // 지금 띄운 {x, y, width, height}(CSS px) | null
+function syncPopupBanner() {
+  const want = !appHidden && scene === 'menu' && !fade && mainMenuScreen.popup === 'event' ? mainMenuScreen.adBannerCss(canvas) : null;
+  const same = want === popupBanner || (want && popupBanner && want.x === popupBanner.x && want.y === popupBanner.y);
+  if (same) return;
+  popupBanner = want;
+  if (want) platform.ads.showPopupBanner(want);
+  else platform.ads.hidePopupBanner();
 }
 
 // devicePixelRatio 변화(브라우저 줌, 외부 모니터 이동 등)를 감지해 다시 그린다.
@@ -1195,6 +1218,43 @@ function togglePreFloor(id) {
   return inv.setReserve(id, !inv.data.loadout.preFloor[id]).ok;
 }
 
+// 패배 팝업 이어하기(docs/ads.md 2장) - 깃털·광고 버튼 판정은 continueOptions 하나.
+// mode: 경쟁 모드는 아직 잠김(플레이 경로 없음) - 열리면 여기서 그 판의 모드를 넘긴다.
+const AD_CONTINUE_KEY = 'adContinue';
+let adBusy = false; // 광고 띄우는 중(연타·재진입 금지, 일시정지 팝업 안 띄움)
+function continueState() {
+  const cfg = controller?.itemsConfig?.adContinue;
+  if (!controller || controller.battleState.status !== 'failed') return { revive: false, ad: false };
+  return continueOptions({
+    cfg,
+    mode: 'normal',
+    tutorial: tutorialRunning(),
+    featherOk: controller.canRevive(),
+    floorLeft: controller.adContinueLeft(),
+    adReady: platform.caps.rewarded || playerState.inventory.isUnlocked('adFree'),
+    save: storage.load(AD_CONTINUE_KEY),
+    nowMs: Date.now(),
+  });
+}
+
+async function startAdContinue() {
+  if (adBusy || !continueState().ad) return;
+  const bs = controller.battleState;
+  if (!playerState.inventory.isUnlocked('adFree')) {
+    adBusy = true;
+    let r;
+    try {
+      r = await showRewarded('revive', { loadTimeoutMs: controller.itemsConfig.adContinue.loadTimeoutMs });
+    } finally {
+      adBusy = false;
+    }
+    if (!r.shown) itemUi.adFailUntil = performance.now() + 2000;
+    // 보상 이벤트를 받았을 때만, 그 사이 층이 바뀌지 않았을 때만(중간에 닫으면 아무 일 없음).
+    if (!r.rewarded || controller.battleState !== bs) return;
+  }
+  if (controller.adContinue()) storage.save(AD_CONTINUE_KEY, recordUse(storage.load(AD_CONTINUE_KEY), Date.now()));
+}
+
 function buildItemUi() {
   itemUi.items = controller?.items ?? null;
   itemUi.config = controller?.itemsConfig ?? null;
@@ -1202,7 +1262,10 @@ function buildItemUi() {
   itemUi.bestFloor = playerState.bestFloor;
   itemUi.invSel = invSel;
   itemUi.hasShop = !!controller?.shopConfig;
-  itemUi.canRevive = !!controller?.canRevive();
+  const cont = continueState();
+  itemUi.canRevive = cont.revive;
+  itemUi.adContinue = cont.ad ? (playerState.inventory.isUnlocked('adFree') ? 'free' : 'ad') : null;
+  itemUi.adBusy = adBusy;
   itemUi.goldMul = controller?.goldMul ?? 1;
   return itemUi;
 }
@@ -1264,6 +1327,7 @@ function drawPrep(now) {
 let lastBattleStatus = null;
 function loop(now) {
   syncBanner();
+  syncPopupBanner();
   const rawDtMs = Math.min(64, now - lastTime);
   const dt = Math.min((now - lastTime) / 1000, MAX_DT_SEC) * timeScale;
   lastTime = now;

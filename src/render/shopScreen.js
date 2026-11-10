@@ -19,6 +19,8 @@ import { rewardFromDelta } from './rewardPopup.js';
 const REWARD_KINDS = new Set(['pack', 'passClaim', 'free']);
 // 현금 상품이 있는 탭 - 마켓 결제 전에 할 일(원스토어 로그인 등)이 있으면 들어올 때 안내한다.
 const CASH_RAILS = new Set(['packs', 'dia']);
+const DOTS = ['.', '..', '...'];
+const DOTS_MS = 400;
 
 const NATIVE_W = 180;
 const NATIVE_H = 320;
@@ -275,7 +277,7 @@ export class ShopScreen {
     this._drawRail(ctx);
     this._nine(ctx, 'upgrade/tab_body.png', ...PANEL);
     this._drawList(ctx, now);
-    if (this.popup) this._drawPopup(ctx);
+    if (this.popup) this._drawPopup(ctx, nowMs);
     if (this.toast) {
       if (now > this.toast.until) this.toast = null;
       else this._drawToast(ctx);
@@ -599,7 +601,7 @@ export class ShopScreen {
     return (p.price ?? 0) * (p.qty ? qty : 1);
   }
 
-  _drawPopup(ctx) {
+  _drawPopup(ctx, nowMs = 0) {
     this._dither(ctx, 0, 0, NATIVE_W * DRAW_SCALE, BASIS_H);
     const layout = this._popupLayout(ctx);
     const { p, tx, step } = this.popup;
@@ -659,7 +661,11 @@ export class ShopScreen {
           const skin = poor ? 'upgrade/btn_disabled' : p.cur === 'gold' || p.cur === 'krw' ? 'buttons/btn_gold' : 'buttons/btn_primary';
           this._button(ctx, skin, btns.buy, label, 22, 'buy', poor ? C.bg3 : skin === 'buttons/btn_gold' ? C.outline : C.bone);
         }
-        if (step === 'paying') this._text(ctx, '...', innerX + innerW / 2, ry + 26, 22, C.bone, 'center');
+        if (step === 'paying') {
+          // 결제 중 표시: . .. ... 를 400ms마다 돌린다. 왼쪽 기준을 '...' 폭으로 고정해 점이 늘어도 자리가 안 흔들린다.
+          const dots = DOTS[Math.floor(nowMs / DOTS_MS) % DOTS.length];
+          this._text(ctx, dots, innerX + innerW / 2 - this._measure(ctx, '...', 22) / 2, ry + 26, 22, C.bone, 'left');
+        }
       }
     }
   }

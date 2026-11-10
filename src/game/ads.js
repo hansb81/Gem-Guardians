@@ -12,4 +12,5 @@ async function withAdSound(show) {
 }
 
 export const showInterstitial = (placement) => withAdSound(() => platform.ads.showInterstitial(placement));
-export const showRewarded = (placement) => withAdSound(() => platform.ads.showRewarded(placement));
+// 결과 { rewarded, shown } - shown=false면 못 띄움(호출부가 "불러오지 못했어요").
+export const showRewarded = (placement, opts) => withAdSound(() => platform.ads.showRewarded(placement, opts));

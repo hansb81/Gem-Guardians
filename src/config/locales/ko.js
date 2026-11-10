@@ -44,7 +44,7 @@ export const ko = {
     },
     deleteData: { title: '데이터 삭제', body: '서버의 출석·우편·랭킹 기록을 지울까요?', ok: '삭제', cancel: '취소' },
     attendance: { title: '출석 체크', body: '콘텐츠 자리 (추후 결정)' },
-    event: { title: '이벤트', body: '콘텐츠 자리 (추후 결정)' },
+    event: { title: '이벤트', body: '새 이벤트를 준비하고 있어요', ad: '광고' },
     mail: { title: '우편함', body: '콘텐츠 자리 (추후 결정)' },
     help: {
       title: "도움말",
@@ -221,7 +221,7 @@ export const ko = {
   popup: {
     pause: { title: '일시정지', desc: '전투와 퍼즐이 멈춘 상태입니다.' },
     win: { title: 'FLOOR CLEAR', desc: '층의 적을 모두 처치했습니다.', descGold: '골드 {total} 획득!' },
-    lose: { title: 'DEFEATED', desc: '성벽이 무너졌습니다.' },
+    lose: { title: 'DEFEATED', desc: '성벽이 무너졌습니다.', adFail: '광고를 불러오지 못했어요' },
     prep: {
       title: { floorClear: '{n}층 클리어', defeat: '{n}층 실패', village: '정비' },
       status: { floorClear: '다음 층 준비', defeat: '재도전 준비', village: '최고 기록 {best}층' },
@@ -241,6 +241,9 @@ export const ko = {
     button: {
       resume: '계속하기',
       restart: '다시 하기',
+      adContinue: '광고 보고 이어하기',
+      freeContinue: '무료 이어하기',
+      adLoading: '불러오는 중…',
       exit: '나가기',
       next: '다음 층',
       revive: '부활',

@@ -162,6 +162,21 @@ export class ItemController {
     return !!target && board.inBounds(target.row, target.col);
   }
 
+  // 광고 이어하기(docs/ads.md) - 이번 층 남은 횟수. share = 깃털(revive)과 같은 층당 칸을 쓴다.
+  continueLeft(share) {
+    const key = share ? 'revive' : 'adContinue';
+    return Math.max(0, (this.config.items.revive?.perFloor ?? 1) - (this._usesThisFloor[key] ?? 0));
+  }
+
+  // 깃털 없이 revive 효과만(값은 items.revive). failed 상태 + 층당 남았을 때만.
+  continueFree(share) {
+    const c = this.config.items.revive;
+    if (!c || this.continueLeft(share) === 0 || !this.battleState?.revive(c.pct, c.freezeSec, c.bossMul)) return false;
+    const key = share ? 'revive' : 'adContinue';
+    this._usesThisFloor[key] = (this._usesThisFloor[key] ?? 0) + 1;
+    return true;
+  }
+
   _consume(id) {
     this.inv.spend(id, 1);
     this._lastUseAt[id] = this.gameState?.validSwapCount ?? 0;

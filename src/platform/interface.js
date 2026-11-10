@@ -16,9 +16,10 @@
  *
  * @typedef {Object} Platform
  * @property {PlatformId} id
+ * @property {boolean} adTesting  광고가 테스트 모드(테스트 id) - 이벤트 팝업에 배너 목표 위치 테두리를 그린다(실기기 위치 확인용)
  * @property {boolean} dev   개발용 가짜 결제를 덮어쓴 상태(src/platform/dev) - 상점이 마켓 상품 id 없이도 현금 상품을 보여 준다
  * @property {{ iap:boolean, ads:boolean, banner:boolean, rewarded:boolean, leaderboard:boolean,
- *              externalLinks:boolean, haptics:boolean, backButton:boolean, exit:boolean, restore:boolean, autoRestore:boolean,
+ *              externalLinks:boolean, haptics:boolean, popupBanner:boolean, backButton:boolean, exit:boolean, restore:boolean, autoRestore:boolean,
  *              storeLinks:'play'|'onestore'|'appstore'|null }} caps
  *   restore = 상점에 "구매 내역 복원"을 보일지(iOS 필수). autoRestore = 시작할 때 restore를 자동으로 돌릴지(토스 - 복원 버튼 없음,
  *   앱을 지우면 Storage도 지워지므로 재설치 때 비소모성을 되살린다).
@@ -35,8 +36,11 @@
  *   restore = 완료된 비소모성 주문(config/products.json type) 다시 지급 + 환불된 것은 onRevoke.
  *   getStoreStatus = 결제 전에 사용자가 할 일(원스토어: 서비스 앱 로그인/설치) - null이면 없음. 상점 현금 탭이 안내 + 버튼을 띄우고,
  *   버튼은 fixStoreStatus(로그인·설치 화면 -> 다시 연결, 연결되면 true).
- * @property {{ showInterstitial(placement:string):Promise<boolean>, showRewarded(placement:string):Promise<{rewarded:boolean}>,
- *              showBanner():Promise<number>, hideBanner():void, getBannerSlotHeight():number }} ads
+ * @property {{ showInterstitial(placement:string):Promise<boolean>, showRewarded(placement:string, opts?:{loadTimeoutMs?:number}):Promise<{rewarded:boolean, shown:boolean}>,
+ *              showBanner():Promise<number>, hideBanner():void, getBannerSlotHeight():number,
+ *              showPopupBanner(rectCss:{x:number,y:number,width:number,height:number}):void, hidePopupBanner():void }} ads
+ *   showRewarded: shown=false = 못 띄움(로드 실패·noFill·loadTimeoutMs 초과 - 게임은 "불러오지 못했어요"), rewarded = 끝까지 봐서 보상 이벤트를 받음.
+ *   showPopupBanner = 이벤트 팝업 광고 칸(docs/ads.md 3장) - 하단 배너(showBanner·#banner-slot)와 별개, caps.popupBanner. rectCss = 화면 CSS px.
  *   showBanner = 실제로 뜬 배너 높이(px), 안 채워지면(noFill) 0. getBannerSlotHeight = 화면에 늘 비워 둘 배너 자리 높이(px, 동기)
  *   - 토스 102 고정, AdMob 적응형은 기기 폭으로 계산. 게임은 이 자리(<div id="banner-slot">)를 배율 변화 없이 항상 비워 두고,
  *   어댑터는 배너를 그 요소(토스 attachBanner 대상) 또는 그 위치(AdMob 하단)에 띄운다.
@@ -56,7 +60,8 @@ export function defaultPlatform() {
   return {
     id: 'web',
     dev: false,
-    caps: { iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, externalLinks: false, haptics: false, backButton: false, exit: false, restore: false, autoRestore: false, storeLinks: null },
+    adTesting: false,
+    caps: { iap: false, ads: false, banner: false, popupBanner: false, rewarded: false, leaderboard: false, externalLinks: false, haptics: false, backButton: false, exit: false, restore: false, autoRestore: false, storeLinks: null },
     init: resolved(undefined),
     storage: { get: resolved(null), set: resolved(undefined), remove: resolved(undefined) },
     identity: { getUserId: resolved('') },
@@ -68,7 +73,7 @@ export function defaultPlatform() {
       getStoreStatus: () => null,
       fixStoreStatus: resolved(false),
     },
-    ads: { showInterstitial: resolved(false), showRewarded: resolved({ rewarded: false }), showBanner: resolved(0), hideBanner: noop, getBannerSlotHeight: () => 0 },
+    ads: { showInterstitial: resolved(false), showRewarded: resolved({ rewarded: false, shown: false }), showBanner: resolved(0), hideBanner: noop, getBannerSlotHeight: () => 0, showPopupBanner: noop, hidePopupBanner: noop },
     leaderboard: { submit: resolved(false), open: resolved(undefined) },
     haptics: { impact: noop },
     lifecycle: { onPause: noop, onResume: noop, onBack: noop, exit: noop },

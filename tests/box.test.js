@@ -268,7 +268,7 @@ test('박스+폭탄 조합: 같은 색 랜덤 2개가 폭탄 잼으로 변환된
 
 // ---- 조합: 박스+컬러 ----
 
-test('박스+컬러 조합: 같은 색이 전부 박스로 변환되고(터지지 않음) 변환개수x2 랜덤이 터진다', () => {
+test('박스+컬러 조합: 같은 색 일반 잼은 박스로 바뀌어 각자 한 번씩 발동하고, 같은 색 특수 잼은 바뀌지 않고 자기 효과로 터진다', () => {
   const rows = 6;
   const cols = 6;
   const grid = new Array(rows * cols).fill(1);
@@ -277,38 +277,138 @@ test('박스+컬러 조합: 같은 색이 전부 박스로 변환되고(터지�
   grid[idx(2, 2)] = 3;
   grid[idx(2, 5)] = 3;
   grid[idx(5, 0)] = 3;
+  grid[idx(4, 4)] = 3; // 같은 색 라인 잼
   const board = boardFromGrid(rows, cols, grid, 106);
+  board.setSpecial(0, 0, { kind: SPECIAL_KIND.BOX, direction: null });
+  board.set(0, 1, COLORLESS);
+  board.setSpecial(0, 1, { kind: SPECIAL_KIND.COLOR, direction: null });
+  board.setSpecial(4, 4, { kind: SPECIAL_KIND.LINE, direction: 'horizontal' });
+  const state = new GameState({ board });
+
+  assert.equal(state.trySwap(0, 0, 0, 1), true);
+  const effects = collectAllEffects(state);
+
+  const combo = effects.find((e) => e.type === 'comboActivate');
+  assert.equal(combo.comboKind, COMBO_KIND.BOX_COLOR);
+  assert.deepEqual(combo.chainCells, [{ row: 4, col: 4 }]);
+
+  const transform = effects.find((e) => e.type === 'specialTransform');
+  assert.equal(transform.kind, SPECIAL_KIND.BOX);
+  // 일반 잼 (2,2),(2,5),(5,0)만 바뀐다 - 라인 잼(4,4)은 그대로.
+  assert.deepEqual(
+    transform.cells.map((c) => `${c.row},${c.col}`).sort(),
+    ['2,2', '2,5', '5,0']
+  );
+
+  const activations = effects.filter((e) => e.type === 'specialActivate');
+  for (const cell of transform.cells) {
+    const mine = activations.filter((e) => e.position.row === cell.row && e.position.col === cell.col);
+    assert.equal(mine.length, 1, `바뀐 박스 (${cell.row},${cell.col})는 정확히 한 번 발동해야 한다`);
+    assert.equal(mine[0].kind, SPECIAL_KIND.BOX);
+    assert.equal(mine[0].affected.length, 3, '자기 칸 + 랜덤 2개');
+  }
+  const line = activations.filter((e) => e.position.row === 4 && e.position.col === 4);
+  assert.equal(line.length, 1);
+  assert.equal(line[0].kind, SPECIAL_KIND.LINE, '같은 색 특수 잼은 박스로 바뀌지 않고 자기 효과로 터진다');
+
+  assert.equal(state.resolutions.length, 0, 'drain이 끝나 있어야 한다');
+  assert.ok(!board.grid.includes(EMPTY));
+});
+
+test('박스+컬러: 바뀐 박스가 많아 보드 곳곳이 armed여도 각 박스는 남은 잼 중 2개를 친다', () => {
+  const rows = 6;
+  const cols = 6;
+  const grid = Array.from({ length: rows * cols }, (_, i) => (i % 3 === 0 ? 3 : 1 + (i % 2)));
+  const board = boardFromGrid(rows, cols, grid, 109);
+  board.set(0, 0, 3);
   board.setSpecial(0, 0, { kind: SPECIAL_KIND.BOX, direction: null });
   board.set(0, 1, COLORLESS);
   board.setSpecial(0, 1, { kind: SPECIAL_KIND.COLOR, direction: null });
   const state = new GameState({ board });
 
-  const accepted = state.trySwap(0, 0, 0, 1);
-  assert.equal(accepted, true);
-
-  // 스왑 애니메이션(160ms)이 끝나는 순간 _resolveComboStep이 동기로 실행되므로, 그 한 틱 뒤에는
-  // 변환이 이미 board.setSpecial로 반영돼 있다 - 이후 cascade에서 그 칸이 다른 매치에 휘말려
-  // 사라질 수도 있으므로(정상 동작), "살아남는다"는 이 시점에서 확인해야 한다.
-  state.update(0.2);
-  const transform = state.effects.find((e) => e.type === 'specialTransform');
-  assert.ok(transform, 'specialTransform 이펙트가 있어야 한다');
-  assert.equal(transform.kind, SPECIAL_KIND.BOX);
-  // 색3을 가진 일반 잼: (2,2),(2,5),(5,0) = 3칸(박스 잼 자신은 이미 특수라 plainCellsOfColor에서 빠진다).
-  assert.equal(transform.cells.length, 3);
-  for (const cell of transform.cells) {
-    const special = board.getSpecial(cell.row, cell.col);
-    assert.ok(special, '변환 직후에는 보드에 박스 잼으로 남아있어야 한다(즉시 터지지 않음)');
-    assert.equal(special.kind, SPECIAL_KIND.BOX);
-  }
-
+  assert.equal(state.trySwap(0, 0, 0, 1), true);
   const effects = collectAllEffects(state);
-  const combo = effects.find((e) => e.type === 'comboActivate');
-  assert.ok(combo);
-  assert.equal(combo.comboKind, COMBO_KIND.BOX_COLOR);
+  const transform = effects.find((e) => e.type === 'specialTransform');
+  assert.ok(transform.cells.length >= 8, '바뀐 박스가 충분히 많아야 의미 있는 테스트');
+  const keys = new Set(transform.cells.map((c) => `${c.row},${c.col}`));
+  const boxActs = effects.filter(
+    (e) => e.type === 'specialActivate' && e.kind === SPECIAL_KIND.BOX && keys.has(`${e.position.row},${e.position.col}`)
+  );
+  assert.equal(boxActs.length, transform.cells.length);
+  for (const act of boxActs) assert.equal(act.affected.length, 3, '자기 칸 + 랜덤 2개(혼자만 터지면 안 된다)');
+});
 
+test('자기 차례를 기다리던 변환 특수 잼이 먼저 맞으면 그때 한 번만 발동한다', () => {
+  // 박스+라인: 바뀐 라인 2개가 같은 줄에 있으면 앞 라인이 뒤 라인을 먼저 친다.
+  const rows = 6;
+  const cols = 6;
+  const grid = new Array(rows * cols).fill(1);
+  const idx = (r, c) => r * cols + c;
+  grid[idx(0, 0)] = 2;
+  grid[idx(3, 1)] = 2;
+  grid[idx(3, 4)] = 2;
+  const board = boardFromGrid(rows, cols, grid, 107);
+  board.setSpecial(0, 0, { kind: SPECIAL_KIND.BOX, direction: null });
+  board.setSpecial(0, 1, { kind: SPECIAL_KIND.LINE, direction: 'horizontal' });
+  const state = new GameState({ board });
+
+  assert.equal(state.trySwap(0, 0, 0, 1), true);
+  const effects = collectAllEffects(state);
+  const transform = effects.find((e) => e.type === 'specialTransform');
+  assert.equal(transform.cells.length, 2);
+  for (const cell of transform.cells) {
+    const n = effects.filter(
+      (e) => e.type === 'specialActivate' && e.position.row === cell.row && e.position.col === cell.col
+    ).length;
+    assert.equal(n, 1, `(${cell.row},${cell.col})는 한 번만 발동`);
+  }
+});
+
+test('_armCell: 차례를 기다리는 특수 잼 칸을 다시 치면 대기 시간이 그 시각으로 앞당겨진다', () => {
+  const board = boardFromGrid(3, 3, new Array(9).fill(1), 108);
+  board.setSpecial(1, 1, { kind: SPECIAL_KIND.BOX, direction: null });
+  const state = new GameState({ board });
+  const resolution = state._createResolution();
+  resolution.chainActivated = new Set();
+  resolution.protectedKeys = new Set();
+  state._armCell(resolution, { row: 1, col: 1 }, 500, 'transform', 1, { forceSelfEffect: true });
+  const cs = board.cellStates[board.index(1, 1)];
+  cs.elapsedMs = 100;
+  state._armCell(resolution, { row: 1, col: 1 }, 30, 'line', 1);
+  assert.equal(cs.durationMs, 130, '맞은 시각(100+30)에 발동');
+  assert.equal(board.cellStates[board.index(1, 1)], cs, '새 예약을 따로 만들지 않는다(한 번만 발동)');
+});
+
+test('박스 잼 스왑으로 매치도 생기면 매치가 터지고 특수 잼이 생기며 박스 효과도 발동한다', () => {
+  // (3,2)의 3이 (2,2)로 올라가면 row2가 3 3 3 3(라인4) -> (2,2)에 라인 잼. 박스는 (3,2)로 간다.
+  const grid = [
+    0, 1, 2, 3, 4, 0,
+    1, 2, 3, 4, 0, 1,
+    3, 3, 0, 3, 2, 4,
+    2, 4, 3, 1, 0, 2,
+    4, 0, 1, 2, 3, 4,
+    0, 1, 2, 0, 1, 3,
+  ];
+  const board = boardFromGrid(6, 6, grid, 7);
+  assert.equal(findMatches(board).length, 0);
+  board.setSpecial(2, 2, { kind: SPECIAL_KIND.BOX, direction: null });
+  const state = new GameState({ board });
+
+  assert.equal(state.trySwap(2, 2, 3, 2), true);
+  const effects = collectAllEffects(state);
+
+  const creates = effects.filter((e) => e.type === 'specialCreate');
+  assert.ok(
+    creates.some((e) => e.kind === SPECIAL_KIND.LINE && e.position.row === 2 && e.position.col === 2),
+    '라인4 매치로 상대 잼 칸(2,2)에 라인 잼이 생겨야 한다'
+  );
   const boxActivations = effects.filter((e) => e.type === 'specialActivate' && e.kind === SPECIAL_KIND.BOX);
-  assert.ok(boxActivations.length >= 1, '변환개수x2 랜덤을 지우는 BOX specialActivate가 있어야 한다');
-
-  assert.equal(state.resolutions.length, 0, 'drain이 끝나 있어야 한다');
+  assert.equal(boxActivations.length, 1, '박스 효과는 한 번 발동한다');
+  assert.deepEqual(boxActivations[0].position, { row: 3, col: 2 });
+  assert.ok(
+    !boxActivations[0].affected.some((c) => c.row === 2 && c.col === 2),
+    '새로 생긴 특수 잼 칸은 박스 효과가 지우지 않는다'
+  );
+  assert.equal(state.resolutions.length, 0);
   assert.ok(!board.grid.includes(EMPTY));
 });

@@ -1020,7 +1020,7 @@
     "box_box": "box_origin + 번개 6갈래(두 박스 색 번갈아) 50ms 간격",
     "box_line": "box_origin + 번개 2갈래(40ms 간격) -> 맞은 잼이 특수 잼 그림으로 교체(라인) -> 60ms 뒤부터 150ms 간격 발동",
     "box_bomb": "box_line과 같고 폭탄으로",
-    "box_color": "color_origin + wisp -> 박스 색 잼 전부 특수 잼 그림으로 교체(박스) -> 100ms 뒤부터 120ms 간격으로 각 박스가 번개 2갈래",
+    "box_color": "color_origin + wisp -> 박스 색 잼 전부 특수 잼 그림으로 교체(박스) -> 100ms 뒤부터 120ms 간격으로 각 박스가 번개 2갈래 후 사라짐, 같은 색 기존 특수 잼은 바뀌지 않고 그 뒤 차례로 발동",
     "note": "컬러 조합 3종은 2.7~2.9초. 간격을 줄이면 2초 안으로 맞출 수 있음. 미리보기 art/effects/combos/*.gif"
   }
 }

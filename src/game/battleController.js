@@ -97,6 +97,19 @@ export class BattleController {
     return !!this.items?.use('revive').ok;
   }
 
+  // 광고 이어하기(docs/ads.md) - 깃털 없이 같은 효과. 층당 횟수는 config adContinue.sharePerFloorWithRevive.
+  get _shareContinue() {
+    return !!this.itemsConfig?.adContinue?.sharePerFloorWithRevive;
+  }
+
+  adContinueLeft() {
+    return this.items?.continueLeft(this._shareContinue) ?? 0;
+  }
+
+  adContinue() {
+    return !!this.items?.continueFree(this._shareContinue);
+  }
+
   get floor() {
     return this.practice ? this.currentFloor.floor : playerState.floor;
   }

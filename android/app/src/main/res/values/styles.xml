@@ -18,7 +18,7 @@
 
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
         <item name="android:background">@drawable/splash</item>
-        <!-- Android 12+는 splash.png 대신 시스템 스플래시(아이콘 + 이 배경색)를 띄운다 -->
-        <item name="windowSplashScreenBackground">#0d0a10</item>
+        <!-- Android 12+는 splash.png 대신 시스템 스플래시(아이콘 + 이 배경색)를 띄운다. 배경 = 적응형 아이콘 배경(ic_launcher_background)과 같은 색 -->
+        <item name="windowSplashScreenBackground">@color/ic_launcher_background</item>
     </style>
 </resources>

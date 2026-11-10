@@ -5,6 +5,8 @@
   "reserveSec": 1.5,
   "_barrierDoc": "blockFlashSec = 결계가 적 공격을 막을 때 wallBlocked 이벤트(렌더 번쩍임)를 같은 적에 대해 다시 내기까지의 최소 간격(초).",
   "_reserveDoc": "낫·망치(action destroy)·섞기(shuffle) 대상이 바쁘면 이 시간(초)까지 대기했다가 한가해지면 실행, 넘으면 취소(소모 없음).",
+  "_adContinueDoc": "패배 팝업 '광고 보고 이어하기'(docs/ads.md). 효과는 items.revive(pct·freezeSec·bossMul) 그대로, 깃털은 안 씀. sharePerFloorWithRevive = 깃털과 층당 1회(revive perFloor) 공유. dailyCap = 하루(KST 0시 리셋) 최대. competitive = 경쟁 모드 허용(false면 깃털·광고 둘 다 없음). loadTimeoutMs = 광고가 이 시간 안에 안 뜨면 실패 처리.",
+  "adContinue": { "enabled": true, "dailyCap": 5, "sharePerFloorWithRevive": true, "competitive": false, "loadTimeoutMs": 8000 },
   "starter": { "count": 3, "equipped": ["scythe_h", "hammer", "repair"] },
   "bossFirstClearReward": { "count": 2 },
   "items": {
