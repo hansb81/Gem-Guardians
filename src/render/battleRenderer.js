@@ -1,5 +1,6 @@
 import { GEM_TYPES } from '../config/gems.js';
 import { TOWER_LAYOUT_CONFIG } from '../config/towerLayout.js';
+import { FRAME_NATIVE_W, snapPx } from './screenFit.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { pickBackgroundSheetName } from '../config/backgroundSheet.js';
 import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
@@ -48,6 +49,8 @@ const DAMAGE_FLOAT_PX = 26;
 
 // assets/backgrounds/manifest.json 로딩 실패 시 쓰는 기본값(manifest.json 기준 고정값).
 const DEFAULT_BG_FRAME_W = 150;
+// 150폭 층 배경 -> 180폭 frame 가로에 꽉(1.2 x s). 180폭 배경이 들어오면 1로.
+const BG_FRAME_SCALE = 1.2;
 const DEFAULT_BG_FRAME_H = 80;
 const DEFAULT_BG_FRAMES = 8;
 const DEFAULT_BG_FRAME_MS = 200;
@@ -190,7 +193,7 @@ export class BattleRenderer {
     const towers = battleState.towers || [];
     this._dev = { layout, assets, now }; // devShoot용(마지막 프레임)
 
-    const bg = this._drawBackground(ctx, layout.content, assets, bgNow, hud?.floor ?? 1);
+    const bg = this._drawBackground(ctx, layout.bgRect, assets, bgNow, hud?.floor ?? 1);
 
     this._drawFloorLabel(ctx, layout.floorLabel, hud, assets);
     this._drawWallHealthBar(ctx, layout.wallBar, battleState, assets);
@@ -415,8 +418,10 @@ export class BattleRenderer {
     // towerArea + 벽 영역 + track을 합친 영역(HUD 줄 아래, 양쪽 6px 여백) - 층별 배경을
     // 그 안쪽에 그린다(manifest.json의 신단(0~46)/길(46~150) 레이아웃이 이 폭 기준).
     const content = { x: rect.x + 6, y: contentY, width: rect.width - 12, height: contentHeight };
+    // 층 배경은 패널(= frame) 가로 끝까지, 세로는 content만큼(_drawBackground).
+    const bgRect = { x: rect.x, y: contentY, width: rect.width, height: contentHeight };
 
-    return { floorLabel, wallBar, pauseButton, towerArea, track, content };
+    return { floorLabel, wallBar, pauseButton, towerArea, track, content, bgRect };
   }
 
   // assets/backgrounds - 전투 패널 안쪽에 가장 먼저 그리는 층별 배경. manifest.json이나 해당
@@ -435,18 +440,14 @@ export class BattleRenderer {
     const frameMs = manifest.frameMs ?? DEFAULT_BG_FRAME_MS;
     const frame = Math.floor(now / frameMs) % frames;
 
-    // 캔버스가 항상 9:16로 고정돼 패널 안쪽 가로:세로 비율이 화면 크기와 무관하게 항상
-    // 2.0:1 이상(원본은 150:80=1.875:1)이라 가로 기준 배율이 세로 기준보다 항상 크거나 같다.
-    // "가장 큰 정수 배율" 기준을 그대로 쓰면 화면 크기에 따라 150px 단위로 들쭉날쭉한 좌우
-    // 여백이 생겨서(작은 화면일수록 더 심함) 패널 가로폭을 정확히 채우는 배율(비정수 허용)로
-    // 바꾼다 - 신단/성벽은 가로 좌표 기준 레이아웃이라 가로 정렬이 더 중요하다. 세로는 이
-    // 배율로 넘치므로(위 비율 관계상 항상 넘치거나 꼭 맞음) 패널 영역으로 클리핑하고 뒷벽이
-    // 있는 위쪽 기준으로 맞춘다(좌표는 정수로 스냅해 스무딩 꺼짐 상태를 유지).
-    const scale = rect.width / frameW;
-    const drawW = Math.round(frameW * scale);
-    const drawH = Math.round(frameH * scale);
-    const offsetX = Math.round(rect.x);
-    const offsetY = Math.round(rect.y);
+    // 배율 = BG_FRAME_SCALE x s(frame 배율) 고정 - 레이아웃이 basis 고정 px라 모든 기기에서 같은 모양,
+    // 세로는 같은 양(80 중 아래 약 12.5px)만 잘린다. 위쪽(뒷벽) 기준, 좌표는 기기 px로 스냅.
+    const dpr = this.dpr ?? 1;
+    const scale = (rect.width / FRAME_NATIVE_W) * BG_FRAME_SCALE;
+    const drawW = snapPx(frameW * scale, dpr);
+    const drawH = snapPx(frameH * scale, dpr);
+    const offsetX = snapPx(rect.x, dpr);
+    const offsetY = snapPx(rect.y, dpr);
 
     ctx.save();
     ctx.fillStyle = BG_FALLBACK_FILL;

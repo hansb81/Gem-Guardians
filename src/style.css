@@ -21,17 +21,18 @@ html, body {
   padding: 0;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: #0d0a10;
   overflow: hidden;
   touch-action: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 #game-canvas {
-  /* 가로/세로는 main.js의 resize()가 고정 비율(LAYOUT_CONFIG.aspectRatio)에 맞춰 px로
-     직접 지정한다 - 남는 공간은 위 body 배경(레터박스)으로 보인다. */
+  /* 화면 전체. 가로/세로 px는 main.js resize()가 innerWidth/innerHeight로 지정하고, 게임은 그 안
+     안전 frame(src/render/screenFit.js)에 그린다 - frame 밖은 배경 블리드. */
   display: block;
+  position: fixed;
+  left: 0;
+  top: 0;
   touch-action: none;
+  image-rendering: pixelated;
 }

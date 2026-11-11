@@ -635,14 +635,14 @@ export class MainMenuScreen {
   // 칸이 없거나, 배너가 칸에 안 들어가거나, 화면 밖이거나, 캔버스 폭 < minCanvasCss면 null(빈 칸만).
   adBannerCss(canvas) {
     if (this.popup !== 'event' || !this.popupAd() || !this._transform) return null;
+    // box = 안전 frame 사각형(main.js가 getBoundingClientRect를 frame으로 바꿔 둠) - 캔버스 좌표와 CSS px가 1:1.
     const box = canvas.getBoundingClientRect();
-    if (box.width < EVENT_AD.minCanvasCss || !canvas.clientWidth) return null;
-    const s = box.width / canvas.clientWidth;
+    if (box.width < EVENT_AD.minCanvasCss) return null;
     const r = this._toScreen(this._adSlotBasis(this._popupCardBasis()));
     const { bannerW: w, bannerH: h } = EVENT_AD;
-    if (r.width * s < w || r.height * s < h) return null;
-    const x = Math.round(box.left + (r.x + r.width / 2) * s - w / 2);
-    const y = Math.round(box.top + (r.y + r.height / 2) * s - h / 2);
+    if (r.width < w || r.height < h) return null;
+    const x = Math.round(box.left + r.x + r.width / 2 - w / 2);
+    const y = Math.round(box.top + r.y + r.height / 2 - h / 2);
     if (x < 0 || y < 0 || x + w > window.innerWidth || y + h > window.innerHeight) return null;
     return { x, y, width: w, height: h };
   }

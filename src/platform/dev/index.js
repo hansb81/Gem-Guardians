@@ -2,7 +2,11 @@
 // shortcut: 결제가 항상 즉시 성공한다 - 취소/실패/미지급 복구를 시험하려면 여기에 분기를 추가한다.
 // 광고(docs/ads.md): 보상형 = 2초 검은 화면 "TEST AD" 뒤 보상. ?adfail=1 = 못 띄움(shown:false), ?adclose=1 = 중간에 닫음(보상 없음).
 // 이벤트 팝업 배너 = 게임이 넘긴 좌표에 회색 div(위치 확인용).
+// 화면 맞춤 확인: ?insets=top,right,bottom,left(CSS px) = 가짜 안전영역, ?banner=50 = 하단 배너 자리 높이.
 const FAKE_AD_MS = 2000;
+const devQuery = new URLSearchParams(location.search);
+const fakeInsets = devQuery.get('insets')?.split(',').map(Number);
+const fakeBanner = Number(devQuery.get('banner')) || 0;
 
 function fakeRewarded() {
   const q = new URLSearchParams(location.search);
@@ -34,8 +38,12 @@ export function withDev(base) {
         return { ok: !!(await onGrant(productKey, orderId)), productKey, orderId };
       },
     },
+    ...(fakeInsets && {
+      layout: { ...base.layout, getInsets: () => ({ top: fakeInsets[0] || 0, right: fakeInsets[1] || 0, bottom: fakeInsets[2] || 0, left: fakeInsets[3] || 0 }) },
+    }),
     ads: {
       ...base.ads,
+      ...(fakeBanner && { getBannerSlotHeight: () => fakeBanner }),
       showRewarded: fakeRewarded,
       showPopupBanner({ x, y, width, height }) {
         if (!bannerEl) {

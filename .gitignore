@@ -13,3 +13,4 @@ dist/
 # Supabase 비밀값 (supabase secrets로만)
 .env.local
 server/supabase/functions/.env
+preview/screen-fit/

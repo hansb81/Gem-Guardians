@@ -25,6 +25,7 @@ const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
 const BOARD_FLOAT_MS = 600; // 보드 위 데미지 폰트 숫자(해제 부적 +5) 수명
 const BOMB_BOUNCE_MS = 250; // 해제 부적 후 시한폭탄 숫자 튕김
+const BLEED_FILL = '#0d0a10'; // frame 밖 기본 블리드(배경 manifest에 bleedFill이 없을 때)
 // 특수 잼 조합(comboActivate)은 전용 소리가 아직 없다 - 섞인 두 종류의 소리를 같이 낸다
 // (assets/sfx/README.md "특수 보석끼리 조합은 ... 두 소리를 같이 재생").
 const COMBO_SFX = { line: 'line_fire', bomb: 'bomb_explode', box: 'box_open', color: 'color_burst' };
@@ -200,19 +201,34 @@ export class CanvasRenderer {
     }
   }
 
-  // CSS 픽셀 크기와 devicePixelRatio를 받아 캔버스 실제 해상도를 맞춘다.
-  resize(cssWidth, cssHeight, dpr) {
-    this.cssWidth = cssWidth;
-    this.cssHeight = cssHeight;
-    this.dpr = dpr;
-    this.canvas.width = Math.round(cssWidth * dpr);
-    this.canvas.height = Math.round(cssHeight * dpr);
-    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  // screenFit.computeScreenFit() 결과를 받는다. 캔버스 = 화면 전체(full), ctx 원점 = frame 왼쪽 위(정수 기기 px).
+  // 각 화면은 frame CSS 크기(cssWidth/cssHeight)만 보고 그린다 - frame 밖은 drawBleed()가 채운다.
+  resize(fit) {
+    this.fit = fit;
+    this.cssWidth = fit.frame.css.w;
+    this.cssHeight = fit.frame.css.h;
+    this.dpr = fit.dpr;
+    this._battleRenderer.dpr = fit.dpr;
+    if (this.canvas.width !== fit.full.w) this.canvas.width = fit.full.w;
+    if (this.canvas.height !== fit.full.h) this.canvas.height = fit.full.h;
+    this.ctx.setTransform(fit.dpr, 0, 0, fit.dpr, fit.frame.x, fit.frame.y);
+  }
+
+  // 매 프레임 맨 먼저 - 캔버스 전체(frame 밖 블리드 포함)를 단색으로. 그림 블리드는 각 배경(LayeredBg)이 그 위에 그린다.
+  drawBleed(fill = BLEED_FILL) {
+    const { ctx, fit } = this;
+    if (!fit) return;
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, fit.full.w, fit.full.h);
+    ctx.restore();
   }
 
   // 타이틀 화면(titleScreen.js) - ctx/css 크기만 공유하고 그리기는 TitleScreen이 직접 한다.
   drawTitle(titleScreen, now, dtMs) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
+    this.drawBleed(titleScreen.bg.bleedFill);
     titleScreen.draw(ctx, width, height, dtMs, now);
   }
 
@@ -226,6 +242,7 @@ export class CanvasRenderer {
   drawMainMenu(mainMenuScreen, playerState, now, alpha = 1) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     if (alpha >= 1) {
+      this.drawBleed(mainMenuScreen.bgLayers.bleedFill);
       mainMenuScreen.draw(ctx, width, height, playerState, now, this.assets);
       return;
     }
@@ -238,6 +255,7 @@ export class CanvasRenderer {
   // 상점 scene(shopScreen.js) - 메인 메뉴처럼 ctx/css 크기만 공유하고 그리기는 ShopScreen이 직접 한다.
   drawShop(shopScreen, now) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
+    this.drawBleed();
     shopScreen.draw(ctx, width, height, now, this.assets);
   }
 
@@ -246,7 +264,9 @@ export class CanvasRenderer {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     if (alpha <= 0 || width === 0 || height === 0) return;
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, alpha)})`;
-    ctx.fillRect(0, 0, width, height);
+    // 블리드까지 덮는다(frame 원점 기준이라 음수 오프셋).
+    const f = this.fit.frame.css;
+    ctx.fillRect(-f.x, -f.y, this.fit.full.css.w, this.fit.full.css.h);
   }
 
   // itemUi = { items(ItemController), config(items.json), equipped, counts, aim } | null(아이템 기능 없음).
@@ -270,7 +290,7 @@ export class CanvasRenderer {
     const dtMs = this._lastFrameTime == null ? 16 : Math.min(64, now - this._lastFrameTime);
     this._lastFrameTime = now;
 
-    ctx.clearRect(0, 0, width, height);
+    this.drawBleed(); // 히트스톱 중엔 위에서 return - 이전 프레임이 그대로 남는다.
 
     const { board } = gameState;
     const layout = computeLayout(width, height, board.rows, board.cols);

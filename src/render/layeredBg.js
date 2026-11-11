@@ -5,6 +5,7 @@
 // 좌표는 전부 네이티브 px(180x320)이고, draw()에 받은 scale로 화면 px로 옮긴다.
 // 입자 공식의 상수는 manifest의 rule 문자열을 코드로 옮긴 것이다(문자열을 평가하지 않는다).
 import { loadImage } from './assetLoader.js';
+import { FRAME_NATIVE_W, FRAME_NATIVE_H } from './screenFit.js';
 
 const TAU = Math.PI * 2;
 
@@ -59,30 +60,45 @@ export class LayeredBg {
   setManifest(background) {
     if (!background || this.background) return;
     this.background = background;
-    for (const file of [background.base, ...(background.pieces ?? []).map((p) => p.file)]) {
+    for (const file of [background.base, background.bleed?.file, ...(background.pieces ?? []).map((p) => p.file)]) {
       if (!file || this.images.has(file)) continue;
       this.images.set(file, null);
       loadImage(`${this.dir}/${file}`).then((s) => this.images.set(file, s));
     }
   }
 
+  // frame 밖 단색(manifest.background.bleedFill) - 없으면 undefined(렌더러 기본색).
+  get bleedFill() {
+    return this.background?.bleedFill;
+  }
+
   // (offsetX, offsetY)를 네이티브 (0,0)으로 두고 1 네이티브 px = scale 화면 px로 그린다.
+  // manifest.background.bleed = { file, w, h }(예: 240x432, 가운데 180x320이 base 자리)가 있으면 base 밑에 깔아 frame 밖까지 채운다.
   // manifest나 이미지가 아직 없으면 그 부분만 조용히 건너뛴다(호출부는 멈추지 않는다).
   draw(ctx, offsetX, offsetY, scale, now) {
     const bg = this.background;
     if (!bg) return;
 
-    // 네이티브 사각형 -> 화면 사각형. 경계를 반올림해 조각/입자가 베이스와 어긋나지 않게 한다.
+    // 네이티브 사각형 -> 화면 사각형. 경계를 기기 px로 반올림해 조각/입자가 베이스와 어긋나지 않게 한다
+    // (d = ctx의 기기 px/단위 배율, 프레임당 한 번. frame 원점이 정수 기기 px라 이 좌표계에서 반올림하면 된다).
+    const d = ctx.getTransform().a;
+    const rd = (v) => Math.round(v * d) / d;
     const place = (x, y, w, h) => {
-      const dx = Math.round(offsetX + x * scale);
-      const dy = Math.round(offsetY + y * scale);
-      return [dx, dy, Math.round(offsetX + (x + w) * scale) - dx, Math.round(offsetY + (y + h) * scale) - dy];
+      const dx = rd(offsetX + x * scale);
+      const dy = rd(offsetY + y * scale);
+      return [dx, dy, rd(offsetX + (x + w) * scale) - dx, rd(offsetY + (y + h) * scale) - dy];
     };
     const pixel = (x, y, color) => {
       if (!color) return;
       ctx.fillStyle = color;
       ctx.fillRect(...place(x, y, 1, 1));
     };
+
+    const bleed = bg.bleed && this.images.get(bg.bleed.file);
+    if (ready(bleed)) {
+      const { w, h } = bg.bleed;
+      ctx.drawImage(bleed.img, ...place(-(w - FRAME_NATIVE_W) / 2, -(h - FRAME_NATIVE_H) / 2, w, h));
+    }
 
     const base = this.images.get(bg.base);
     const baseDrawn = ready(base);

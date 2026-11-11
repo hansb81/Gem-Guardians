@@ -17,7 +17,7 @@ import { setupDevPanel } from './game/devPanel.js';
 import { setupSfxTestPanel } from './game/sfxTestPanel.js';
 import { audio, bgmForScene } from './audio/AudioManager.js';
 import { ANIMATION_DURATIONS_MS } from './config/animation.js';
-import { LAYOUT_CONFIG } from './config/layout.js';
+import { computeScreenFit } from './render/screenFit.js';
 import { t, tOr, setLocale } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
 import { towerAttack, normalFloorReward } from './core/economy/economy.js';
@@ -441,6 +441,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
         if (tab) prep.tab = tab;
       },
       shopScreen,
+      enterShop,
       mainMenuScreen, // 예: __gg.mainMenuScreen.events = [{ id: 1, title: { ko: "테스트" } }]
     };
   }
@@ -1073,16 +1074,9 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
-// 데스크톱도 모바일과 같은 고정 비율(LAYOUT_CONFIG.aspectRatio) 캔버스를 쓴다 - 창이 그
-// 비율보다 넓거나 길면 나머지는 레터박스(style.css의 검은 배경)로 남는다.
-function fitAspectRatio(maxWidth, maxHeight, ratio) {
-  if (maxWidth / maxHeight > ratio) return { width: maxHeight * ratio, height: maxHeight };
-  return { width: maxWidth, height: maxWidth / ratio };
-}
-
-// 안전영역(노치·홈 바·토스 닫기 버튼 줄)과 배너 광고 자리를 body 안쪽 여백으로 빼고, 남은 칸 가운데에 9:16 캔버스.
-// 캔버스 전체가 insets 안이라 상단 재화바·일시정지 버튼도 insets.top 아래에 온다. 배너가 있으면 캔버스를 위로 붙이고
-// 맨 아래 핫바와 배너 사이를 BANNER_GAP 이상 띄운다(광고 정책: 조작 영역 바로 옆 금지).
+// 캔버스 = 화면 전체. 안전영역(노치·홈 바·토스 닫기 버튼 줄)과 배너 광고 자리를 뺀 칸 가운데에 9:16 안전 frame을
+// 놓는다(src/render/screenFit.js) - 게임 UI는 frame 안, frame 밖(블리드)엔 배경만. 배너가 있으면 맨 아래 핫바와
+// 배너 사이를 BANNER_GAP 이상 띄운다(광고 정책: 조작 영역 바로 옆 금지).
 const BANNER_GAP = 8;
 const BANNER_FILL = '#0d0a10';
 // 배너 자리: 배너를 쓰는 빌드이고 광고 제거를 안 샀으면 어느 화면이든 하단에 항상 비워 둔다 - 배너를 켜고 끌 때마다
@@ -1090,15 +1084,14 @@ const BANNER_FILL = '#0d0a10';
 // 배너가 안 보이는 화면이나 광고가 안 채워진 경우(noFill)엔 이 칸이 BANNER_FILL로 보인다(어댑터가 배너를 이 위에 띄운다).
 let bannerReserved = false;
 let bannerSlot = null; // <div id="banner-slot">
+// 입력·DOM 오버레이 좌표는 전부 frame 기준 - getBoundingClientRect를 쓰는 곳(pointerInput, rankingUi, main.js 포인터,
+// 메뉴 이벤트 배너)이 frame 사각형을 받게 여기 한 곳에서 바꾼다(캔버스 자체는 화면 전체, 왼쪽 위 0,0).
+let frameBox = { left: 0, top: 0, x: 0, y: 0, width: 0, height: 0, right: 0, bottom: 0 };
+canvas.getBoundingClientRect = () => frameBox;
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   const ins = platform.layout.getInsets();
   const slotH = bannerReserved ? platform.ads.getBannerSlotHeight() : 0;
-  const bottom = ins.bottom + (slotH > 0 ? slotH + BANNER_GAP : 0);
-  const body = document.body.style;
-  body.boxSizing = 'border-box';
-  body.padding = `${ins.top}px ${ins.right}px ${bottom}px ${ins.left}px`;
-  body.alignItems = slotH > 0 ? 'flex-start' : 'center';
   if (slotH > 0) {
     if (!bannerSlot) {
       bannerSlot = document.createElement('div');
@@ -1110,14 +1103,14 @@ function resize() {
     bannerSlot.style.height = `${slotH}px`;
   }
   if (bannerSlot) bannerSlot.style.display = slotH > 0 ? 'block' : 'none';
-  const { width, height } = fitAspectRatio(
-    Math.max(1, window.innerWidth - ins.left - ins.right),
-    Math.max(1, window.innerHeight - ins.top - bottom),
-    LAYOUT_CONFIG.aspectRatio
-  );
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  renderer.resize(width, height, dpr);
+  const cssW = window.innerWidth;
+  const cssH = window.innerHeight;
+  canvas.style.width = `${cssW}px`;
+  canvas.style.height = `${cssH}px`;
+  const fit = computeScreenFit(Math.round(cssW * dpr), Math.round(cssH * dpr), dpr, ins, slotH > 0 ? slotH + BANNER_GAP : 0);
+  const f = fit.frame.css;
+  frameBox = { left: f.x, top: f.y, x: f.x, y: f.y, width: f.w, height: f.h, right: f.x + f.w, bottom: f.y + f.h };
+  renderer.resize(fit);
 }
 // 배너를 보일 화면은 메인 메뉴·전투만(토스: 인트로·로딩·컷신 광고 금지 - 타이틀·로딩·문 전환·튜토리얼·상점은 숨김).
 // 페이드 중엔 그대로. 매 프레임 불러도 바뀔 때만 SDK를 부르고, 자리(배율)는 광고 제거가 바뀔 때만 다시 잡는다.
