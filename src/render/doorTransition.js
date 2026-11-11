@@ -4,6 +4,7 @@
 // 피할 수 있다. 문이 다 열리면 메인 메뉴로 페이드 아웃한다(빛 퍼짐 연출 없음).
 // 시간 상수는 전부 전환 시작 후 ms.
 import { loadImage } from './assetLoader.js';
+import { drawImageSnapped } from './screenFit.js';
 
 export const DOOR_TRANSITION_MS = 1600;
 
@@ -105,7 +106,7 @@ export class DoorTransition {
     g.clearRect(0, 0, NATIVE_W, NATIVE_H);
     g.imageSmoothingEnabled = false;
     this._drawDoor(g, elapsed);
-    ctx.drawImage(this._canvas, 0, 0, NATIVE_W, NATIVE_H, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
+    drawImageSnapped(ctx, this._canvas, 0, 0, NATIVE_W, NATIVE_H, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
   }
 
   _archPath(g) {

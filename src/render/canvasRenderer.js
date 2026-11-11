@@ -6,6 +6,7 @@ import { HINT_CONFIG } from '../config/hint.js';
 import { COMBO_CONFIG } from '../config/combo.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { computeLayout } from './layout.js';
+import { FRAME_LOGICAL_W, FRAME_LOGICAL_H, screen, snapPx, drawImageSnapped, gemPixelScale } from './screenFit.js';
 import { ParticlePool } from './effects/particlePool.js';
 import { BattleRenderer } from './battleRenderer.js';
 import { haptics } from '../platform/haptics.js';
@@ -69,7 +70,6 @@ export class CanvasRenderer {
     this.ctx = canvas.getContext('2d');
     this.cssWidth = 0;
     this.cssHeight = 0;
-    this.dpr = 1;
     this.lastLayout = null;
 
     // setAssets()로 주입되기 전까지는 null - render()는 이 상태에서도 전부 색/도형
@@ -201,17 +201,19 @@ export class CanvasRenderer {
     }
   }
 
-  // screenFit.computeScreenFit() 결과를 받는다. 캔버스 = 화면 전체(full), ctx 원점 = frame 왼쪽 위(정수 기기 px).
-  // 각 화면은 frame CSS 크기(cssWidth/cssHeight)만 보고 그린다 - frame 밖은 drawBleed()가 채운다.
+  // screenFit.computeScreenFit() 결과를 받는다. 캔버스 = 화면 전체(full), ctx 원점 = frame 왼쪽 위(정수 기기 px),
+  // 좌표계 = frame 논리 360x640(1 = frame.unit 기기 px). cssWidth/cssHeight는 이름만 남은 논리 크기(항상 360x640).
+  // 각 화면은 이 크기만 보고 그린다 - frame 밖은 drawBleed()가 채운다.
   resize(fit) {
     this.fit = fit;
-    this.cssWidth = fit.frame.css.w;
-    this.cssHeight = fit.frame.css.h;
-    this.dpr = fit.dpr;
-    this._battleRenderer.dpr = fit.dpr;
+    this.cssWidth = FRAME_LOGICAL_W;
+    this.cssHeight = FRAME_LOGICAL_H;
+    const { unit, x, y } = fit.frame;
+    screen.unit = unit;
+    Object.assign(screen.full, { x: -x / unit, y: -y / unit, width: fit.full.w / unit, height: fit.full.h / unit });
     if (this.canvas.width !== fit.full.w) this.canvas.width = fit.full.w;
     if (this.canvas.height !== fit.full.h) this.canvas.height = fit.full.h;
-    this.ctx.setTransform(fit.dpr, 0, 0, fit.dpr, fit.frame.x, fit.frame.y);
+    this.ctx.setTransform(unit, 0, 0, unit, x, y);
   }
 
   // 매 프레임 맨 먼저 - 캔버스 전체(frame 밖 블리드 포함)를 단색으로. 그림 블리드는 각 배경(LayeredBg)이 그 위에 그린다.
@@ -264,9 +266,8 @@ export class CanvasRenderer {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     if (alpha <= 0 || width === 0 || height === 0) return;
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, alpha)})`;
-    // 블리드까지 덮는다(frame 원점 기준이라 음수 오프셋).
-    const f = this.fit.frame.css;
-    ctx.fillRect(-f.x, -f.y, this.fit.full.css.w, this.fit.full.css.h);
+    const F = screen.full; // 블리드까지 덮는다.
+    ctx.fillRect(F.x, F.y, F.width, F.height);
   }
 
   // itemUi = { items(ItemController), config(items.json), equipped, counts, aim } | null(아이템 기능 없음).
@@ -319,7 +320,7 @@ export class CanvasRenderer {
     const shockwaveSources = this._collectShockwaveSources(gameState);
 
     ctx.save();
-    ctx.translate(this._shakeX, this._shakeY);
+    ctx.translate(snapPx(this._shakeX), snapPx(this._shakeY));
 
     this._drawCurrencyBar(layout.currencyBar, playerState, itemUi?.goldMul ?? 1);
     this._drawBattlePanel(layout.battle);
@@ -408,7 +409,7 @@ export class CanvasRenderer {
     for (let i = 0; i < slotCount; i++) {
       const x = startX + i * (slotSize + slotGap);
       if (ready) {
-        ctx.drawImage(state.img, x, y, slotSize, slotSize);
+        drawImageSnapped(ctx, state.img, x, y, slotSize, slotSize);
       } else {
         ctx.fillStyle = '#272c3a';
         ctx.strokeStyle = '#4a5265';
@@ -477,7 +478,7 @@ export class CanvasRenderer {
         const y = rect.y + r * cellSize;
         if (tilesReady) {
           const tile = (r + c) % 2 === 0 ? tileA : tileB;
-          ctx.drawImage(tile.img, 0, 0, tile.img.width, tile.img.height, x, y, cellSize, cellSize);
+          drawImageSnapped(ctx, tile.img, 0, 0, tile.img.width, tile.img.height, x, y, cellSize, cellSize);
         } else {
           ctx.fillStyle = (r + c) % 2 === 0 ? '#181c25' : '#141720';
           ctx.fillRect(x, y, cellSize, cellSize);
@@ -575,7 +576,7 @@ export class CanvasRenderer {
     const cy = rect.y + (row + 0.5) * cellSize;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(state.img, cx - imageSize / 2, cy - imageSize / 2, imageSize, imageSize);
+    drawImageSnapped(ctx, state.img, cx - imageSize / 2, cy - imageSize / 2, imageSize, imageSize);
     ctx.restore();
     return true;
   }
@@ -596,7 +597,7 @@ export class CanvasRenderer {
       : Math.min(anim.frames - 1, Math.floor(elapsedMs / anim.frameMs));
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, cx - imageSize / 2, cy - imageSize / 2, imageSize, imageSize);
+    drawImageSnapped(ctx, anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, cx - imageSize / 2, cy - imageSize / 2, imageSize, imageSize);
     ctx.restore();
   }
 
@@ -744,7 +745,7 @@ export class CanvasRenderer {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     [...text].forEach((ch, i) => {
-      ctx.drawImage(state.img, Number(ch) * glyphW, rowIdx * glyphH, glyphW, glyphH, ox + i * 4 * s, oy, glyphW * s, glyphH * s);
+      drawImageSnapped(ctx, state.img, Number(ch) * glyphW, rowIdx * glyphH, glyphW, glyphH, ox + i * 4 * s, oy, glyphW * s, glyphH * s);
     });
     ctx.restore();
   }
@@ -816,7 +817,7 @@ export class CanvasRenderer {
     ctx.imageSmoothingEnabled = false;
     ctx.translate(cx, cy);
     if (angle) ctx.rotate(angle);
-    ctx.drawImage(
+    drawImageSnapped(ctx, 
       anim.state.img,
       frame * anim.frameW,
       0,
@@ -942,21 +943,21 @@ export class CanvasRenderer {
       squashX = 1 + amount * 0.5 * remain;
     }
 
-    // 잼 에셋은 48px 이미지(몸통 32px + 효과용 여백 8px씩) - 칸 크기에 맞춰 늘리거나
-    // 줄이지 않고, 몸통이 항상 칸 크기와 같아지는 배율로 칸 중심에 맞춰 그린다(README 참고).
-    // 그래서 이미지 전체(여백 포함)는 칸보다 커지고, 그 여백은 옆 칸으로 살짝 번진다.
+    // 잼 에셋은 48px 이미지(몸통 32px + 효과용 여백 8px씩) - 몸통이 칸 크기에 가장 가까운 정수 배율
+    // (원본 1px = m 기기 px)로 칸 중심에 맞춰 그린다(README 참고). 여백(그림자·외곽)도 같은 m이라
+    // 이미지 전체는 칸보다 커지고, 그 여백은 옆 칸으로 살짝 번진다.
     const tileSize = this.assets?.gemTileSize ?? 48;
     const bodySize = this.assets?.gemBodySize ?? 32;
     const bodyRatio = bodySize / tileSize;
-    const baseImageSize = tileSize * (cellSize / bodySize);
+    const baseImageSize = (tileSize * gemPixelScale(cellSize * screen.unit, bodySize)) / screen.unit;
 
     const baseScale = scale * hintScale * armedScale;
     const sizeX = baseImageSize * baseScale * squashX;
     const sizeY = baseImageSize * baseScale * squashY;
     const cx = cellX + cellSize / 2 + armedOffsetX;
     const cy = cellY + cellSize / 2 + armedOffsetY;
-    const x = cx - sizeX / 2;
-    const y = cy - sizeY / 2;
+    const x = snapPx(cx - sizeX / 2);
+    const y = snapPx(cy - sizeY / 2);
 
     ctx.save();
     ctx.globalAlpha = opacity * idleAlpha;
@@ -1016,13 +1017,13 @@ export class CanvasRenderer {
       // 시간을 어긋나게 한다(Math.random 대신 - 보드/화면과 결정적으로 맞음).
       const offset = this._cellAnimOffset(row, col);
       const frame = Math.floor((nowMs + offset) / anim.frameMs) % anim.frames;
-      ctx.drawImage(anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, x, y, w, h);
+      drawImageSnapped(ctx, anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, x, y, w, h);
       return;
     }
 
     const staticState = variant === null ? this.assets?.gemColorImage : this.assets?.gemImages?.get(`${colorId}_${variant}`);
     if (staticState && staticState.loaded && !staticState.failed) {
-      ctx.drawImage(staticState.img, x, y, w, h);
+      drawImageSnapped(ctx, staticState.img, x, y, w, h);
       return;
     }
 
@@ -1548,7 +1549,7 @@ export class CanvasRenderer {
     const h = anim.frameH * scale;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, cx - w / 2, cy - h / 2, w, h);
+    drawImageSnapped(ctx, anim.state.img, frame * anim.frameW, 0, anim.frameW, anim.frameH, cx - w / 2, cy - h / 2, w, h);
     ctx.restore();
     return true;
   }
@@ -1612,7 +1613,7 @@ export class CanvasRenderer {
     const scale = rect.cellSize / 32;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this._boltCanvas, 0, 0, w, h, rect.x + minX * scale, rect.y + minY * scale, w * scale, h * scale);
+    drawImageSnapped(ctx, this._boltCanvas, 0, 0, w, h, rect.x + minX * scale, rect.y + minY * scale, w * scale, h * scale);
     ctx.restore();
 
     return head ? { x: head[0] + minX, y: head[1] + minY } : null;
@@ -1819,7 +1820,7 @@ export class CanvasRenderer {
     const hit = this.itemAssets?.hit;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    if (uiReady(hit)) ctx.drawImage(hit.img, frame * 16, 0, 16, 16, x, y, size, size);
+    if (uiReady(hit)) drawImageSnapped(ctx, hit.img, frame * 16, 0, 16, 16, x, y, size, size);
     else if (frame === 0) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(x + size * 0.2, y + size * 0.2, size * 0.6, size * 0.6);
@@ -2692,11 +2693,11 @@ export class CanvasRenderer {
         if (uiReady(animState) && animMeta?.frames) {
           const frameMs = animMeta.frameMs ?? 90;
           const frame = Math.floor(performance.now() / frameMs) % animMeta.frames;
-          ctx.drawImage(animState.img, frame * animMeta.frameW, 0, animMeta.frameW, animMeta.frameH, fillX, fillY, fillW, fillH);
+          drawImageSnapped(ctx, animState.img, frame * animMeta.frameW, 0, animMeta.frameW, animMeta.frameH, fillX, fillY, fillW, fillH);
         } else {
           const fillState = getUi(this.assets, 'gauges/combo_fill.png');
           if (uiReady(fillState)) {
-            ctx.drawImage(fillState.img, 0, 0, fillState.img.width, fillState.img.height, fillX, fillY, fillW, fillH);
+            drawImageSnapped(ctx, fillState.img, 0, 0, fillState.img.width, fillState.img.height, fillX, fillY, fillW, fillH);
           }
         }
       }
@@ -2769,7 +2770,7 @@ export class CanvasRenderer {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = cfg.overlayColor;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
 
     const popupPath = `popups/popup_${kind}.png`;
     const popupState = getUi(this.assets, popupPath);
@@ -2840,7 +2841,7 @@ export class CanvasRenderer {
         const ix = Math.round(bx + 8);
         const iy = Math.round(btnY + btnHeight / 2 - iconSize / 2);
         ctx.imageSmoothingEnabled = false;
-        if (uiReady(icon)) ctx.drawImage(icon.img, ix, iy, iconSize, iconSize);
+        if (uiReady(icon)) drawImageSnapped(ctx, icon.img, ix, iy, iconSize, iconSize);
         else drawItemIconFallback(ctx, 'revive', ix, iy, iconSize);
         labelX += iconSize / 2;
       } else if (action === 'adContinue' && itemUi.adContinue === 'ad') {

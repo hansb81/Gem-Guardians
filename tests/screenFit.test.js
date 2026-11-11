@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { computeScreenFit } from '../src/render/screenFit.js';
+import { computeScreenFit, gemPixelScale } from '../src/render/screenFit.js';
 
 const NO = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -34,4 +34,18 @@ test('screenFit: 배너 자리(높이+간격)를 아래에서 뺀다', () => {
   assert.ok(frame.scale > 5 && frame.scale < 6 && !Number.isInteger(frame.scale)); // 5/5.456 < 0.92
   assert.equal(frame.y + frame.h, 1920 - 58 * 3);
   assert.ok(Number.isInteger(frame.x) && Number.isInteger(frame.y));
+});
+
+test('gemPixelScale: 칸 기기 px / 32 반올림, 최소 1', () => {
+  assert.equal(gemPixelScale(128), 4); // s=6, 칸 64 basis
+  assert.equal(gemPixelScale((64 * 7) / 3), 5); // s=7: 149.3
+  assert.equal(gemPixelScale((64 * 8) / 3), 5); // s=8: 170.7
+  assert.equal(gemPixelScale(48, 32, true), 2); // 정수 프레임이면 반올림
+  assert.equal(gemPixelScale(48, 32, false), 1.5); // 1280x720@1(s=2.25 분수): 칸에 딱 맞게
+  assert.equal(gemPixelScale(10), 1);
+});
+
+test('screenFit: unit = 논리(360x640) 1px당 기기 px', () => {
+  assert.equal(computeScreenFit(1080, 1920, 3, NO).frame.unit, 3);
+  assert.equal(computeScreenFit(1280, 720, 1, NO).frame.unit, 1.125);
 });

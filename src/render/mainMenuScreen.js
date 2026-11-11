@@ -20,6 +20,7 @@ import { HUD_CONFIG } from '../config/hud.js';
 import { GAME_INFO } from '../config/gameInfo.js';
 import { platform } from '../platform/index.js';
 import { haptics } from '../platform/haptics.js';
+import { drawImageSnapped, screen } from './screenFit.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -289,7 +290,7 @@ export class MainMenuScreen {
   _drawBackground(ctx, offsetX, offsetY, scale, nowMs) {
     if (this.bgLayers.draw(ctx, offsetX, offsetY, scale, nowMs)) return;
     if (ready(this.bg)) {
-      ctx.drawImage(this.bg.img, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
+      drawImageSnapped(ctx, this.bg.img, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
     }
   }
 
@@ -311,7 +312,7 @@ export class MainMenuScreen {
     if (!uiReady(state)) return false;
     const { offsetX, offsetY, k } = this._transform;
     if (alpha !== 1) ctx.globalAlpha = alpha;
-    ctx.drawImage(state.img, offsetX + bx * k, offsetY + by * k, state.img.width * this._ak, state.img.height * this._ak);
+    drawImageSnapped(ctx, state.img, offsetX + bx * k, offsetY + by * k, state.img.width * this._ak, state.img.height * this._ak);
     if (alpha !== 1) ctx.globalAlpha = 1;
     return true;
   }
@@ -442,7 +443,7 @@ export class MainMenuScreen {
 
   _drawPopup(ctx, width, height) {
     ctx.fillStyle = COLORS.overlay;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
 
     const card = this._popupCardBasis();
     if (!this._nine(ctx, 'menu/popup_menu.png', card)) this._panel(ctx, card, '#221c2b', COLORS.bg3);
@@ -494,7 +495,7 @@ export class MainMenuScreen {
       const { offsetX, offsetY, k } = this._transform;
       const w = st.img.width * ASSET_SCALE;
       const h = st.img.height * ASSET_SCALE;
-      ctx.drawImage(st.img, offsetX + (bx + (32 - w) / 2) * k, offsetY + (by + (32 - h) / 2) * k, w * k, h * k);
+      drawImageSnapped(ctx, st.img, offsetX + (bx + (32 - w) / 2) * k, offsetY + (by + (32 - h) / 2) * k, w * k, h * k);
       return;
     }
     const r = this._toScreen([bx, by, 32, 32]);
@@ -635,14 +636,15 @@ export class MainMenuScreen {
   // 칸이 없거나, 배너가 칸에 안 들어가거나, 화면 밖이거나, 캔버스 폭 < minCanvasCss면 null(빈 칸만).
   adBannerCss(canvas) {
     if (this.popup !== 'event' || !this.popupAd() || !this._transform) return null;
-    // box = 안전 frame 사각형(main.js가 getBoundingClientRect를 frame으로 바꿔 둠) - 캔버스 좌표와 CSS px가 1:1.
+    // box = 안전 frame 사각형(CSS px, main.js가 getBoundingClientRect를 frame으로 바꿔 둠), s = 렌더 논리 px당 CSS px.
     const box = canvas.getBoundingClientRect();
     if (box.width < EVENT_AD.minCanvasCss) return null;
+    const s = box.u ?? 1;
     const r = this._toScreen(this._adSlotBasis(this._popupCardBasis()));
     const { bannerW: w, bannerH: h } = EVENT_AD;
-    if (r.width < w || r.height < h) return null;
-    const x = Math.round(box.left + r.x + r.width / 2 - w / 2);
-    const y = Math.round(box.top + r.y + r.height / 2 - h / 2);
+    if (r.width * s < w || r.height * s < h) return null;
+    const x = Math.round(box.left + (r.x + r.width / 2) * s - w / 2);
+    const y = Math.round(box.top + (r.y + r.height / 2) * s - h / 2);
     if (x < 0 || y < 0 || x + w > window.innerWidth || y + h > window.innerHeight) return null;
     return { x, y, width: w, height: h };
   }
@@ -668,7 +670,7 @@ export class MainMenuScreen {
       const fillW = g.fillMaxW * value;
       if (uiReady(fill) && fillW > 0) {
         const { offsetX, offsetY, k } = this._transform;
-        ctx.drawImage(fill.img, offsetX + g.fillX * k, offsetY + (g.y - 4) * k, fillW * k, TRACK_FILL.h * k);
+        drawImageSnapped(ctx, fill.img, offsetX + g.fillX * k, offsetY + (g.y - 4) * k, fillW * k, TRACK_FILL.h * k);
       }
       // 손잡이(10x14 -> 화면 20x28)는 채움 끝에 가운데 맞춤.
       const dragging = this._drag?.channel === row.channel;
@@ -721,7 +723,7 @@ export class MainMenuScreen {
       const { offsetX, offsetY, k } = this._transform;
       const w = pic.img.width * HELP.imageScale;
       const h = pic.img.height * HELP.imageScale;
-      ctx.drawImage(pic.img, offsetX + (cx + (cw - w) / 2) * k, offsetY + y * k, w * k, h * k);
+      drawImageSnapped(ctx, pic.img, offsetX + (cx + (cw - w) / 2) * k, offsetY + y * k, w * k, h * k);
       y += h + HELP.imageGap;
     }
     for (const line of this._helpLines(ctx, page)) {

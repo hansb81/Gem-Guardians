@@ -5,7 +5,7 @@
 // 좌표는 전부 네이티브 px(180x320)이고, draw()에 받은 scale로 화면 px로 옮긴다.
 // 입자 공식의 상수는 manifest의 rule 문자열을 코드로 옮긴 것이다(문자열을 평가하지 않는다).
 import { loadImage } from './assetLoader.js';
-import { FRAME_NATIVE_W, FRAME_NATIVE_H } from './screenFit.js';
+import { FRAME_NATIVE_W, FRAME_NATIVE_H, snapPx } from './screenFit.js';
 
 const TAU = Math.PI * 2;
 
@@ -79,10 +79,8 @@ export class LayeredBg {
     const bg = this.background;
     if (!bg) return;
 
-    // 네이티브 사각형 -> 화면 사각형. 경계를 기기 px로 반올림해 조각/입자가 베이스와 어긋나지 않게 한다
-    // (d = ctx의 기기 px/단위 배율, 프레임당 한 번. frame 원점이 정수 기기 px라 이 좌표계에서 반올림하면 된다).
-    const d = ctx.getTransform().a;
-    const rd = (v) => Math.round(v * d) / d;
+    // 네이티브 사각형 -> 화면 사각형. 경계를 기기 px로 반올림해 조각/입자가 베이스와 어긋나지 않게 한다.
+    const rd = snapPx;
     const place = (x, y, w, h) => {
       const dx = rd(offsetX + x * scale);
       const dy = rd(offsetY + y * scale);

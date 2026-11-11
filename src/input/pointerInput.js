@@ -31,8 +31,10 @@ export class PointerInput {
     if (!boardRect) return null;
 
     const rect = this.canvas.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
+    // rect = 안전 frame(CSS px), u = 렌더 논리 1px당 CSS px(main.js resize) - 보드 rect는 논리 좌표다.
+    const u = rect.u ?? 1;
+    const x = (clientX - rect.left) / u;
+    const y = (clientY - rect.top) / u;
 
     if (
       x < boardRect.x ||

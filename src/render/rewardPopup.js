@@ -6,6 +6,7 @@ import { ditherPattern } from './itemBarRenderer.js';
 import { getFontString } from '../config/fonts.js';
 import { t } from '../config/i18n.js';
 import { HUD_CONFIG } from '../config/hud.js';
+import { screen } from './screenFit.js';
 
 const K = 2;
 const SLOT = 22 * K;
@@ -77,7 +78,7 @@ export class RewardPopup {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = ditherPattern(ctx, DIM);
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
     const frame = getUi(assets, 'menu/popup_menu.png');
     const meta = getUiMeta(assets, 'menu/popup_menu.png');
     if (uiReady(frame) && meta?.slice) drawNine(ctx, frame.img, meta.slice, cardX, cardY, cardW, cardH, K);

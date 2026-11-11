@@ -10,6 +10,7 @@ import { audio } from '../audio/AudioManager.js';
 import { getFontString } from '../config/fonts.js';
 import { drawText, drawNine } from './uiKit.js';
 import { t } from '../config/i18n.js';
+import { drawImageSnapped, screen } from './screenFit.js';
 
 const FALLBACK_BG = '#0d0a10';
 const SLOW_FRAME_LIMIT = 8; // 이만큼 느린 프레임이 쌓이면 문 열림 전환을 포기한다.
@@ -174,7 +175,7 @@ export class TitleScreen {
       if (this._blackFadeFromMs < 0) return;
       const alpha = Math.min(1, (this.exitElapsedMs - this._blackFadeFromMs) / 300);
       ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-      ctx.fillRect(0, 0, width, height);
+      ctx.fillRect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
     }
   }
 
@@ -189,10 +190,10 @@ export class TitleScreen {
     const t = nowMs % shineLayer.repeatEveryMs;
     if (t < shineLayer.frames * shineLayer.frameMs && ready(this.logoShine)) {
       const frame = Math.floor(t / shineLayer.frameMs);
-      ctx.drawImage(this.logoShine.img, frame * layer.w, 0, layer.w, layer.h, dx, dy, dw, dh);
+      drawImageSnapped(ctx, this.logoShine.img, frame * layer.w, 0, layer.w, layer.h, dx, dy, dw, dh);
       return;
     }
-    if (ready(this.logo)) ctx.drawImage(this.logo.img, 0, 0, layer.w, layer.h, dx, dy, dw, dh);
+    if (ready(this.logo)) drawImageSnapped(ctx, this.logo.img, 0, 0, layer.w, layer.h, dx, dy, dw, dh);
   }
 
   // 홈(slider_track 3-slice) + 채움(slider_fill을 진행률만큼 가로로). 그림이 없으면 같은 자리에 단색.
@@ -210,7 +211,7 @@ export class TitleScreen {
     if (fillW <= 0) return;
     const fx = x + g.fill.x * k;
     const fy = y + g.fill.y * k;
-    if (ready(this.gaugeFill)) ctx.drawImage(this.gaugeFill.img, fx, fy, fillW, g.fill.h * k);
+    if (ready(this.gaugeFill)) drawImageSnapped(ctx, this.gaugeFill.img, fx, fy, fillW, g.fill.h * k);
     else {
       ctx.fillStyle = '#f2d264';
       ctx.fillRect(fx, fy, fillW, g.fill.h * k);

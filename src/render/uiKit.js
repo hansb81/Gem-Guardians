@@ -2,6 +2,7 @@
 // CanvasRenderer/BattleRenderer가 공유한다 - 이미지 로드 실패 시 호출부가 폴백 도형을
 // 그리도록, 여기서는 이미지가 준비됐는지(uiReady)만 판단하고 그리기 자체는 실패하지 않는다.
 import { audio } from '../audio/AudioManager.js';
+import { drawImageSnapped } from './screenFit.js';
 
 const BUTTON_SOUND = { click: 'ui_click', cancel: 'ui_cancel', none: null };
 
@@ -44,7 +45,7 @@ export function drawFixedImage(ctx, assets, path, cx, cy, k = 2) {
   if (!uiReady(state)) return false;
   const w = state.img.width * k;
   const h = state.img.height * k;
-  ctx.drawImage(state.img, cx - w / 2, cy - h / 2, w, h);
+  drawImageSnapped(ctx, state.img, cx - w / 2, cy - h / 2, w, h);
   return true;
 }
 
@@ -64,7 +65,7 @@ export function drawNine(ctx, img, s, x, y, w, h, k = 2) {
       const dw = dx[i + 1] - dx[i];
       const dh = dy[j + 1] - dy[j];
       if (cw > 0 && ch > 0 && dw > 0 && dh > 0) {
-        ctx.drawImage(img, sx[i], sy[j], cw, ch, x + dx[i], y + dy[j], dw, dh);
+        drawImageSnapped(ctx, img, sx[i], sy[j], cw, ch, x + dx[i], y + dy[j], dw, dh);
       }
     }
   }
@@ -98,7 +99,7 @@ export function drawDamage(ctx, img, font, text, cx, y, k = 2) {
   for (const c of text) {
     const i = font.chars.indexOf(c);
     const gw = font.widths[c];
-    ctx.drawImage(img, i * font.cellW, 0, gw, font.cellH, x, y, gw * k, font.cellH * k);
+    drawImageSnapped(ctx, img, i * font.cellW, 0, gw, font.cellH, x, y, gw * k, font.cellH * k);
     x += (gw - 1) * k;
   }
 }

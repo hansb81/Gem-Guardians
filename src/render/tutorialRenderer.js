@@ -6,6 +6,7 @@ import { drawNine, drawText, drawFixedImage, getUi, getUiMeta, uiReady, snap } f
 import { getFontString } from '../config/fonts.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { t } from '../config/i18n.js';
+import { drawImageSnapped, screen } from './screenFit.js';
 
 const DIR = 'assets/ui/tutorial/';
 const K = 2;
@@ -73,7 +74,7 @@ export class TutorialRenderer {
     if (!img) return false;
     const w = this._meta(name).w ?? img.width;
     const h = this._meta(name).h ?? img.height;
-    ctx.drawImage(img, frame * w, 0, w, h, Math.round(x), Math.round(y), w * k, h * k);
+    drawImageSnapped(ctx, img, frame * w, 0, w, h, Math.round(x), Math.round(y), w * k, h * k);
     return true;
   }
 
@@ -111,7 +112,7 @@ export class TutorialRenderer {
     if (!finishing) {
       const dim = this.manifest?.dim ?? { color: '#0d0a10', alpha: 0.72 };
       ctx.beginPath();
-      ctx.rect(0, 0, W, H);
+      ctx.rect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
       for (const h of holes) ctx.rect(h.x, h.y, h.width, h.height);
       ctx.globalAlpha = dim.alpha;
       ctx.fillStyle = dim.color;
@@ -209,7 +210,7 @@ export class TutorialRenderer {
     // cell_mark는 셀 32px 기준 - 정수 배율(칸 64px면 2배)로 칸 가운데에 맞춘다.
     const s = Math.max(1, Math.floor(board.cellSize / 32));
     const off = (board.cellSize - 32 * s) / 2;
-    if (img) for (const [row, col] of pair) ctx.drawImage(img, f * 32, 0, 32, 32, Math.round(board.x + col * board.cellSize + off), Math.round(board.y + row * board.cellSize + off), 32 * s, 32 * s);
+    if (img) for (const [row, col] of pair) drawImageSnapped(ctx, img, f * 32, 0, 32, 32, Math.round(board.x + col * board.cellSize + off), Math.round(board.y + row * board.cellSize + off), 32 * s, 32 * s);
     const a = this._cellCenter(board, pair[0]);
     const b = this._cellCenter(board, pair[1]);
     ctx.save();

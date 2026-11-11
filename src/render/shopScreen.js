@@ -14,6 +14,7 @@ import { platform } from '../platform/index.js';
 import { ITEM_CAP } from '../core/inventory/inventory.js';
 import { productText, gotText, fmt } from './shopText.js';
 import { rewardFromDelta } from './rewardPopup.js';
+import { drawImageSnapped, screen } from './screenFit.js';
 
 // 획득 팝업으로 알리는 상품(나머지는 토스트) - docs/inventory.md 5-2.
 const REWARD_KINDS = new Set(['pack', 'passClaim', 'free']);
@@ -189,7 +190,7 @@ export class ShopScreen {
 
   _drawState(ctx, state, x, y, w, h) {
     const { offsetX, offsetY, k } = this._transform;
-    ctx.drawImage(state.img, offsetX + x * k, offsetY + y * k, w * k, h * k);
+    drawImageSnapped(ctx, state.img, offsetX + x * k, offsetY + y * k, w * k, h * k);
   }
 
   _fill(ctx, color, x, y, w, h) {
@@ -602,7 +603,9 @@ export class ShopScreen {
   }
 
   _drawPopup(ctx, nowMs = 0) {
-    this._dither(ctx, 0, 0, NATIVE_W * DRAW_SCALE, BASIS_H);
+    const F = screen.full; // 블리드까지(basis 좌표로)
+    const { offsetX, offsetY, k } = this._transform;
+    this._dither(ctx, (F.x - offsetX) / k, (F.y - offsetY) / k, F.width / k, F.height / k);
     const layout = this._popupLayout(ctx);
     const { p, tx, step } = this.popup;
     const { innerX, innerY, innerW, h, top } = layout;

@@ -333,6 +333,7 @@ export class RankingUi {
     const el = this._input;
     if (!el) return;
     const c = this.canvas.getBoundingClientRect();
+    scale *= c.u ?? 1; // 렌더 논리 px -> CSS px
     const css = `${Math.round(c.left + r.x * scale)}px|${Math.round(c.top + r.y * scale)}px|${Math.round(r.width * scale)}px|${Math.round(r.height * scale)}px`;
     if (el.dataset.pos === css) return;
     el.dataset.pos = css;

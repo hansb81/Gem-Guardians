@@ -1,6 +1,6 @@
 import { GEM_TYPES } from '../config/gems.js';
 import { TOWER_LAYOUT_CONFIG } from '../config/towerLayout.js';
-import { FRAME_NATIVE_W, snapPx } from './screenFit.js';
+import { FRAME_NATIVE_W, snapPx, drawImageSnapped } from './screenFit.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { pickBackgroundSheetName } from '../config/backgroundSheet.js';
 import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
@@ -260,7 +260,7 @@ export class BattleRenderer {
     const icon = itemIcons?.get(id);
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    if (uiReady(icon)) ctx.drawImage(icon.img, x, y, size, size);
+    if (uiReady(icon)) drawImageSnapped(ctx, icon.img, x, y, size, size);
     else drawItemIconFallback(ctx, id, x, y, size);
     if (hasFont) {
       drawDamage(ctx, fontState.img, fontMeta, text, x + size + 4 + textW / 2, Math.round(y + size / 2 - fontMeta.cellH), 2);
@@ -367,9 +367,9 @@ export class BattleRenderer {
       const w = animData.frameW * scale;
       const h = animData.frameH * scale;
       ctx.save();
-      ctx.translate(cx, 0);
+      ctx.translate(snapPx(cx), 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(animData.state.img, 0, 0, animData.frameW, animData.frameH, -w / 2, cy - h / 2, w, h);
+      drawImageSnapped(ctx, animData.state.img, 0, 0, animData.frameW, animData.frameH, -w / 2, cy - h / 2, w, h);
       ctx.restore();
     } else {
       this._drawTowerFallback(ctx, { x: cx, y: cy + size / 2 }, size * 0.8, size, color);
@@ -442,12 +442,11 @@ export class BattleRenderer {
 
     // 배율 = BG_FRAME_SCALE x s(frame 배율) 고정 - 레이아웃이 basis 고정 px라 모든 기기에서 같은 모양,
     // 세로는 같은 양(80 중 아래 약 12.5px)만 잘린다. 위쪽(뒷벽) 기준, 좌표는 기기 px로 스냅.
-    const dpr = this.dpr ?? 1;
     const scale = (rect.width / FRAME_NATIVE_W) * BG_FRAME_SCALE;
-    const drawW = snapPx(frameW * scale, dpr);
-    const drawH = snapPx(frameH * scale, dpr);
-    const offsetX = snapPx(rect.x, dpr);
-    const offsetY = snapPx(rect.y, dpr);
+    const drawW = snapPx(frameW * scale);
+    const drawH = snapPx(frameH * scale);
+    const offsetX = snapPx(rect.x);
+    const offsetY = snapPx(rect.y);
 
     ctx.save();
     ctx.fillStyle = BG_FALLBACK_FILL;
@@ -456,7 +455,7 @@ export class BattleRenderer {
     ctx.rect(rect.x, rect.y, rect.width, rect.height);
     ctx.clip();
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(sheetState.img, frame * frameW, 0, frameW, frameH, offsetX, offsetY, drawW, drawH);
+    drawImageSnapped(ctx, sheetState.img, frame * frameW, 0, frameW, frameH, offsetX, offsetY, drawW, drawH);
     ctx.restore();
 
     return { theme, frame };
@@ -561,7 +560,7 @@ export class BattleRenderer {
       const fillState = getUi(assets, fillColorPath);
       const fillW = Math.max(0, (w - fx * k - padRight * k) * ratio);
       if (uiReady(fillState) && fillW > 0) {
-        ctx.drawImage(fillState.img, 0, 0, fillState.img.width, fillState.img.height, gaugeX + fx * k, barRect.y + fy * k, fillW, fh * k);
+        drawImageSnapped(ctx, fillState.img, 0, 0, fillState.img.width, fillState.img.height, gaugeX + fx * k, barRect.y + fy * k, fillW, fh * k);
       }
     } else {
       ctx.fillStyle = '#2a2f3a';
@@ -669,7 +668,7 @@ export class BattleRenderer {
       if (slot && !slot.started) {
         // 시작 전 슬롯 - 받침만 그린다(석상도 기둥도 아직 없음, README).
         ctx.save();
-        ctx.translate(drawX, 0);
+        ctx.translate(snapPx(drawX), 0);
         ctx.scale(-1, 1);
         this._drawPlinth(ctx, assets, bg, tower.color, -frameW / 2, foot.y - frameH, scale);
         ctx.restore();
@@ -692,10 +691,10 @@ export class BattleRenderer {
           const frame = this._towerFrameIndex(anim, animData, now, isAttackAnim);
           // 석상 원본은 왼쪽을 보고 있다(assets/statues/README.md) - 적은 오른쪽에서 오므로
           // 좌우 반전해서 적을 보게 한다(ctx.scale(-1,1), 기존 적 스프라이트 반전과 같은 패턴).
-          ctx.translate(drawX, 0);
+          ctx.translate(snapPx(drawX), 0);
           ctx.scale(-1, 1);
           this._drawPlinth(ctx, assets, bg, tower.color, -frameW / 2, foot.y - frameH, scale);
-          ctx.drawImage(
+          drawImageSnapped(ctx, 
             animData.state.img,
             frame * animData.frameW,
             0,
@@ -750,7 +749,7 @@ export class BattleRenderer {
     ctx.beginPath();
     ctx.rect(panelRect.x, panelRect.y, panelRect.width, panelRect.height);
     ctx.clip();
-    ctx.translate(drawX, 0);
+    ctx.translate(snapPx(drawX), 0);
     ctx.scale(-1, 1);
 
     this._drawPlinth(ctx, assets, bg, color, statueLocalX, statueLocalY, scale);
@@ -763,7 +762,7 @@ export class BattleRenderer {
 
   _drawSummonFrame(ctx, animEntry, frame, x, y, w, h) {
     if (!animEntry?.state?.loaded || animEntry.state.failed) return;
-    ctx.drawImage(animEntry.state.img, frame * animEntry.frameW, 0, animEntry.frameW, animEntry.frameH, x, y, w, h);
+    drawImageSnapped(ctx, animEntry.state.img, frame * animEntry.frameW, 0, animEntry.frameW, animEntry.frameH, x, y, w, h);
   }
 
   // assets/backgrounds/plinths/{theme}_{color}.png - 석상 발밑 받침. 배경이 안 그려졌으면(bg
@@ -782,7 +781,7 @@ export class BattleRenderer {
 
     const dx = statueLocalX + PLINTH_OFFSET_NATIVE.x * scale;
     const dy = statueLocalY + PLINTH_OFFSET_NATIVE.y * scale;
-    ctx.drawImage(plinthState.img, frame * srcFrameW, 0, srcFrameW, srcFrameH, dx, dy, srcFrameW * scale, srcFrameH * scale);
+    drawImageSnapped(ctx, plinthState.img, frame * srcFrameW, 0, srcFrameW, srcFrameH, dx, dy, srcFrameW * scale, srcFrameH * scale);
   }
 
   // 탑 발 아래에 "Lv N / 다음 비용"을 작게 표시한다. 골드가 모자라면 비용을 붉게
@@ -986,7 +985,7 @@ export class BattleRenderer {
         const h = projData.frameH * scale;
         const frame = Math.floor((now - p.startMs) / projData.frameMs) % projData.frames;
         const sheet = p.buffed ? this._brightSheet(p.color, projData.state.img) : projData.state.img;
-        ctx.drawImage(sheet, frame * projData.frameW, 0, projData.frameW, projData.frameH, x - w / 2, y - h / 2, w, h);
+        drawImageSnapped(ctx, sheet, frame * projData.frameW, 0, projData.frameW, projData.frameH, x - w / 2, y - h / 2, w, h);
       } else {
         ctx.fillStyle = GEM_COLOR_BY_ID.get(p.color) ?? '#ffffff';
         ctx.beginPath();
@@ -1113,11 +1112,11 @@ export class BattleRenderer {
             ctx.shadowBlur = Math.max(2, h * 0.04);
           }
           ctx.imageSmoothingEnabled = false;
-          ctx.translate(drawX, pos.y);
+          ctx.translate(snapPx(drawX), snapPx(pos.y));
           if (flip) ctx.scale(-1, 1);
           // 맞은 직후 flashMs 동안 번쩍 버전(flashMap, 프레임별 캐시).
           const img = hitEvent && hitEvent.elapsedMs < flashMs ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
-          ctx.drawImage(img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
+          drawImageSnapped(ctx, img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
         }
       } else {
         const shapeSize = baseShapeSize * this._rankScale(enemy.rank, null, rules);
@@ -1216,7 +1215,7 @@ export class BattleRenderer {
       const fillState = getUi(assets, isBoss ? 'gauges/fill_red.png' : 'enemy/fill_red.png');
       const fillW = Math.max(0, (w - fx * k - padRight * k) * ratio);
       if (uiReady(fillState) && fillW > 0) {
-        ctx.drawImage(fillState.img, 0, 0, fillState.img.width, fillState.img.height, x + fx * k, y + fy * k, fillW, fh * k);
+        drawImageSnapped(ctx, fillState.img, 0, 0, fillState.img.width, fillState.img.height, x + fx * k, y + fy * k, fillW, fh * k);
       }
       ctx.restore();
       return y;

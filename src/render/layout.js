@@ -9,7 +9,7 @@ export function computeLayout(width, height, boardRows, boardCols) {
   const battleHeight = L.battlePx * k;
   const scoreBarY = currencyBarHeight + battleHeight;
   const scoreBarHeight = L.scoreBarPx * k;
-  const cellSize = (L.boardPx * k) / Math.max(boardRows, boardCols);
+  const cellSize = Math.min(L.cellPx, L.boardPx / Math.max(boardRows, boardCols)) * k;
   const boardPixelWidth = cellSize * boardCols;
   const boardPixelHeight = cellSize * boardRows;
   const boardY = scoreBarY + scoreBarHeight + (L.boardPx * k - boardPixelHeight) / 2;

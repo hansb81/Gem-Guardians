@@ -14,6 +14,7 @@ import { vaultSections } from '../inventoryTab.js';
 import { fmt as fmtGold } from '../shopText.js'; // 골드 1,000 형식(메뉴 재화 바·상점과 같음)
 
 export const PREP_TABS = ['statue', 'totem', 'vault'];
+import { drawImageSnapped, screen } from '../screenFit.js';
 const BASIS_W = 540;
 const K = 2;
 const SIDE = 26; // popup_menu 테두리 안쪽
@@ -193,7 +194,8 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   ctx.imageSmoothingEnabled = false;
   ctx.textBaseline = 'middle';
   ctx.fillStyle = HUD_CONFIG.popup.overlayColor;
-  ctx.fillRect(0, 0, BASIS_W, layout.basisH);
+  const F = screen.full; // 블리드까지(basis 좌표로)
+  ctx.fillRect(F.x / layout.scale, F.y / layout.scale, F.width / layout.scale, F.height / layout.scale);
 
   nine(ctx, assets, 'menu/popup_menu.png', sheet, '#221c2b');
   drawFixedImage(ctx, assets, 'upgrade/emblem_upgrade.png', layout.emblem.cx, layout.emblem.cy, K);
@@ -301,7 +303,7 @@ function drawTotemTab(ctx, assets, tab, view) {
     label(ctx, tower?.name ?? '', row.name, C.sub, 14, false, 'left', NAME_OUTLINE);
     for (const s of row.slots) {
       const st = getUi(assets, 'items/slot_locked.png');
-      if (uiReady(st)) ctx.drawImage(st.img, s.x, s.y, s.width, s.height);
+      if (uiReady(st)) drawImageSnapped(ctx, st.img, s.x, s.y, s.width, s.height);
       else {
         ctx.fillStyle = C.silhouette;
         ctx.fillRect(s.x, s.y, s.width, s.height);
@@ -353,7 +355,7 @@ function drawSilhouette(ctx, assets, color, r) {
   ctx.save();
   ctx.translate(Math.round(r.x + r.width / 2), 0);
   ctx.scale(-1, 1);
-  ctx.drawImage(c, -w / 2, Math.round(r.y + r.height / 2 - h / 2), w, h);
+  drawImageSnapped(ctx, c, -w / 2, Math.round(r.y + r.height / 2 - h / 2), w, h);
   ctx.restore();
 }
 

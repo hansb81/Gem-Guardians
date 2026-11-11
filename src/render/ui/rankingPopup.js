@@ -9,6 +9,7 @@
 import { drawNine, drawText, drawFixedImage, getUi, getUiMeta, uiReady } from '../uiKit.js';
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
+import { drawImageSnapped, screen } from '../screenFit.js';
 
 export const RANKING_TABS = ['normal', 'comp'];
 export const STATUE_PICKS = ['red', 'blue', 'yellow', 'green', 'purple'];
@@ -235,7 +236,7 @@ export function drawRankingPopup(ctx, assets, st, L) {
   ctx.textBaseline = 'middle';
   if (st.sheet) drawSheet(ctx, assets, st, L);
   if (L.sub) {
-    fillDither(ctx, rect(0, 0, BASIS_W, L.basisH));
+    fillDither(ctx, fullBasis(L));
     if (st.sub === 'rewards') drawRewards(ctx, assets, st, L.sub);
     else if (st.sub === 'history') drawHistory(ctx, assets, st, L.sub);
     else if (st.sub === 'result') drawResult(ctx, assets, st, L.sub);
@@ -244,8 +245,14 @@ export function drawRankingPopup(ctx, assets, st, L) {
   ctx.restore();
 }
 
+// 블리드 포함 캔버스 전체(basis 좌표) - 뒤 어둡게 깔기용.
+function fullBasis(L) {
+  const F = screen.full;
+  return rect(F.x / L.scale, F.y / L.scale, F.width / L.scale, F.height / L.scale);
+}
+
 function drawSheet(ctx, assets, st, L) {
-  fillDither(ctx, rect(0, 0, BASIS_W, L.basisH));
+  fillDither(ctx, fullBasis(L));
   nine(ctx, assets, 'menu/popup_menu.png', L.sheet, C.bg1);
   if (!drawFixedImage(ctx, assets, 'ranking/emblem_rank.png', L.emblem.cx, L.emblem.cy, K)) drawFixedImage(ctx, assets, 'popups/emblem_win.png', L.emblem.cx, L.emblem.cy, K);
   drawFixedImage(ctx, assets, 'upgrade/btn_close.png', L.close.x + 22, L.close.y + 22, K);
@@ -570,7 +577,7 @@ function rewardIcons(ctx, assets, tier, st, x, cy, size, align, bundle) {
     const icx = px + 16;
     if (p.kind === 'item') {
       const img = st.itemIcon?.(p.id);
-      if (img) ctx.drawImage(img, icx - img.width, cy - img.height, img.width * K, img.height * K);
+      if (img) drawImageSnapped(ctx, img, icx - img.width, cy - img.height, img.width * K, img.height * K);
     } else drawFixedImage(ctx, assets, p.kind === 'gold' ? 'icons/gold.png' : 'icons/diamond.png', icx, cy, K);
     ctx.textAlign = 'left';
     ctx.fillStyle = C.bone;
@@ -582,7 +589,7 @@ function rewardIcons(ctx, assets, tier, st, x, cy, size, align, bundle) {
 
 function drawStatue(ctx, assets, color, x, y) {
   const st = assets?.towerImages?.get(color);
-  if (uiReady(st)) ctx.drawImage(st.img, Math.round(x), Math.round(y), st.img.width * K, st.img.height * K);
+  if (uiReady(st)) drawImageSnapped(ctx, st.img, Math.round(x), Math.round(y), st.img.width * K, st.img.height * K);
   else {
     ctx.fillStyle = C.bg3;
     ctx.fillRect(x + 4, y + 4, 24, 36);

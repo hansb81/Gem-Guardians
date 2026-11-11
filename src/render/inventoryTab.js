@@ -6,6 +6,7 @@ import { drawNine, drawText, getUi, getUiMeta, drawFixedImage, uiReady } from '.
 import { getFontString } from '../config/fonts.js';
 import { t } from '../config/i18n.js';
 import { HUD_CONFIG } from '../config/hud.js';
+import { drawImageSnapped } from './screenFit.js';
 
 const K = 2;
 const SLOT = 22 * K; // 44
@@ -443,7 +444,7 @@ export class InventoryTab {
 
   _drawLocked(ctx, assets, x, y) {
     const st = getUi(assets, 'items/slot_locked.png');
-    if (uiReady(st)) ctx.drawImage(st.img, x, y, SLOT, SLOT);
+    if (uiReady(st)) drawImageSnapped(ctx, st.img, x, y, SLOT, SLOT);
     else {
       ctx.fillStyle = '#1b1f2a';
       ctx.fillRect(x, y, SLOT, SLOT);

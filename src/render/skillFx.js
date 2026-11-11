@@ -6,6 +6,7 @@
 import { drawText } from './uiKit.js';
 import { getFontString } from '../config/fonts.js';
 import { t } from '../config/i18n.js';
+import { drawImageSnapped } from './screenFit.js';
 
 const COLORS = ['red', 'blue', 'yellow', 'green', 'purple'];
 const BONE = '#e8dcc0';
@@ -314,7 +315,7 @@ export class SkillFx {
   _drawAnim(ctx, anim, frame, x, y, scale, color) {
     const img = color && anim.tinted ? anim.tinted[color] : anim.state?.loaded ? anim.state.img : null;
     if (!img) return;
-    ctx.drawImage(img, frame * anim.frameW, 0, anim.frameW, anim.frameH, Math.round(x), Math.round(y), anim.frameW * scale, anim.frameH * scale);
+    drawImageSnapped(ctx, img, frame * anim.frameW, 0, anim.frameW, anim.frameH, Math.round(x), Math.round(y), anim.frameW * scale, anim.frameH * scale);
   }
 
   // 진행 중 연출 그리기(적 다음, 석상 앞).
@@ -366,7 +367,7 @@ export class SkillFx {
           if (s.done) continue;
           if (soul?.state?.loaded) {
             const f = Math.floor(age / soul.frameMs) % soul.frames;
-            ctx.drawImage(soul.state.img, f * soul.frameW, 0, soul.frameW, soul.frameH, Math.round(s.x - soul.frameW), Math.round(s.y - soul.frameH), soul.frameW * 2, soul.frameH * 2);
+            drawImageSnapped(ctx, soul.state.img, f * soul.frameW, 0, soul.frameW, soul.frameH, Math.round(s.x - soul.frameW), Math.round(s.y - soul.frameH), soul.frameW * 2, soul.frameH * 2);
           } else {
             ctx.fillStyle = BONE;
             ctx.fillRect(Math.round(s.x - 3), Math.round(s.y - 3), 6, 6);

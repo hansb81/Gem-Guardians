@@ -17,7 +17,7 @@ import { setupDevPanel } from './game/devPanel.js';
 import { setupSfxTestPanel } from './game/sfxTestPanel.js';
 import { audio, bgmForScene } from './audio/AudioManager.js';
 import { ANIMATION_DURATIONS_MS } from './config/animation.js';
-import { computeScreenFit } from './render/screenFit.js';
+import { computeScreenFit, FRAME_LOGICAL_W } from './render/screenFit.js';
 import { t, tOr, setLocale } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
 import { towerAttack, normalFloorReward } from './core/economy/economy.js';
@@ -788,24 +788,21 @@ function processInventoryHold(nowMs) {
 canvas.addEventListener('pointerdown', (e) => {
   if (fade) return; // 화면 전환 페이드 중에는 입력을 받지 않는다.
   if (rewardPopup.active) {
-    const r = canvas.getBoundingClientRect();
-    rewardPopup.handlePointerDown(e.clientX - r.left, e.clientY - r.top);
+    rewardPopup.handlePointerDown(frameX(e), frameY(e));
     return;
   }
   if (scene === 'title') {
     // 뒤로가기로 연 종료 확인이 떠 있으면 그 모달 입력만(문 열림 안 함).
     if (mainMenuScreen.popup) {
-      const r = canvas.getBoundingClientRect();
-      if (mainMenuScreen.handlePointerDown(e.clientX - r.left, e.clientY - r.top) === 'exitApp') platform.lifecycle.exit();
+      if (mainMenuScreen.handlePointerDown(frameX(e), frameY(e)) === 'exitApp') platform.lifecycle.exit();
       return;
     }
     exitTitle();
     return;
   }
 
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+  const x = frameX(e);
+  const y = frameY(e);
 
   if (scene === 'menu') {
     if (ranking.isOpen) {
@@ -942,27 +939,23 @@ function handleAudioSettingsPointerDown(rects, x, y) {
 }
 
 canvas.addEventListener('pointermove', (e) => {
-  if (invDragMove(e.clientY - canvas.getBoundingClientRect().top)) return;
-  if (ranking.pointerMove(e.clientY - canvas.getBoundingClientRect().top)) return;
+  if (invDragMove(frameY(e))) return;
+  if (ranking.pointerMove(frameY(e))) return;
   // 터치는 누른 동안만, 마우스는 떼고 움직여도 미리보기가 따라온다.
   if (aim) {
-    const rect = canvas.getBoundingClientRect();
-    if (!aim.confirm) aim.hover = cellAtPoint(e.clientX - rect.left, e.clientY - rect.top);
+    if (!aim.confirm) aim.hover = cellAtPoint(frameX(e), frameY(e));
     return;
   }
   if (scene === 'menu') {
-    const rect = canvas.getBoundingClientRect();
-    mainMenuScreen.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+    mainMenuScreen.handlePointerMove(frameX(e), frameY(e));
     return;
   }
   if (scene === 'shop') {
-    const rect = canvas.getBoundingClientRect();
-    shopScreen.handlePointerMove(e.clientX - rect.left, e.clientY - rect.top);
+    shopScreen.handlePointerMove(frameX(e), frameY(e));
     return;
   }
   if (!sliderDrag) return;
-  const rect = canvas.getBoundingClientRect();
-  audio.setVolume(sliderDrag.channel, (e.clientX - rect.left - sliderDrag.rect.x) / sliderDrag.rect.width);
+  audio.setVolume(sliderDrag.channel, (frameX(e) - sliderDrag.rect.x) / sliderDrag.rect.width);
 });
 
 // 강화 버튼을 누른 채 손가락/포인터가 캔버스 밖으로 나가거나 뗄 때 연속 강화를 멈춘다.
@@ -977,8 +970,7 @@ window.addEventListener('pointerup', (e) => {
   if (aim?.down) aimPointerUp();
   upgradeHold = null;
   sliderDrag = null;
-  const r = canvas.getBoundingClientRect();
-  const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(e.clientX - r.left, e.clientY - r.top) : mainMenuScreen.handlePointerUp();
+  const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
   if (menuUp === 'openRanking') ranking.open();
   if (menuUp === 'openInventory') {
     openPrep('village');
@@ -1084,10 +1076,13 @@ const BANNER_FILL = '#0d0a10';
 // 배너가 안 보이는 화면이나 광고가 안 채워진 경우(noFill)엔 이 칸이 BANNER_FILL로 보인다(어댑터가 배너를 이 위에 띄운다).
 let bannerReserved = false;
 let bannerSlot = null; // <div id="banner-slot">
-// 입력·DOM 오버레이 좌표는 전부 frame 기준 - getBoundingClientRect를 쓰는 곳(pointerInput, rankingUi, main.js 포인터,
-// 메뉴 이벤트 배너)이 frame 사각형을 받게 여기 한 곳에서 바꾼다(캔버스 자체는 화면 전체, 왼쪽 위 0,0).
-let frameBox = { left: 0, top: 0, x: 0, y: 0, width: 0, height: 0, right: 0, bottom: 0 };
+// 입력·DOM 오버레이 좌표는 전부 frame 기준 - getBoundingClientRect를 쓰는 곳(pointerInput, rankingUi, 메뉴 이벤트 배너)이
+// frame 사각형(CSS px)을 받게 여기 한 곳에서 바꾼다(캔버스 자체는 화면 전체, 왼쪽 위 0,0). u = 논리 1px(360x640 좌표)당 CSS px.
+let frameBox = { left: 0, top: 0, x: 0, y: 0, width: 0, height: 0, right: 0, bottom: 0, u: 1 };
 canvas.getBoundingClientRect = () => frameBox;
+// 포인터 -> 렌더러가 그리는 frame 논리 좌표(360x640).
+const frameX = (e) => (e.clientX - frameBox.left) / frameBox.u;
+const frameY = (e) => (e.clientY - frameBox.top) / frameBox.u;
 function resize() {
   const dpr = window.devicePixelRatio || 1;
   const ins = platform.layout.getInsets();
@@ -1109,7 +1104,7 @@ function resize() {
   canvas.style.height = `${cssH}px`;
   const fit = computeScreenFit(Math.round(cssW * dpr), Math.round(cssH * dpr), dpr, ins, slotH > 0 ? slotH + BANNER_GAP : 0);
   const f = fit.frame.css;
-  frameBox = { left: f.x, top: f.y, x: f.x, y: f.y, width: f.w, height: f.h, right: f.x + f.w, bottom: f.y + f.h };
+  frameBox = { left: f.x, top: f.y, x: f.x, y: f.y, width: f.w, height: f.h, right: f.x + f.w, bottom: f.y + f.h, u: f.w / FRAME_LOGICAL_W };
   renderer.resize(fit);
 }
 // 배너를 보일 화면은 메인 메뉴·전투만(토스: 인트로·로딩·컷신 광고 금지 - 타이틀·로딩·문 전환·튜토리얼·상점은 숨김).

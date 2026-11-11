@@ -2,6 +2,7 @@
 //   타격: hit_{석상 색} 스프라이트 + 번쩍 버전(flashMap, 프레임 이미지별 1번 캐시) + 뒤로 밀림(battleRenderer가 오프셋).
 //   사망: 번쩍(flashMs) -> 재 흩어짐(dissolveMs, 사망 순간 파티클 1번 생성) + smokeAtMs 연기 + soulAtMs 영혼불, 끝나면 버림.
 // 그림은 몬스터와 같은 배율, imageSmoothingEnabled=false, 루프 없음.
+import { drawImageSnapped } from './screenFit.js';
 
 // 작업용 캔버스는 CPU 쪽(willReadFrequently) - 보통 캔버스에서 getImageData를 하면 GPU 되읽기로 1번에 30ms 넘게 멈춘다.
 const CPU = { willReadFrequently: true };
@@ -161,7 +162,7 @@ export class MonsterFx {
       const h = d.src.height * d.scale;
       if (el < flashMs) {
         const knock = Math.round(knockPx * d.scale * Math.max(0, 1 - el / knockMs));
-        ctx.drawImage(d.flash, d.sx + knock, d.sy, w, h);
+        drawImageSnapped(ctx, d.flash, d.sx + knock, d.sy, w, h);
       } else {
         drawDissolve(ctx, d.parts, (el - flashMs) / dissolveMs, d.sx, d.sy, d.scale, m.death?.ash ?? ASH);
       }
@@ -188,7 +189,7 @@ export class MonsterFx {
       const h = a.frameH * scale;
       const x = Math.round(s.x - w / 2);
       const y = Math.round(a.anchor === 'center' ? s.y - h / 2 : s.y - h); // bottom-center
-      ctx.drawImage(a.state.img, f * a.frameW, 0, a.frameW, a.frameH, x, y, w, h);
+      drawImageSnapped(ctx, a.state.img, f * a.frameW, 0, a.frameW, a.frameH, x, y, w, h);
     }
     this._sprites.length = n;
     ctx.restore();
