@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack } from '../src/core/shop/shop.js';
+import { buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack, skillLevelCap } from '../src/core/shop/shop.js';
 import { itemPrice, normalFloorReward } from '../src/core/economy/economy.js';
 import { defaultSkillLevels } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -62,7 +62,7 @@ test('잠금 조건 전엔 구매 불가: 해제 부적 21층, 특수 기술 A�
 });
 
 test('젬 스킬: 가시는 처음부터 Lv 1, 색 효과는 Lv 5에서 더 못 올린다', () => {
-  const player = makePlayer({ gold: 1e9 });
+  const player = makePlayer({ gold: 1e9, bestFloor: 100 }); // 100층이면 층 단계 잠금 상한 = 5
   const ctx = ctxOf(player);
   assert.equal(player.inventory.skillLevel('spike'), 1);
   assert.equal(player.inventory.skillLevel('ult'), 0);
@@ -75,7 +75,25 @@ test('젬 스킬: 가시는 처음부터 Lv 1, 색 효과는 Lv 5에서 더 못 
   assert.equal(player.gold, gold);
   // 레벨업 비용 = levelCost 배수 x 일반 층 보상.
   const p = buildRail(ctx, 'skills').find((e) => e.id === 'skill.blue');
-  assert.equal(p.price, Math.round(SHOP.skills.levelCost[0] * normalFloorReward(DATA, 12)));
+  assert.equal(p.price, Math.round(SHOP.skills.levelCost[0] * normalFloorReward(DATA, 100)));
+});
+
+test('젬 스킬 층 단계 잠금: 최대 Lv = 1 + floor(최고 층/20), 상한 5, 넘은 세이브는 안 낮춤', () => {
+  const cap = (f) => skillLevelCap(SHOP.skills, f);
+  assert.deepEqual([1, 19, 20, 40, 80, 100].map(cap), [1, 1, 2, 3, 5, 5]);
+  const player = makePlayer({ gold: 1e9, bestFloor: 25 });
+  const ctx = ctxOf(player);
+  assert.ok(buyProduct(ctx, 'skill.red').ok); // Lv 1 -> 2
+  const p = buildRail(ctx, 'skills').find((e) => e.id === 'skill.red');
+  assert.equal(p.state, 'locked');
+  assert.deepEqual([p.lockFloor, p.lockLv], [40, 3]);
+  const gold = player.gold;
+  assert.equal(buyProduct(ctx, 'skill.red').reason, 'locked');
+  assert.equal(player.gold, gold);
+  assert.equal(player.inventory.skillLevel('red'), 2);
+  player.bestFloor = 1; // 상한(1)보다 높은 세이브: 레벨은 그대로, 카드만 잠김
+  assert.equal(buildRail(ctx, 'skills').find((e) => e.id === 'skill.red').state, 'locked');
+  assert.equal(player.inventory.skillLevel('red'), 2);
 });
 
 test('1회 상품은 산 뒤 다시 안 보인다(스타터·광고 제거·4번째 슬롯), 챕터 팩은 챕터당 1회', () => {
@@ -152,8 +170,9 @@ test('골드 교환·토템', () => {
   const player = makePlayer({ diamonds: 1000 });
   const r = buyProduct(ctxOf(player), 'goldex.small');
   assert.ok(r.ok);
-  assert.equal(player.gold, Math.round(5 * normalFloorReward(DATA, 12)));
-  assert.equal(player.diamonds, 980);
+  const small = SHOP.goldExchange.find((e) => e.id === 'small'); // 수치는 shop.json에서 읽는다
+  assert.equal(player.gold, Math.round(small.floors * normalFloorReward(DATA, 12)));
+  assert.equal(player.diamonds, 1000 - small.dia);
   assert.equal(buyProduct(ctxOf(player), 'totem.1').reason, 'locked');
 });
 
@@ -166,9 +185,11 @@ test('applySkillLevels: Lv 1이면 skills.json 그대로(특수 기술 잠금만
   assert.equal(a.unlocked.specialSkills.bomb, false);
   assert.equal(a.unlocked.specialSkills.color_color, false, '궁극기 해금 전엔 대폭발도 잠김');
   const b = applySkillLevels(SKILLS, SHOP.skills, lvOf({ ...lv1, red: 3, blue: 5, ult: 5 }));
-  assert.ok(Math.abs(b.colorEffects.red.ratio - 0.5) < 1e-9);
-  assert.ok(Math.abs(b.colorEffects.blue.mul - 0.58) < 1e-9);
-  assert.ok(Math.abs(b.specialSkills.color.mul - 1.5) < 1e-9);
+  // 레벨 N의 값 = shop.json values[N-1] (수치를 여기 다시 적지 않는다)
+  const { color: colors, special: specials } = SHOP.skills;
+  assert.ok(Math.abs(b.colorEffects.red.ratio - colors.red.values[2]) < 1e-9);
+  assert.ok(Math.abs(b.colorEffects.blue.mul - colors.blue.values[4]) < 1e-9);
+  assert.ok(Math.abs(b.specialSkills.color.mul - specials.ult.values[4]) < 1e-9);
   assert.equal(b.unlocked.specialSkills.color_color, true);
   assert.equal(SKILLS.colorEffects.red.ratio, 0.4, '원본은 그대로');
 });
@@ -192,9 +213,9 @@ test('BattleController: shopConfig가 있으면 층마다 젬 스킬 레벨을 �
   assert.equal(c.battleState.skills.unlocked.specialSkills.bomb, false, '용암탄 해금 전');
   playerState.inventory.grant({ skills: { red: 3, lava: 2 } }, { src: 'test' });
   c.retryFloor();
-  assert.ok(Math.abs(c.battleState.skills.colorEffects.red.ratio - 0.5) < 1e-9);
+  assert.ok(Math.abs(c.battleState.skills.colorEffects.red.ratio - SHOP.skills.color.red.values[2]) < 1e-9);
   assert.equal(c.battleState.skills.unlocked.specialSkills.bomb, true);
-  assert.ok(Math.abs(c.battleState.skills.specialSkills.bomb.mul - 2.2) < 1e-9);
+  assert.ok(Math.abs(c.battleState.skills.specialSkills.bomb.mul - SHOP.skills.special.lava.values[1]) < 1e-9);
   assert.equal(SKILLS.colorEffects.red.ratio, 0.4);
 });
 

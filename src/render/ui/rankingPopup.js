@@ -588,6 +588,19 @@ function rewardIcons(ctx, assets, tier, st, x, cy, size, align, bundle) {
 }
 
 function drawStatue(ctx, assets, color, x, y) {
+  // 수호자(idle 시트에 drawScale이 있는 그림): 전투 화면과 같은 배율로 idle 첫 프레임을 32x40 칸의
+  // 아래 가운데에 그린다(20x26 x 1.5 = 30x39). 시트는 왼쪽을 보므로 뒤집어 오른쪽을 보게 한다.
+  const own = assets?.towerAnims?.get(`tower_idle_${color}`);
+  if (own?.drawScale && uiReady(own.state)) {
+    const w = own.frameW * own.drawScale;
+    const h = own.frameH * own.drawScale;
+    ctx.save();
+    ctx.translate(Math.round(x) + 16, 0);
+    ctx.scale(-1, 1);
+    drawImageSnapped(ctx, own.state.img, 0, 0, own.frameW, own.frameH, -w / 2, Math.round(y) + 40 - h, w, h);
+    ctx.restore();
+    return;
+  }
   const st = assets?.towerImages?.get(color);
   if (uiReady(st)) drawImageSnapped(ctx, st.img, Math.round(x), Math.round(y), st.img.width * K, st.img.height * K);
   else {

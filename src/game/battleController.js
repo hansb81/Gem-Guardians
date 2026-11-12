@@ -56,7 +56,7 @@ export class BattleController {
     this.practice = practice;
     const floor = getFloor(this.balance, this.enemies, this.obstacles, this.floorsData, floorNumber);
     this.currentFloor = floor;
-    const resolvedFloor = { wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns: resolveFloorSpawns(this.balance, this.enemies, floor) };
+    const resolvedFloor = { wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns: resolveFloorSpawns(this.balance, this.enemies, floor), emptySpawn: this.balance.floorShape.emptySpawn, emptySpawnCooldown: this.balance.floorShape.emptySpawnCooldown, packGap: this.balance.floorShape.pack?.gap };
     this.floorTag = floor.tag;
     this.killGoldThisFloor = 0; // 실제로 지급된 처치 골드(황금 주화 배율 포함).
     this._killGoldBase = 0; // 배율 전 처치 골드 - 클리어 보너스는 이걸로 계산해 층 골드가 정확히 x배가 되게.

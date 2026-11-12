@@ -1,5 +1,6 @@
 import { EMPTY, OBSTACLE } from '../core/board.js';
 import { createRng } from '../core/rng.js';
+import { DROP_ANIM } from '../config/animation.js';
 
 function easeOutQuad(t) {
   return 1 - (1 - t) * (1 - t);
@@ -107,6 +108,47 @@ export function computeShuffleFallPose(move, elapsedMs, timing, rows, shuffleAni
   const scale = squashScale + (1 - squashScale) * bt;
   return { row: move.to.row + 0.5 * (1 - scale), col: move.to.col, scale };
 }
+
+// 낙하(중력 drop) / 리필(spawning) 칸의 연출 타이밍 - 셔플처럼 아래 잼부터 하나씩. 같은 열에서
+// 같은 settle로 걸린 칸(= 같은 elapsedMs)을 아래부터 j=0..n-1로 세어, j번째는 j*stagger에
+// 출발하고 모두 같은 낙하 시간 F = 길이 - (n-1)*stagger 동안 easeIn으로 떨어진다 - 아래 잼이
+// 먼저 착지하고 맨 위가 core 길이 끝에 닿는다(전체 시간은 core 그대로). 리필 잼은 보드 위
+// -(s+1)행(s = 아래에 있는 리필 잼 수)에서 출발해 열 하나가 줄지어 들어온다. 위 잼이 늘 늦게,
+// 더 위에서 출발하므로 서로 겹치지 않는다. out(재사용 객체)에 { startMs, landMs, fromRow }.
+export function isDropState(cs) {
+  return cs !== null && (cs.phase === 'spawning' || (cs.phase === 'falling' && cs.drop === true));
+}
+
+export function dropTiming(cellStates, rows, cols, r, c, out) {
+  const cs = cellStates[r * cols + c];
+  let n = 0;
+  let below = 0;
+  let spawnsBelow = 0;
+  for (let rr = 0; rr < rows; rr++) {
+    const o = cellStates[rr * cols + c];
+    if (!isDropState(o) || o.elapsedMs !== cs.elapsedMs) continue;
+    n++;
+    if (rr > r) {
+      below++;
+      if (o.phase === 'spawning') spawnsBelow++;
+    }
+  }
+  const d = cs.durationMs;
+  const stagger = n > 1 ? Math.min(DROP_ANIM.staggerMs, (d * DROP_ANIM.maxShare) / (n - 1)) : 0;
+  out.startMs = below * stagger;
+  out.landMs = out.startMs + d - (n - 1) * stagger;
+  out.fromRow = cs.phase === 'spawning' ? -(spawnsBelow + 1) : cs.fromRow;
+  return out;
+}
+
+// dropTiming 결과로 지금 행 위치(소수). 출발 전엔 출발 행(보드 위면 클립돼 안 보임).
+function dropRow(timing, elapsedMs, r) {
+  const span = timing.landMs - timing.startMs;
+  const t = span > 0 ? Math.min(1, Math.max(0, (elapsedMs - timing.startMs) / span)) : 1;
+  return timing.fromRow + (r - timing.fromRow) * easeInQuad(t);
+}
+
+const _dropScratch = { startMs: 0, landMs: 0, fromRow: 0 };
 
 // 과거의 Animator는 core가 내보낸 이벤트 배열을 큐에 담아 순서대로 재생하면서
 // visualGrid/visualSpecials라는 섀도 상태를 직접 들고 있었다. 지금의 core는 더 이상
@@ -238,20 +280,16 @@ export class Animator {
           const row = startRow + (endRow - startRow) * ease;
           const col = startCol + (endCol - startCol) * ease;
           list.push({ row, col, value: cs.value, special: cs.special, opacity: 1, scale: 1, attachment: hasAttachments ? attachments[i] : null });
+        } else if (isDropState(cs)) {
+          // 중력 낙하·리필 - 아래 잼부터 하나씩 위에서 떨어진다(dropTiming).
+          const row = dropRow(dropTiming(cellStates, rows, cols, r, c, _dropScratch), cs.elapsedMs, r);
+          list.push({ row, col: c, value: cs.value, special: cs.special, opacity: 1, scale: 1, attachment: hasAttachments ? attachments[i] : null });
         } else if (cs.phase === 'falling') {
-          // 중력 낙하와 유효 스왑 재배치를 포괄한다 - fromRow/fromCol에서 지금 칸(r,c)까지
-          // 위치만 보간하면 된다.
+          // 유효 스왑 재배치 - fromRow/fromCol에서 지금 칸(r,c)까지 위치만 보간하면 된다.
           const ease = easeOutQuad(t);
           const row = cs.fromRow + (r - cs.fromRow) * ease;
           const col = cs.fromCol + (c - cs.fromCol) * ease;
           list.push({ row, col, value: cs.value, special: cs.special, opacity: 1, scale: 1, attachment: hasAttachments ? attachments[i] : null });
-        } else if (cs.phase === 'spawning') {
-          // fromRow/fromCol이 null이므로, 과거 Animator의 spawn 오버레이와 동일하게
-          // "한 칸 위에서 내려오는" 것으로 처리한다.
-          const ease = easeOutQuad(t);
-          const startRow = r - 1;
-          const row = startRow + (r - startRow) * ease;
-          list.push({ row, col: c, value: cs.value, special: cs.special, opacity: 1, scale: 1 });
         }
       }
     }
@@ -364,6 +402,10 @@ export class Animator {
           continue;
         }
         if (cs.phase !== 'falling' || cs.bounce) continue; // occupant는 무효 스왑 들썩이 없다.
+        if (cs.drop) {
+          list.push({ row: dropRow(dropTiming(cellStates, rows, cols, r, c, _dropScratch), cs.elapsedMs, r), col: c, occupant: occ });
+          continue;
+        }
         const t = cs.durationMs > 0 ? Math.min(1, cs.elapsedMs / cs.durationMs) : 1;
         const ease = easeOutQuad(t);
         const row = cs.fromRow + (r - cs.fromRow) * ease;
@@ -402,15 +444,17 @@ export class Animator {
   // "지난 프레임엔 falling/spawning이었는데 이번 프레임엔 idle(cellStates===null)이 된" 칸만
   // 추려서 돌려준다(낙하 착지 스쿼시 트리거, §11). getNewlyClearingCells와 완전히 같은 전/후
   // Set 비교 패턴.
+  // 낙하·리필(dropTiming)은 core 상태가 끝나기 전 화면에서 먼저 착지하므로 그 착지 시각에 낸다.
   getNewlySettledCells(board) {
-    const { cols, cellStates } = board;
+    const { rows, cols, cellStates } = board;
     const newly = [];
     const curr = this._scratchFalling;
     curr.clear();
 
     for (let i = 0; i < cellStates.length; i++) {
       const cs = cellStates[i];
-      if (cs && (cs.phase === 'falling' || cs.phase === 'spawning')) {
+      const landed = isDropState(cs) && cs.elapsedMs >= dropTiming(cellStates, rows, cols, Math.floor(i / cols), i % cols, _dropScratch).landMs;
+      if (cs && (cs.phase === 'falling' || cs.phase === 'spawning') && !landed) {
         curr.add(i);
       } else if (this._prevFalling.has(i)) {
         newly.push({ row: Math.floor(i / cols), col: i % cols });

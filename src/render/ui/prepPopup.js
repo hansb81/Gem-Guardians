@@ -350,8 +350,9 @@ function drawSilhouette(ctx, assets, color, r) {
     silhouettes.set(color, c);
   }
   // 석상 원본은 왼쪽을 본다 - 강화 줄과 같이 오른쪽 보기.
-  const w = anim.frameW * K;
-  const h = anim.frameH * K;
+  const k = anim.drawScale ?? K; // 수호자(20x26)는 전투와 같은 1.5배 = 30x39라 석상 칸에 그대로 들어간다
+  const w = anim.frameW * k;
+  const h = anim.frameH * k;
   ctx.save();
   ctx.translate(Math.round(r.x + r.width / 2), 0);
   ctx.scale(-1, 1);

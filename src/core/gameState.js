@@ -916,6 +916,7 @@ export class GameState {
         phase: 'falling',
         elapsedMs: 0,
         durationMs: ANIMATION_DURATIONS_MS.fall,
+        drop: true, // 중력 낙하 표시(스왑의 'falling'과 구분) - render가 리필과 한 줄로 떨어뜨린다.
         value: move.value,
         special: move.special,
         fromRow: move.from.row,

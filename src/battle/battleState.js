@@ -11,6 +11,8 @@
 // 스탯 객체(hp/def/speed/wallDmg/gold/name/anim/rank 등)로 바꿔둔 결과다 - 이 클래스는
 // 그 숫자를 그대로 쓰기만 한다(밸런스 공식을 모른다).
 import { pickSummonFrame, isSummonDone } from './summon.js';
+// 예외: 빈 전장 즉시 등장 판정만 core의 순수 함수를 쓴다(시뮬과 같은 규칙을 한 곳에 두려고).
+import { emptySpawnCount } from '../core/balance/emptySpawn.js';
 
 export class BattleState {
   constructor({ towersData, resolvedFloor, battleConfig }) {
@@ -51,6 +53,10 @@ export class BattleState {
     // 무리 등장(floorShape.pack) 층은 적마다 등장 시각(초)이 따로 온다. 없으면 interval 간격.
     this.spawnAt = resolvedFloor.spawnAt ?? null;
     this.totalEnemies = this.spawns.length;
+    // 빈 전장 즉시 등장(balance.json floorShape.emptySpawn 'off'|'on'|'predict') - 없으면 off.
+    this.emptySpawn = resolvedFloor.emptySpawn ?? 'off';
+    this.emptySpawnCooldown = resolvedFloor.emptySpawnCooldown ?? 0;
+    this.packGap = resolvedFloor.packGap ?? 0;
 
     this.enemies = [];
     this.events = [];
@@ -221,6 +227,21 @@ export class BattleState {
     this._elapsedSec = 0;
     this._spawnedCount = 0;
     this._killedCount = 0;
+    this._sincePullSec = Infinity; // 마지막 즉시 등장(_pullSpawn) 뒤 지난 시간(초).
+  }
+
+  // 빈 전장 즉시 등장: 사격·기술이 대상을 고르기 직전에 부른다. 판정은 emptySpawnCount(src/core), 등장은 기존
+  // _spawnEnemy 그대로. 등장 타이머(_elapsedSec)는 마지막으로 낸 적의 예정 시각으로 맞춰 그 시점부터 다시 센다.
+  // 소환 연출·튜토리얼(holdSpawns) 중에는 안 낸다. 냈으면 true.
+  _pullSpawn() {
+    if (this.emptySpawn === 'off' || this.summon.active || this.holdSpawns) return false;
+    const n = emptySpawnCount(this.emptySpawn, this.enemies, this._spawnedCount, this.spawns.length, this.spawnAt, this.spawnInterval, this.packGap, this._sincePullSec, this.emptySpawnCooldown);
+    if (n === 0) return false;
+    for (let k = 0; k < n; k++) this._spawnEnemy(this.spawns[this._spawnedCount++]);
+    const last = this._spawnedCount - 1;
+    this._elapsedSec = this.spawnAt ? this.spawnAt[last] : last * this.spawnInterval;
+    this._sincePullSec = 0;
+    return true;
   }
 
   _pushEvent(type, fields) {
@@ -467,6 +488,7 @@ export class BattleState {
     }
     const raw = attack * this.atkMul * spec.mul;
 
+    this._pullSpawn();
     const order = this._enemiesFrontToBack();
     if (order.length === 0) return;
     // 명중 1번 = targets 한 칸(같은 적이 두 번 들어갈 수 있다 - 영혼 불꽃 되돌아 배정).
@@ -618,6 +640,7 @@ export class BattleState {
     const tower = this.towersData.find((t) => t.color === color);
     if (!tower) return undefined;
 
+    this._pullSpawn();
     const target = this._pickTarget();
     if (!target) return undefined;
 
@@ -731,6 +754,7 @@ export class BattleState {
     this._expirePendingSkills(dtMs);
     this._spikedThisStep.clear();
     this._boxedThisStep.clear();
+    this._sincePullSec += dtSec;
 
     if (this.status !== 'active') return;
 

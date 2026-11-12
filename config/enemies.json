@@ -4,7 +4,7 @@
  "spriteDir": "assets/enemies/",
  "spriteRules": {
   "_doc": "파일 이름 = anim.walk의 {i}를 frames 값으로 바꾸고 .png. idle이 null이면 walk를 그대로 씀(Idle+Walk 한 줄짜리 시트, Default Anim). 실제 파일 이름이 다르면 이 패턴만 고친다.",
-  "displayScale": 2,
+  "displayScale": 1.5,
   "anchor": "feet",
   "frameMs": {
    "walk": 110,

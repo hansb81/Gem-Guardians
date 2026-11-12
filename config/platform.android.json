@@ -1,6 +1,6 @@
 {
   "_doc": "Android(Capacitor) 빌드 설정 - src/platform/capacitor가 읽는다. 값은 전부 placeholder. features = 기능 스위치(iap는 RevenueCat api 키를 넣은 뒤 true로). admob.appId는 런타임이 아니라 android/app/src/main/AndroidManifest.xml의 com.google.android.gms.ads.APPLICATION_ID에 넣는다(여기는 기록용). popupBanner = 이벤트 팝업 안 배너(320x50, 하단 banner와 별개 - 플러그인이 배너 1개만 지원해서 banner가 켜지면 꺼진다, docs/ads.md). 광고 단위 id는 Google 공식 테스트 id - 출시 전에 AdMob 콘솔 id로 바꾸고 testing을 false로. testDevices = 테스트 광고만 받을 폰의 광고 기기 id(logcat에 찍힘) - 실광고 id일 때 본인·팀 폰을 여기 넣는다.",
-  "features": { "iap": true, "ads": true, "banner": false, "rewarded": true, "popupBanner": true, "haptics": true },
+  "features": { "iap": false, "ads": true, "banner": false, "rewarded": true, "popupBanner": true, "haptics": true },
   "revenuecat": { "apiKey": "goog_iiBsBMdUTDNQTfsGlLcPJqZwFSd" },
   "admob": {
     "appId": "ca-app-pub-7696723989750319~8032024836",

@@ -176,6 +176,9 @@ export async function loadAssets(onProgress) {
   for (const color of statueManifest.colors ?? []) {
     const anim = statueManifest.anims?.[`statue_idle_${color}`];
     if (anim) jobs.push({ bucket: 'towerAnim', key: `tower_idle_${color}`, src: `assets/statues/${anim.sheet}`, anim });
+    // 공격 시트가 있는 그림(수호자)만 - 없으면 렌더러가 공격 중에도 idle을 그린다.
+    const attack = statueManifest.anims?.[`statue_attack_${color}`];
+    if (attack) jobs.push({ bucket: 'towerAnim', key: `tower_attack_${color}`, src: `assets/statues/${attack.sheet}`, anim: attack });
   }
   // towerManifest가 fetch 실패로 {}이면 아래 Object.entries가 빈 객체를 돌려주므로
   // towerProjectiles가 빈 Map으로 남고, 렌더러는 기존 색 점으로 fallback한다(assets/towers/README.md).
@@ -323,6 +326,8 @@ export async function loadAssets(onProgress) {
           frameMs: job.anim.frameMs,
           loop: job.anim.loop,
           fireFrame: job.anim.fireFrame,
+          drawScale: job.anim.drawScale, // 있으면 칸 맞춤 대신 이 배율로 그린다(수호자)
+          muzzle: job.anim.muzzle, // 공격 시트의 발사 위치(화면에서 보이는 방향 기준 원본 좌표)
         });
       } else if (job.bucket === 'towerProjectile') {
         towerProjectiles.set(job.key, {

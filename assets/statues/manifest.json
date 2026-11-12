@@ -44,44 +44,119 @@
   },
   "anims": {
     "statue_idle_red": {
-      "sheet": "sheets/statue_idle_red.png",
+      "sheet": "sheets/guardian_idle_red.png",
       "frames": 4,
-      "frameMs": 150,
+      "frameMs": 160,
       "loop": true,
-      "frameW": 16,
-      "frameH": 20
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
     },
     "statue_idle_blue": {
-      "sheet": "sheets/statue_idle_blue.png",
+      "sheet": "sheets/guardian_idle_blue.png",
       "frames": 4,
-      "frameMs": 150,
+      "frameMs": 160,
       "loop": true,
-      "frameW": 16,
-      "frameH": 20
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
     },
     "statue_idle_yellow": {
-      "sheet": "sheets/statue_idle_yellow.png",
+      "sheet": "sheets/guardian_idle_yellow.png",
       "frames": 4,
-      "frameMs": 150,
+      "frameMs": 160,
       "loop": true,
-      "frameW": 16,
-      "frameH": 20
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
     },
     "statue_idle_green": {
-      "sheet": "sheets/statue_idle_green.png",
+      "sheet": "sheets/guardian_idle_green.png",
       "frames": 4,
-      "frameMs": 150,
+      "frameMs": 160,
       "loop": true,
-      "frameW": 16,
-      "frameH": 20
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
     },
     "statue_idle_purple": {
-      "sheet": "sheets/statue_idle_purple.png",
+      "sheet": "sheets/guardian_idle_purple.png",
       "frames": 4,
-      "frameMs": 150,
+      "frameMs": 160,
       "loop": true,
-      "frameW": 16,
-      "frameH": 20
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
+    },
+    "statue_attack_red": {
+      "sheet": "sheets/guardian_attack_red.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": {
+        "x": 16,
+        "y": 5
+      },
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
+    },
+    "statue_attack_blue": {
+      "sheet": "sheets/guardian_attack_blue.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": {
+        "x": 15,
+        "y": 4
+      },
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
+    },
+    "statue_attack_yellow": {
+      "sheet": "sheets/guardian_attack_yellow.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": {
+        "x": 17,
+        "y": 2
+      },
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
+    },
+    "statue_attack_green": {
+      "sheet": "sheets/guardian_attack_green.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": {
+        "x": 15,
+        "y": 3
+      },
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
+    },
+    "statue_attack_purple": {
+      "sheet": "sheets/guardian_attack_purple.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": {
+        "x": 16,
+        "y": 4
+      },
+      "frameW": 20,
+      "frameH": 26,
+      "drawScale": 1.5
     }
   },
   "neon": {

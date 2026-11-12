@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "design": "A - 받침 위에 떠 있는 잼 수정",
+  "design": "A - 받침 위에 떠 있는 잼 수정. 탑 그림은 assets/statues로 바뀌어 지웠고, 이 manifest는 투사체(projectiles)만 쓴다",
   "frameW": 16,
   "frameH": 20,
   "drawScale": 3,
@@ -18,100 +18,6 @@
     "yellow",
     "purple"
   ],
-  "towers": {
-    "red": "red.png",
-    "blue": "blue.png",
-    "green": "green.png",
-    "yellow": "yellow.png",
-    "purple": "purple.png"
-  },
-  "anims": {
-    "tower_idle_red": {
-      "sheet": "sheets/tower_idle_red.png",
-      "frames": 4,
-      "frameMs": 150,
-      "loop": true,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_attack_red": {
-      "sheet": "sheets/tower_attack_red.png",
-      "frames": 6,
-      "frameMs": 80,
-      "loop": false,
-      "fireFrame": 3,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_idle_blue": {
-      "sheet": "sheets/tower_idle_blue.png",
-      "frames": 4,
-      "frameMs": 150,
-      "loop": true,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_attack_blue": {
-      "sheet": "sheets/tower_attack_blue.png",
-      "frames": 6,
-      "frameMs": 80,
-      "loop": false,
-      "fireFrame": 3,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_idle_green": {
-      "sheet": "sheets/tower_idle_green.png",
-      "frames": 4,
-      "frameMs": 150,
-      "loop": true,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_attack_green": {
-      "sheet": "sheets/tower_attack_green.png",
-      "frames": 6,
-      "frameMs": 80,
-      "loop": false,
-      "fireFrame": 3,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_idle_yellow": {
-      "sheet": "sheets/tower_idle_yellow.png",
-      "frames": 4,
-      "frameMs": 150,
-      "loop": true,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_attack_yellow": {
-      "sheet": "sheets/tower_attack_yellow.png",
-      "frames": 6,
-      "frameMs": 80,
-      "loop": false,
-      "fireFrame": 3,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_idle_purple": {
-      "sheet": "sheets/tower_idle_purple.png",
-      "frames": 4,
-      "frameMs": 150,
-      "loop": true,
-      "frameW": 16,
-      "frameH": 20
-    },
-    "tower_attack_purple": {
-      "sheet": "sheets/tower_attack_purple.png",
-      "frames": 6,
-      "frameMs": 80,
-      "loop": false,
-      "fireFrame": 3,
-      "frameW": 16,
-      "frameH": 20
-    }
-  },
   "projectiles": {
     "red": {
       "sheet": "sheets/projectile_red.png",

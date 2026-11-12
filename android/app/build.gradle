@@ -87,6 +87,10 @@ apply from: 'capacitor.build.gradle'
 // ---- 마켓별 결제 의존성 ----
 // capacitor.build.gradle은 cap sync가 매번 다시 만든다(모든 플러그인을 implementation으로) - 여기서 Play 결제 플러그인을
 // play flavor로만 옮긴다. onestore 산출물에 Play Billing(com.android.billingclient)이 없어야 한다.
+// 결제를 끈 Play 빌드(config/platform.android.json features.iap:false)는 RevenueCat이 넣는 BILLING 권한을 뺀다(src/playNoIap).
+if (!new groovy.json.JsonSlurper().parse(file('../../config/platform.android.json')).features.iap) {
+    android.sourceSets.play.manifest.srcFile 'src/playNoIap/AndroidManifest.xml'
+}
 def PLAY_ONLY_PLUGINS = ['revenuecat-purchases-capacitor': '@revenuecat/purchases-capacitor']
 configurations.implementation.dependencies.removeAll { it instanceof ProjectDependency && PLAY_ONLY_PLUGINS.containsKey(it.name) }
 dependencies {

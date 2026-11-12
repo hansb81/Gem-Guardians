@@ -123,7 +123,9 @@ const HELP = {
 };
 
 // 게임 정보 팝업(카드 왼쪽 위 기준, 카드 480x820). 본문은 locale menu.about.body 한 쪽을 위아래로 스크롤한다.
-const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13, lineH: 24, headSize: 16, headH: 40 };
+const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13, lineH: 24, headSize: 16, headH: 40, linkH: 48, link: [90, 4, 300, 38] };
+// 본문 줄 높이: 소제목 / 링크 버튼({ link } - 누르면 GAME_INFO.links[link]를 새 창으로) / 문단.
+const aboutLineH = (l) => (l.head ? ABOUT.headH : l.link ? ABOUT.linkH : ABOUT.lineH);
 // 서버가 켜져 있으면 게임 정보 아래에 플레이어 코드(길게 누르면 복사)와 데이터 삭제 요청 버튼(docs/server.md §10, §14-3).
 const ABOUT_NET = { viewBottom: 680, code: [30, 692, 420, 40], del: [90, 744, 300, 46] };
 
@@ -747,7 +749,7 @@ export class MainMenuScreen {
     const bottom = this._aboutBottom();
     const viewH = bottom - ABOUT.viewY;
     let contentH = 0;
-    for (const l of lines) contentH += l.head ? ABOUT.headH : ABOUT.lineH;
+    for (const l of lines) contentH += aboutLineH(l);
     this._aboutScroll = Math.max(0, Math.min(this._aboutScroll, contentH - viewH));
 
     const { offsetX, offsetY, k } = this._transform;
@@ -757,9 +759,13 @@ export class MainMenuScreen {
     ctx.clip();
     let y = cy + ABOUT.viewY - this._aboutScroll;
     for (const l of lines) {
-      const h = l.head ? ABOUT.headH : ABOUT.lineH;
+      const h = aboutLineH(l);
       if (y + h > cy + ABOUT.viewY && y < cy + bottom) {
-        if (l.head) this._text(ctx, l.head, cx + cw / 2, y + h / 2 + 4, { size: ABOUT.headSize, color: HUD_CONFIG.text.title, align: 'center' });
+        if (l.link) {
+          const b = ABOUT.link;
+          this._panel(ctx, [cx + b[0], y + b[1], b[2], b[3]], COLORS.bg2, COLORS.bg3);
+          this._text(ctx, l.text, cx + cw / 2, y + b[1] + b[3] / 2, { size: ABOUT.textSize, align: 'center', color: COLORS.title });
+        } else if (l.head) this._text(ctx, l.head, cx + cw / 2, y + h / 2 + 4, { size: ABOUT.headSize, color: HUD_CONFIG.text.title, align: 'center' });
         else this._text(ctx, l.text, cx + ABOUT.bodyX, y + h / 2, { size: ABOUT.textSize });
       }
       y += h;
@@ -796,7 +802,7 @@ export class MainMenuScreen {
     const versionLine = t('menu.about.version', GAME_INFO);
     for (const item of Array.isArray(body) ? body : []) {
       if (typeof item === 'object') {
-        lines.push({ head: item.head });
+        lines.push(item);
         continue;
       }
       let line = '';
@@ -811,6 +817,16 @@ export class MainMenuScreen {
     }
     this._aboutWrap = { key, lines };
     return lines;
+  }
+
+  _openAboutLinkAt(screenY) {
+    let y = this._popupCardBasis()[1] + ABOUT.viewY - this._aboutScroll;
+    const by = (screenY - this._transform.offsetY) / this._transform.k;
+    for (const l of this._aboutWrap?.lines ?? []) {
+      const h = aboutLineH(l);
+      if (l.link && by >= y && by < y + h && platform.links.open(GAME_INFO.links[l.link])) audio.play('ui_click');
+      y += h;
+    }
   }
 
   // 게임 정보가 열려 있으면 휠로 스크롤하고 true(main.js가 기본 동작을 막는다).
@@ -1087,6 +1103,9 @@ export class MainMenuScreen {
     const up = this._transform && x != null;
     const altar = up && this._pressed === 'altar' && pointInRect(x, y, this._toScreen(this._altar().hitArea_screenPx));
     const crystal = up && this._pressed === 'crystal' && pointInRect(x, y, this._toScreen(this._crystal()));
+    // 게임 정보 본문을 끌지 않고 뗐으면(탭) 그 자리의 링크 버튼을 연다.
+    const d = this._drag;
+    if (up && this.popup === 'about' && d?.key === '_aboutScroll' && Math.abs(y - d.scrollFromY) < 8 * this._transform.k) this._openAboutLinkAt(y);
     this._pressed = null;
     this._drag = null;
     if (!altar && !crystal) return null;

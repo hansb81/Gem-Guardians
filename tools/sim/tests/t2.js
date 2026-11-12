@@ -62,6 +62,8 @@ function clearsFloor(env, player, floorNumber, level, modList, mul, statsAcc, sk
       maxFloorSeconds: sim.maxFloorSeconds,
       summon,
       battleEffects,
+      shotFlight: !!env.flight,
+      emptySpawn: env.emptySpawn,
     });
     if (result.status === 'cleared') clears++;
     if (statsAcc && hooks) {

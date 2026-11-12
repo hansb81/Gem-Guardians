@@ -6,6 +6,7 @@ import { mdTable } from '../report.js';
 import { skillsFor } from '../skills.js';
 import { needPower, expectedTowerLevels, PROBE_FLOOR_NUMBERS } from './t2.js';
 import { newAgg, aggRow, aggTable } from '../agg.js';
+import { applySkillLevels } from '../../../src/core/shop/shop.js';
 
 const MODES = ['none', 'color', 'special', 'all', 'all+boss'];
 
@@ -28,7 +29,10 @@ function singleModes(skillsConfig) {
 }
 
 export async function run(env) {
-  const { sim, skills: skillsConfig } = env.configs;
+  const { sim, shop } = env.configs;
+  // --skilllv=N: 모든 색 효과·특수 기술을 상점 Lv N 값(shop.json skills.values, 게임과 같은 applySkillLevels)으로 잰다.
+  const lvN = env.skillLvAll;
+  const skillsConfig = lvN ? applySkillLevels(env.configs.skills, shop.skills, () => lvN) : env.configs.skills;
   const probes = expectedTowerLevels(env.configs, PROBE_FLOOR_NUMBERS).filter(
     (p) => p.floor >= env.floorsRange.from && p.floor <= env.floorsRange.to
   );
@@ -105,7 +109,7 @@ export async function run(env) {
   }
 
   const summaryMd =
-    `## T2s 실제 기술별 등가 전력 (고정 보스층, 탑 레벨 = expTowerLevel, enemyHpMul ${env.configs.balance.scaling.enemyHpMul ?? 1})\n` +
+    `## T2s 실제 기술별 등가 전력 (고정 보스층, 탑 레벨 = expTowerLevel, 스킬 Lv ${lvN ?? 1}, enemyHpMul ${env.configs.balance.scaling.enemyHpMul ?? 1})\n` +
     sections.join('\n\n');
   return { csvRows, summaryMd, outOfRange, equivSummary };
 }

@@ -24,7 +24,7 @@ const TEST_MODULES = {
 async function main() {
   const configs = loadConfigs();
   const args = parseArgs(process.argv.slice(2), configs.sim);
-  const sets = applySets(configs.balance, args.set);
+  const sets = applySets(configs, args.set);
   // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
   const env = {
     configs,
@@ -37,12 +37,23 @@ async function main() {
     // skillArgsAt(bestFloor) - shop 모드는 최고 도달 층에 따라 특수 기술 해금이 달라진다(그 층을 처음 도전 = bestFloor).
     skillArgsAt: skillArgsAtFor(args.skills, configs.skills, configs.shop),
     itemPolicies: args.itemPolicies,
+    skillBuy: args.skillBuy,
+    towerBuy: args.towerBuy,
+    skillGate: args.skillGate ?? configs.shop.skills.maxLevelByFloor?.every ?? 'off',
+    skillShare: args.skillShare,
+    dia: args.dia,
+    ads: args.ads,
+    minutesPerDay: args.minutesPerDay,
+    strategies: args.strategies,
+    skillLvAll: args.skillLvAll,
+    flight: args.flight, // --flight=on: 측정 전용 탄 비행 시간 근사(T4·T7·T2/T2s, floorSim shotFlight)
+    emptySpawn: args.emptySpawn ?? configs.balance.floorShape.emptySpawn ?? 'off', // 빈 전장 즉시 등장: 기본 = balance.json floorShape.emptySpawn(게임 그대로), --emptySpawn=off|on|predict로 덮어쓰기
   };
   const dateTag = todayTag();
   // --out=<dir>: 단계별 비교 실행 결과를 reports/sim/summary.md와 섞지 않으려고 따로 저장.
   const REPORT_DIR = args.out ?? DEFAULT_REPORT_DIR;
 
-  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode}`);
+  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode} skillbuy=${env.skillBuy} towerbuy=${env.towerBuy} gate=${env.skillGate} dia=${env.dia} ads=${env.ads} flight=${env.flight ? 'on' : 'off'} emptySpawn=${env.emptySpawn}`);
 
   const { execSync } = await import('node:child_process');
   let commit = 'unknown';
@@ -66,8 +77,10 @@ async function main() {
       `- 테스트: ${args.tests.join(', ')}
 ` +
       `- 기술: ${env.skillsMode} (T2s는 모드별 비교) / enemyHpMul ${configs.balance.scaling.enemyHpMul ?? 1}` +
+      `
+- 스킬 구매: ${env.skillBuy} (잠금 ${env.skillGate === 'off' ? 'off' : `${env.skillGate}층마다 +1`}, balanced 상한 ${env.skillShare}) / 탑 구매 ${env.towerBuy === 'always' ? 'always(층이 끝날 때마다)' : 'onfail(실패했을 때만)'} / 다이아 ${env.dia} / 광고 ${env.ads} (하루 ${env.minutesPerDay}분) / 탄 비행 ${env.flight ? 'on(측정 전용 근사)' : 'off(즉시 명중)'} / 빈 전장 즉시 등장 ${env.emptySpawn}${args.emptySpawn ? '(--emptySpawn 덮어쓰기)' : '(balance.json)'}` +
       (sets.length ? `
-- 메모리 덮어쓰기(--set, balance.json 파일은 그대로): ${sets.join(', ')}` : ''),
+- 메모리 덮어쓰기(--set, 파일은 그대로): ${sets.join(', ')}` : ''),
   ];
   const allOutOfRange = [];
 
@@ -79,12 +92,14 @@ async function main() {
     }
     const t0 = Date.now();
     const { run } = await mod();
-    const { csvRows, summaryMd, outOfRange } = await run(env);
+    const { csvRows, summaryMd, outOfRange, extraCsv } = await run(env);
     const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
     console.log(`${testId} 완료 (${elapsed}s, ${csvRows.length}행)`);
 
     const csvPath = join(REPORT_DIR, `${testId}_${dateTag}.csv`);
     writeCsv(csvPath, csvRows);
+    // 테스트가 따로 내는 표(기존 csv 모양을 안 바꾸려고 파일을 나눈다): { 이름: 행[] }
+    for (const [name, rows] of Object.entries(extraCsv ?? {})) writeCsv(join(REPORT_DIR, `${name}_${dateTag}.csv`), rows);
     summaryParts.push(summaryMd);
     allOutOfRange.push(...outOfRange);
   }

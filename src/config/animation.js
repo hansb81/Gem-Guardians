@@ -18,3 +18,8 @@ export const ANIMATION_DURATIONS_MS = {
   comboActivate: 360,
   specialTransform: 260,
 };
+
+// 낙하·리필 연출(render/animator dropTiming) - 한 열에서 같이 떨어지는 잼을 아래부터 하나씩
+// staggerMs 간격으로 출발시킨다. 전체 길이는 fall/spawn 그대로라 간격 합이 길이의 maxShare를
+// 넘으면 간격을 줄인다.
+export const DROP_ANIM = { staggerMs: 25, maxShare: 0.5 };

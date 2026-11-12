@@ -12,8 +12,10 @@ import { PuzzleBattleBridge } from '../../src/game/puzzleBattleBridge.js';
 const keyOf = (row, col) => `${row},${col}`;
 
 export class SimBridge {
-  constructor(battleState) {
+  // onShot(event): 측정 전용(floorSim shotFlight) - 주면 즉시 명중 대신 그 함수에 탄을 넘긴다(비행 시간 근사).
+  constructor(battleState, onShot = null) {
     this.battleState = battleState;
+    this.onShot = onShot;
     // 특수 잼 발동 -> 전투 기술(docs/skills.md 2장)은 게임 브리지의 판정을 그대로 쓴다(어떤 잼이
     // 기술을 쏘는지 - 변환 잼 제외, 조합 규칙 - 를 여기서 다시 짜지 않기 위해).
     this._caster = new PuzzleBattleBridge(battleState);
@@ -119,7 +121,10 @@ export class SimBridge {
         this.stats.colorCounts[colorId] = (this.stats.colorCounts[colorId] ?? 0) + count;
         this.stats.swapGroupCount++;
         const event = this.battleState.applyGemClear(colorId, count, cascadeIndex, special);
-        if (event) this.battleState.resolveTowerAttack(event);
+        if (event) {
+          if (this.onShot) this.onShot(event);
+          else this.battleState.resolveTowerAttack(event);
+        }
       }
     }
   }

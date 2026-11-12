@@ -130,3 +130,34 @@ test('입장 셔플도 낙하 자체는 재배치와 같은 타이밍을 쓴다(
   assert.equal(entry[0].row, 0, '낙하가 끝나면 목표 칸(0행)에 있다');
   assert.equal(entry[0].col, 0);
 });
+
+test('낙하·리필: 아래 잼부터 하나씩 위에서 떨어지고, 전체 길이는 그대로, 서로 겹치지 않는다', async () => {
+  const { Animator: A, dropTiming } = await import('../src/render/animator.js');
+  const { ANIMATION_DURATIONS_MS: D } = await import('../src/config/animation.js');
+  // 1열 5행: 아래 2칸은 중력 낙하(0->3, 1->4), 위 3칸은 리필.
+  const rows = 5, cols = 1;
+  const cellStates = [
+    { phase: 'spawning', elapsedMs: 0, durationMs: D.spawn, value: 1, special: null, fromRow: null, fromCol: null },
+    { phase: 'spawning', elapsedMs: 0, durationMs: D.spawn, value: 2, special: null, fromRow: null, fromCol: null },
+    { phase: 'spawning', elapsedMs: 0, durationMs: D.spawn, value: 3, special: null, fromRow: null, fromCol: null },
+    { phase: 'falling', drop: true, elapsedMs: 0, durationMs: D.fall, value: 4, special: null, fromRow: 0, fromCol: 0 },
+    { phase: 'falling', drop: true, elapsedMs: 0, durationMs: D.fall, value: 0, special: null, fromRow: 1, fromCol: 0 },
+  ];
+  const board = { rows, cols, grid: [1, 2, 3, 4, 0], specials: new Array(5).fill(null), cellStates };
+  const t = (r) => dropTiming(cellStates, rows, cols, r, 0, {});
+  for (let r = 4; r > 0; r--) {
+    assert.ok(t(r).startMs < t(r - 1).startMs, '아래 칸이 먼저 출발');
+    assert.ok(t(r).landMs < t(r - 1).landMs, '아래 칸이 먼저 착지');
+  }
+  assert.equal(t(0).landMs, D.spawn, '맨 위가 core 길이 끝에 착지 - 전체 시간 그대로');
+  assert.equal(t(2).fromRow, -1, '가장 아래 리필 잼은 보드 바로 위에서 출발');
+  assert.equal(t(0).fromRow, -3);
+
+  const animator = new A();
+  for (let ms = 0; ms <= D.spawn; ms += 5) {
+    for (const cs of cellStates) cs.elapsedMs = ms;
+    const list = animator.getDisplayList(board, null, null).sort((a, b) => a.row - b.row);
+    assert.equal(list.length, 5);
+    for (let k = 1; k < list.length; k++) assert.ok(list[k].row - list[k - 1].row >= 1 - 1e-9, `${ms}ms에 겹침`);
+  }
+});

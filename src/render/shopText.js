@@ -88,6 +88,7 @@ export function productText(p, env) {
         desc: [effect, max ? t('shop.skill.max', { v: f(v[p.maxLevel - 1]) }) : t('shop.skill.next', { a: f(v[p.lv - 1]), b: f(v[p.lv]) })],
         soldText: t('shop.sold.max'), long: t('shop.skill.longLevel', { desc: effect }),
         info: v.map((x, i) => [`Lv ${i + 1}`, f(x) + (i + 1 === p.lv ? t('shop.info.now') : '')]).concat(extra ? [[t('shop.info.together'), extra]] : []),
+        ...(p.capLock ? { lockText: t('shop.lock.skillLv', { floor: p.lockFloor, lv: p.lockLv }), lockMsg: t('shop.lockMsg.skillLv', { name, floor: p.lockFloor, lv: p.lockLv }) } : null),
       };
     }
     case 'totem':

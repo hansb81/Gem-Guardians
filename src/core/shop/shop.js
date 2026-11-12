@@ -114,15 +114,27 @@ function railItems(ctx) {
   return out;
 }
 
+// 층 단계 레벨 상한(maxLevelByFloor): base + floor(최고 층 / every), maxLevel을 넘지 않음. every 없으면 maxLevel. tools/sim도 이걸 쓴다.
+export function skillLevelCap(skillsCfg, bestFloor, every = skillsCfg.maxLevelByFloor?.every) {
+  const { maxLevel } = skillsCfg;
+  if (!every) return maxLevel;
+  return Math.min(maxLevel, (skillsCfg.maxLevelByFloor?.base ?? 1) + Math.floor(bestFloor / every));
+}
+
 function railSkills(ctx) {
   const { cfg, player } = ctx;
   const { maxLevel, levelCost } = cfg.skills;
+  const cap = skillLevelCap(cfg.skills, player.bestFloor);
+  const every = cfg.skills.maxLevelByFloor?.every;
   // tools/sim은 inventory 없이 { shop: { skillLv } }만 넘긴다(수정 금지 구역).
   const lvOf = (id) => (player.inventory ? player.inventory.skillLevel(id) : player.shop.skillLv?.[id] ?? 0);
   const levelCard = (id, special) => {
     const lv = lvOf(id);
     const max = lv >= maxLevel;
-    return { id: `skill.${id}`, kind: 'skill', skill: id, special, lv, maxLevel, cur: 'gold', price: max ? 0 : goldOf(ctx, levelCost[lv - 1]), state: max ? 'sold' : '' };
+    // 상한에 닿으면 잠근다(상한보다 높은 세이브도 낮추지 않고 잠금만). lockFloor = 다음 레벨이 열리는 층.
+    const capped = !max && lv >= cap;
+    const lockFloor = capped ? (lv + 1 - (cfg.skills.maxLevelByFloor?.base ?? 1)) * every : undefined;
+    return { id: `skill.${id}`, kind: 'skill', skill: id, special, lv, maxLevel, cur: 'gold', price: max ? 0 : goldOf(ctx, levelCost[lv - 1]), state: max ? 'sold' : capped ? 'locked' : '', capLock: capped, lockFloor, lockLv: capped ? lv + 1 : undefined };
   };
   const out = [hdr('color')];
   for (const id of Object.keys(cfg.skills.color)) out.push(levelCard(id, false));
@@ -198,7 +210,7 @@ function railDia(ctx) {
   }
   out.push(hdr('goldex'));
   for (const g of cfg.goldExchange) out.push({ id: `goldex.${g.id}`, kind: 'goldEx', exId: g.id, cur: 'dia', price: g.dia, gold: goldOf(ctx, g.floors), floors: g.floors, stack: g.stack, state: '' });
-  out.push({ legal: true });
+  if (out[0].hdr === 'diaBuy') out.push({ legal: true }); // 현금 상품이 없는 마켓·빌드는 약관·환불 고지도 없다.
   return out;
 }
 

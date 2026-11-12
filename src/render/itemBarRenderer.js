@@ -3,6 +3,7 @@
 import { drawDamage, drawNine, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
 import { getFontString } from '../config/fonts.js';
 import { t } from '../config/i18n.js';
+import { drawImageSnapped } from './screenFit.js';
 
 const SLOT_K = 2; // slot_*.png(22x22) 2배
 const DIM_DARK = '#0d0a10';
@@ -96,8 +97,8 @@ export class ItemBarRenderer {
     const slots = [];
     const equipped = ui.equipped ?? [];
     const slotPx = 22 * SLOT_K;
-    // 바 높이가 2배 슬롯보다 낮으면 1배로(보고 사항 - 지금 9:16에선 2배가 들어간다).
-    const k = rect.height >= slotPx + 4 ? SLOT_K : 1;
+    // 바 높이가 2배 슬롯보다 낮을 때만 1배로. 위아래 여백은 요구하지 않는다 - 13 mini 사파리(바 약 47px)에서 1배로 떨어지던 것.
+    const k = rect.height >= slotPx ? SLOT_K : 1;
     const size = 22 * k;
     const gap = Math.round(size * 0.35);
     const total = equipped.length * size + (equipped.length - 1) * gap;
@@ -161,7 +162,7 @@ export class ItemBarRenderer {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     if (uiReady(slotState)) {
-      ctx.drawImage(slotState.img, x, y, size, size);
+      drawImageSnapped(ctx, slotState.img, x, y, size, size);
     } else {
       ctx.fillStyle = '#272c3a';
       ctx.fillRect(x, y, size, size);
@@ -175,7 +176,7 @@ export class ItemBarRenderer {
       const iy = y + meta.y * k;
       const iw = meta.w * k;
       const icon = icons?.get(id);
-      if (uiReady(icon)) ctx.drawImage(silhouette ? silhouetteOf(icon.img) : icon.img, ix, iy, iw, iw);
+      if (uiReady(icon)) drawImageSnapped(ctx, silhouette ? silhouetteOf(icon.img) : icon.img, ix, iy, iw, iw);
       else drawItemIconFallback(ctx, id, ix, iy, iw);
       if (dim) {
         // 패턴은 캔버스 원점 기준이라, 아이콘 좌상단으로 옮겨 그려 체커가 아이콘 픽셀과 맞게 한다.

@@ -108,6 +108,9 @@ export class BattleRenderer {
     // towerAttack 이벤트(객체 참조) 단위 처리 여부 - CanvasRenderer._seenEffects와 같은
     // 패턴(WeakSet이라 이벤트가 battleState.events에서 빠지면 자동으로 사라짐).
     this._seenTowerAttacks = new WeakSet();
+    // enemyHit 이벤트 -> 데미지 숫자를 띄울 자리(x, 몬스터 머리 위 y). 몬스터가 있는 동안은 따라가고,
+    // 죽어서 목록에서 빠진 뒤에도 마지막 자리에서 숫자가 끝까지 떠오른다(이벤트가 사라지면 같이 정리).
+    this._hitNumberPos = new WeakMap();
     // 화면에 날아가는 중인 투사체 스프라이트 목록. towerAttack 발사 시점이 아니라 공격
     // 애니메이션의 fireFrame에서 스폰된다(README 규칙).
     this._towerProjectiles = [];
@@ -622,11 +625,19 @@ export class BattleRenderer {
   // 탑 index의 발사 위치(muzzle) - manifest.muzzle(원본 좌표) × drawScale + 발 기준 탑
   // 왼쪽 위(assets/towers/README.md). 투사체 스폰과 towerLaunchPoint(빔/파티클 목적지) 둘
   // 다 이 메서드로 좌표를 구한다.
-  _towerMuzzlePosition(towerArea, index, assets) {
+  _towerMuzzlePosition(towerArea, index, assets, color = null) {
     const { frameW, frameH, scale } = this._towerFrameSize(assets, towerArea);
     const muzzle = assets?.towerManifest?.muzzle ?? DEFAULT_TOWER_MUZZLE;
     const foot = this._computeTowerFootPositions(towerArea, frameH)[index];
     if (!foot) return null;
+    // 공격 시트에 자기 muzzle과 배율이 있으면(수호자 - 지팡이 결정) 그 그림 기준으로 구한다.
+    const own = color ? assets?.towerAnims?.get(`tower_attack_${color}`) : null;
+    if (own?.muzzle && own.drawScale) {
+      return {
+        x: foot.x - (own.frameW * own.drawScale) / 2 + own.muzzle.x * own.drawScale,
+        y: foot.y - own.frameH * own.drawScale + own.muzzle.y * own.drawScale,
+      };
+    }
     return {
       x: foot.x - frameW / 2 + muzzle.x * scale,
       y: foot.y - frameH + muzzle.y * scale,
@@ -638,7 +649,7 @@ export class BattleRenderer {
   towerLaunchPoint(towerArea, towers, towerId, assets) {
     const index = towers.findIndex((t) => t.id === towerId);
     if (index < 0) return null;
-    return this._towerMuzzlePosition(towerArea, index, assets);
+    return this._towerMuzzlePosition(towerArea, index, assets, towers[index].color);
   }
 
   _drawTowers(ctx, towerArea, towers, assets, now, hud, bg, summon, panelRect) {
@@ -694,16 +705,19 @@ export class BattleRenderer {
           ctx.translate(snapPx(drawX), 0);
           ctx.scale(-1, 1);
           this._drawPlinth(ctx, assets, bg, tower.color, -frameW / 2, foot.y - frameH, scale);
+          // 시트에 drawScale이 있으면(수호자 20x26) 그 배율로, 없으면 높이를 칸에 맞춘다. 폭은 시트 비율대로.
+          const drawH = animData.drawScale ? animData.frameH * animData.drawScale : frameH;
+          const drawW = animData.frameW * (drawH / animData.frameH);
           drawImageSnapped(ctx, 
             animData.state.img,
             frame * animData.frameW,
             0,
             animData.frameW,
             animData.frameH,
-            -frameW / 2,
-            foot.y - frameH,
-            frameW,
-            frameH
+            -drawW / 2,
+            foot.y - drawH,
+            drawW,
+            drawH
           );
         } else {
           this._drawTowerFallback(ctx, { x: drawX, y: foot.y }, frameW, frameH, tower.color);
@@ -754,7 +768,18 @@ export class BattleRenderer {
 
     this._drawPlinth(ctx, assets, bg, color, statueLocalX, statueLocalY, scale);
     this._drawSummonFrame(ctx, assets.summonAnims.get(`pillar_back_${color}`), frame, pillarLocalX, pillarLocalY, pillarW, pillarH);
-    this._drawSummonFrame(ctx, assets.summonAnims.get(`statue_summon_${color}`), frame, statueLocalX, statueLocalY, frameW, frameH);
+    // 수호자(idle 시트에 drawScale이 있는 그림)는 석상 소환 시트 대신 자기 idle 첫 프레임을
+    // statueShowFrame부터 그린다 - 안 그러면 빛기둥 속에 예전 석상이 잠깐 보였다가 바뀐다.
+    const own = assets?.towerAnims?.get(`tower_idle_${color}`);
+    if (own?.drawScale) {
+      if (frame >= (assets.summonManifest.statueShowFrame ?? 6) && own.state.loaded && !own.state.failed) {
+        const w = own.frameW * own.drawScale;
+        const h = own.frameH * own.drawScale;
+        drawImageSnapped(ctx, own.state.img, 0, 0, own.frameW, own.frameH, -w / 2, foot.y - h, w, h);
+      }
+    } else {
+      this._drawSummonFrame(ctx, assets.summonAnims.get(`statue_summon_${color}`), frame, statueLocalX, statueLocalY, frameW, frameH);
+    }
     this._drawSummonFrame(ctx, assets.summonAnims.get(`pillar_front_${color}`), frame, pillarLocalX, pillarLocalY, pillarW, pillarH);
 
     ctx.restore();
@@ -878,7 +903,7 @@ export class BattleRenderer {
       if (anim.mode === 'attack' && !anim.firedProjectile && anim.hitEvent) {
         const prevEnemy = enemies.find((e) => e.id === anim.targetEnemyId);
         const prevPos = prevEnemy ? this._enemyPixelPos(track, prevEnemy) : anim.fallbackTargetPos;
-        const prevMuzzle = this._towerMuzzlePosition(towerArea, towerIndex, assets);
+        const prevMuzzle = this._towerMuzzlePosition(towerArea, towerIndex, assets, tower.color);
         if (prevPos && prevMuzzle) this._spawnTowerProjectile(tower, prevMuzzle, prevPos, now, anim.hitEvent);
       }
       anim.mode = 'attack';
@@ -905,7 +930,7 @@ export class BattleRenderer {
         anim.firedProjectile = true;
         const enemy = enemies.find((e) => e.id === anim.targetEnemyId);
         const targetPos = enemy ? this._enemyPixelPos(track, enemy) : anim.fallbackTargetPos;
-        const muzzle = this._towerMuzzlePosition(towerArea, i, assets);
+        const muzzle = this._towerMuzzlePosition(towerArea, i, assets, tower.color);
         if (targetPos && muzzle) this._spawnTowerProjectile(tower, muzzle, targetPos, now, anim.hitEvent);
       }
 
@@ -1050,7 +1075,11 @@ export class BattleRenderer {
       const outline = RANK_OUTLINE[enemy.rank];
 
       const dead = enemy.state === 'dead'; // 로직은 이미 처리됨 - 그림만 MonsterFx로 넘기고 여기선 안 그린다
-      const hitEvent = events.find((e) => e.type === 'enemyHit' && e.enemyId === enemy.id);
+      // 가장 최근 피격(뒤에서부터 찾는다 - Array.findLast는 오래된 WebView에 없어서 쓰지 않는다).
+      let hitEvent = null;
+      for (let k = events.length - 1; k >= 0; k--) {
+        if (events[k].type === 'enemyHit' && events[k].enemyId === enemy.id) { hitEvent = events[k]; break; }
+      }
       const wallHitEvent = events.find((e) => e.type === 'wallDamaged' && e.sourceEnemyId === enemy.id);
 
       // 피격 = 원본 1px 뒤로 밀렸다 knockbackMs에 복귀(README) - 지속 피해 틱(독)은 번쩍임만. 성벽 공격 = 앞으로 2px 튀어나갔다 복귀.
@@ -1161,15 +1190,27 @@ export class BattleRenderer {
         ctx.restore();
       }
 
+      // 이 몬스터가 맞은 피격마다 숫자 자리를 갱신한다(그리기는 아래에서 한꺼번에).
       if (hitEvent) {
-        const t = clamp(hitEvent.elapsedMs / hitEvent.durationMs, 0, 1);
-        // 데미지 숫자는 "쏜 탑 색" 폰트로 그린다(README) - enemyHit 이벤트가 직접 들고 있는
-        // towerId로 바로 찾는다.
-        // 독 틱은 작은(1배) 보라 숫자.
-        const poison = hitEvent.source === 'poison';
-        const tower = towers.find((t2) => t2.id === hitEvent.towerId);
-        this._drawFloatingNumber(ctx, pos.x, pos.y - visualHeight, `-${hitEvent.damage}`, t, '#ff6b6b', assets, hitEvent.buffed ? 'crit' : poison ? 'purple' : tower?.color ?? 'white', poison ? 1 : 2);
+        for (const e of events) {
+          if (e.type !== 'enemyHit' || e.enemyId !== enemy.id) continue;
+          let p = this._hitNumberPos.get(e);
+          if (!p) this._hitNumberPos.set(e, (p = { x: 0, y: 0 }));
+          p.x = pos.x;
+          p.y = pos.y - visualHeight;
+        }
       }
+    }
+
+    // 데미지 숫자: 피격마다 하나씩, "쏜 탑 색" 폰트로(README). 독 틱은 작은(1배) 보라 숫자.
+    for (const e of events) {
+      if (e.type !== 'enemyHit') continue;
+      const p = this._hitNumberPos.get(e);
+      if (!p) continue;
+      const t = clamp(e.elapsedMs / e.durationMs, 0, 1);
+      const poison = e.source === 'poison';
+      const tower = towers.find((t2) => t2.id === e.towerId);
+      this._drawFloatingNumber(ctx, p.x, p.y, `-${e.damage}`, t, '#ff6b6b', assets, e.buffed ? 'crit' : poison ? 'purple' : tower?.color ?? 'white', poison ? 1 : 2);
     }
   }
 
@@ -1248,7 +1289,7 @@ export class BattleRenderer {
     const fontState = getUiFont(assets, variant);
 
     ctx.save();
-    ctx.globalAlpha = 1 - t;
+    ctx.globalAlpha = t < 0.6 ? 1 : 1 - (t - 0.6) / 0.4; // 앞 60%는 또렷하게, 뒤 40%에서 사라진다
     if (fontMeta?.chars && uiReady(fontState)) {
       ctx.imageSmoothingEnabled = false;
       const k = scale;

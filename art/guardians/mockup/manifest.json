@@ -1,0 +1,208 @@
+{
+  "frameW": 20,
+  "frameH": 26,
+  "anchor": "bottom-center",
+  "facing": "right",
+  "anims": {
+    "guardian_idle_red": {
+      "sheet": "red_idle.png",
+      "frames": 4,
+      "frameMs": [
+        140,
+        180,
+        180,
+        140
+      ],
+      "loop": true
+    },
+    "guardian_attack_red": {
+      "sheet": "red_attack.png",
+      "frames": 6,
+      "frameMs": [
+        80,
+        80,
+        80,
+        120,
+        80,
+        80
+      ],
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        16,
+        5
+      ]
+    },
+    "guardian_attack_red_80ms": {
+      "sheet": "red_attack_80ms.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        16,
+        5
+      ]
+    },
+    "guardian_idle_blue": {
+      "sheet": "blue_idle.png",
+      "frames": 4,
+      "frameMs": [
+        140,
+        180,
+        180,
+        140
+      ],
+      "loop": true
+    },
+    "guardian_attack_blue": {
+      "sheet": "blue_attack.png",
+      "frames": 6,
+      "frameMs": [
+        80,
+        80,
+        80,
+        120,
+        80,
+        80
+      ],
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        15,
+        4
+      ]
+    },
+    "guardian_attack_blue_80ms": {
+      "sheet": "blue_attack_80ms.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        15,
+        4
+      ]
+    },
+    "guardian_idle_yellow": {
+      "sheet": "yellow_idle.png",
+      "frames": 4,
+      "frameMs": [
+        140,
+        180,
+        180,
+        140
+      ],
+      "loop": true
+    },
+    "guardian_attack_yellow": {
+      "sheet": "yellow_attack.png",
+      "frames": 6,
+      "frameMs": [
+        80,
+        60,
+        60,
+        120,
+        80,
+        80
+      ],
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        17,
+        2
+      ]
+    },
+    "guardian_attack_yellow_80ms": {
+      "sheet": "yellow_attack_80ms.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        17,
+        2
+      ]
+    },
+    "guardian_idle_green": {
+      "sheet": "green_idle.png",
+      "frames": 4,
+      "frameMs": [
+        140,
+        180,
+        180,
+        140
+      ],
+      "loop": true
+    },
+    "guardian_attack_green": {
+      "sheet": "green_attack.png",
+      "frames": 6,
+      "frameMs": [
+        80,
+        80,
+        80,
+        120,
+        80,
+        80
+      ],
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        15,
+        3
+      ]
+    },
+    "guardian_attack_green_80ms": {
+      "sheet": "green_attack_80ms.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        15,
+        3
+      ]
+    },
+    "guardian_idle_purple": {
+      "sheet": "purple_idle.png",
+      "frames": 4,
+      "frameMs": [
+        140,
+        180,
+        180,
+        140
+      ],
+      "loop": true
+    },
+    "guardian_attack_purple": {
+      "sheet": "purple_attack.png",
+      "frames": 6,
+      "frameMs": [
+        80,
+        80,
+        80,
+        120,
+        80,
+        80
+      ],
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        16,
+        4
+      ]
+    },
+    "guardian_attack_purple_80ms": {
+      "sheet": "purple_attack_80ms.png",
+      "frames": 7,
+      "frameMs": 80,
+      "loop": false,
+      "fireFrame": 3,
+      "muzzle": [
+        16,
+        4
+      ]
+    }
+  }
+}

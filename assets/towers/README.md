@@ -1,5 +1,7 @@
 # Gem Guardians 탑 에셋 (첫 목업 디자인 · 받침 위에 떠 있는 잼 수정)
 
+> 2026-11-12: 탑 그림(`{색}.png`, `sheets/tower_idle·attack_*`)은 `assets/statues`(수호자)로 바뀌어 지웠다. 지금 이 폴더에서 게임이 쓰는 것은 투사체 `sheets/projectile_{색}.png`뿐이다. 아래 규격·쓰는 법은 옛 탑 기준 기록이다.
+
 압축을 풀어 저장소의 `assets/towers/`에 넣으면 됩니다. 경로는 `manifest.json` 기준 상대경로입니다.
 
 ## 규격
@@ -12,9 +14,6 @@
 ## 파일
 | 파일 | 내용 |
 |---|---|
-| `{색}.png` | 정지 이미지(폴백, UI 아이콘) |
-| `sheets/tower_idle_{색}.png` | 대기 4프레임, 150ms, 루프 (룬 빛 맥동, 반짝임 이동) |
-| `sheets/tower_attack_{색}.png` | 발사 6프레임, 80ms, 1회 (수정이 밝아짐 → 번쩍 → 복귀). **3번째 프레임(0부터 셈)에서 투사체 생성** (`fireFrame`) |
 | `sheets/projectile_{색}.png` | 투사체 8×8, 4프레임, 60ms, 루프, 중심 기준 |
 
 ## 쓰는 법

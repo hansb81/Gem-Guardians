@@ -4,7 +4,7 @@
 // shop = 게임 그대로(all+boss) + 특수 기술 A안 해금 일정(config/shop.json skills.special.unlockBossFloor).
 //   진행(T4 runOneProgression)에서는 해금 골드를 모아 사야 켜진다(unlockPrice). 고정 층 테스트는 조건만 본다.
 // shop-free = shop과 같지만 진행에서도 해금 골드 없이 조건만 풀리면 켠다(비용 영향 비교용).
-import { defaultShopSave, applySkillLevels, buildRail } from '../../src/core/shop/shop.js';
+import { defaultShopSave, applySkillLevels, buildRail, skillLevelCap } from '../../src/core/shop/shop.js';
 
 export const SHOP_MODES = ['shop', 'shop-free'];
 
@@ -52,4 +52,20 @@ export function skillArgsAtFor(mode, skillsConfig, shopCfg) {
     if (!cache.has(key)) cache.set(key, { skills: applySkillLevels(skillsConfig, shopCfg.skills, lv), bossRules: true });
     return cache.get(key);
   };
+}
+
+// S2: 지금 살 수 있는 스킬 레벨 카드 [{ skill, special, lv, price }] - 게임 상점 레일(buildRail 'skills')의 가격
+// (round(levelCost[lv-1] x normalFloorReward(bestFloor)))을 그대로 쓴다. 잠긴 특수 기술(Lv 0)·최대 레벨은 빠진다.
+// 층 단계 잠금(maxLv)은 게임에 없는 규칙(설계 D1)이라 여기서만 거른다.
+export function skillLevelCards(configs, bestFloor, skillLv, maxLv) {
+  const { balance, enemies, obstacles, floorsData, shop, items } = configs;
+  const ctx = { cfg: shop, itemsConfig: items, data: { balance, enemies, obstacles, floorsData }, player: { bestFloor, shop: { skillLv } } };
+  return buildRail(ctx, 'skills')
+    .filter((p) => p.kind === 'skill' && (p.state === '' || p.capLock) && p.lv < maxLv) // 상한은 --skillgate(maxLv)가 정한다
+    .map((p) => ({ skill: p.skill, special: p.special, lv: p.lv, price: p.price }));
+}
+
+// 층 단계 잠금 상한: gate = N(층) -> base + floor(bestFloor / N), 'off' -> maxLevel.
+export function skillMaxLevel(shopCfg, gate, bestFloor) {
+  return gate === 'off' ? shopCfg.skills.maxLevel : skillLevelCap(shopCfg.skills, bestFloor, gate);
 }

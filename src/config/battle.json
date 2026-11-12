@@ -2,7 +2,7 @@
   "_doc": "피해 공식(cascadeBonusPerStep)과 성벽 체력은 config/balance.json(원본, tools/gen_floors.py가 읽음)으로 옮겼다 - 이 파일엔 연출 전용 수치만 남는다.",
   "effectDurationsMs": {
     "towerAttack": 300,
-    "enemyHit": 200,
+    "enemyHit": 600,
     "enemyDie": 300,
     "enemyReachLine": 250,
     "wallDamaged": 250,

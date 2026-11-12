@@ -17,3 +17,9 @@
 - 공격 프레임 없음 (발사는 기존 투사체 사용).
 - 색: 보석 팔레트(characters.hex) + 색마다 네온 2색 추가.
 - 원본 생성 스크립트: art/statues/build_statues.py (각 석상 .py 포함).
+
+## 수호자 교체(확인용, 2026-11-11)
+
+- 전투 화면의 석상 5개는 지금 `sheets/guardian_idle_{color}.png`(4프레임, 160ms)와 `sheets/guardian_attack_{color}.png`(7프레임, 80ms, fireFrame 3)를 쓴다. 20x26, `drawScale` 1.5.
+- 원본은 `art/guardians/mockup/build_mockup.py`. `--export-statues`로 시트와 manifest 항목을 다시 내보낸다(왼쪽을 보게 뒤집어 저장).
+- 기존 석상 파일(`{color}.png`, `sheets/statue_idle_{color}.png`)은 지우지 않았다. 도움말 그림은 아직 기존 석상을 쓴다. 랭킹·닉네임 화면은 수호자 idle 첫 프레임을 1.5배로 그린다. 소환 연출은 빛기둥 속에 수호자 idle 첫 프레임을 그린다(석상 소환 시트는 안 씀).

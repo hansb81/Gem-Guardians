@@ -21,6 +21,7 @@ import { layoutPrepPopup, drawPrepPopup } from './ui/prepPopup.js';
 import { layoutRankingPopup, drawRankingPopup } from './ui/rankingPopup.js';
 import { DETONATION_CONFIG } from '../config/detonation.js';
 import { TutorialRenderer } from './tutorialRenderer.js';
+import { fmt } from './shopText.js';
 
 const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
@@ -2479,7 +2480,7 @@ export class CanvasRenderer {
 
     const midY = rect.y + rect.height / 2;
     const iconSize = rect.height * 0.4;
-    const fontSize = Math.max(11, rect.height * 0.34);
+    const fontSize = Math.max(10, rect.height * 0.3);
     ctx.font = getFontString(fontSize, true);
 
     let x = rect.x + 10;
@@ -2546,7 +2547,11 @@ export class CanvasRenderer {
     }
 
     ctx.font = getFontString(fontSize, true);
-    const text = String(value);
+    // 1,000 형식. 값이 바뀔 때만 문자열을 다시 만든다(매 프레임 포맷 호출 방지).
+    const cache = (this._currencyText ??= {});
+    let cached = cache[iconPath];
+    if (!cached || cached.value !== value) cached = cache[iconPath] = { value, text: fmt(value) };
+    const text = cached.text;
     const textWidth = ctx.measureText(text).width;
 
     // panels/panel_inset(9-slice) - 골드/다이아 숫자 칸(README). 텍스트 폭에 맞춰 크기를
