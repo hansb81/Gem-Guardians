@@ -126,6 +126,9 @@ src/
 - AAB 서명: Play App Signing 사용, 업로드 키는 안전한 곳에 백업(분실 시 재발급 절차 번거로움).
 - **서명 키는 저장소 폴더 밖에만 둔다**(.gitignore: `*.jks`, `*.keystore`, `*.p12`, `signing-key*`, `android/*.zip`, `keystore.properties`).
   2026-11-09 키(`gemguardians`, SHA-256 `E1:AA:40:…:6D:CE`)가 공개 저장소에 올라가 유출 → 2026-11-12 기록에서 삭제, 새 키로 교체(Play: 앱 서명 키 업그레이드 + 업로드 키 재설정, 원스토어: 처음부터 새 키로 등록). 옛 키는 다시 쓰지 않는다.
+  새 키(저장소 밖 `D:\GoogleKeys`, 백업 2곳): 앱 서명 `gemguardians2` SHA-256 `56:D5:4C:45:61:43:66:84:22:B7:A4:DB:B2:78:71:C9:A8:E5:DB:82:0E:8D:60:95:61:84:06:51:87:DC:6A:3A`,
+  업로드 `upload2` SHA-256 `92:67:A4:36:89:2B:65:EB:5C:62:C9:18:84:15:DF:61:45:35:6B:DF:0B:39:08:A8:8B:FF:F6:64:27:DE:A6:82`.
+  Play 앱 서명 키는 "Java Keystore의 키 내보내기 및 업로드"(PEPK)로 업그레이드 - 원스토어에 같은 키를 쓰기 위해(O1).
 - 앱 아이콘·스플래시(`android/app/src/main/res`의 mipmap-*, drawable*)는 `art/store/build_store_art.py`로만 만든다(정수배 nearest). `@capacitor/assets`는 축소 때 보간이 들어가 픽셀아트가 흐려지므로 쓰지 않는다.
 
 ### 3-4. App Store (Capacitor iOS)
