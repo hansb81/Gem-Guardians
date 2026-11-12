@@ -17,3 +17,11 @@ preview/screen-fit/
 
 # Supabase CLI 로컬 상태(연결한 프로젝트 ref 등) - 기기마다 다름
 supabase/.temp/
+
+# 서명 키는 절대 저장소에 올리지 않는다(2026-11-09 signing-key.zip 유출 사고)
+*.jks
+*.keystore
+*.p12
+signing-key*
+android/*.zip
+keystore.properties
