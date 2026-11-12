@@ -124,6 +124,8 @@ src/
 - 필수 서류: 데이터 보안 양식, 개인정보처리방침 URL(웹에 한 페이지 호스팅), IARC 등급 설문, 광고 포함 표시, 앱 접근 권한 안내.
 - AdMob: UMP 동의 팝업(유럽 등), `app-ads.txt`를 개발자 웹사이트 루트에 배치.
 - AAB 서명: Play App Signing 사용, 업로드 키는 안전한 곳에 백업(분실 시 재발급 절차 번거로움).
+- **서명 키는 저장소 폴더 밖에만 둔다**(.gitignore: `*.jks`, `*.keystore`, `*.p12`, `signing-key*`, `android/*.zip`, `keystore.properties`).
+  2026-11-09 키(`gemguardians`, SHA-256 `E1:AA:40:…:6D:CE`)가 공개 저장소에 올라가 유출 → 2026-11-12 기록에서 삭제, 새 키로 교체(Play: 앱 서명 키 업그레이드 + 업로드 키 재설정, 원스토어: 처음부터 새 키로 등록). 옛 키는 다시 쓰지 않는다.
 - 앱 아이콘·스플래시(`android/app/src/main/res`의 mipmap-*, drawable*)는 `art/store/build_store_art.py`로만 만든다(정수배 nearest). `@capacitor/assets`는 축소 때 보간이 들어가 픽셀아트가 흐려지므로 쓰지 않는다.
 
 ### 3-4. App Store (Capacitor iOS)
