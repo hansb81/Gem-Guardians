@@ -13,7 +13,7 @@ import { loadBalanceData } from './game/loadBalanceData.js';
 import { PuzzleBattleBridge } from './game/puzzleBattleBridge.js';
 import { BattleController } from './game/battleController.js';
 import { playerState } from './game/playerState.js';
-import { setupDevPanel } from './game/devPanel.js';
+import { setupDevPanel, devCheats } from './game/devPanel.js';
 import { setupSfxTestPanel } from './game/sfxTestPanel.js';
 import { audio, bgmForScene } from './audio/AudioManager.js';
 import { ANIMATION_DURATIONS_MS } from './config/animation.js';
@@ -29,6 +29,7 @@ import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform } from './platform/index.js';
 import { recoverPending, restore, syncServerIap } from './shop/iap.js';
 import { storage } from './platform/storage.js';
+import { guardianFxSetting } from './render/guardianFx.js';
 import { loadServerConfig, setupServer } from './game/serverUi.js';
 import { showRewarded } from './game/ads.js';
 import { continueOptions, recordUse } from './game/adContinue.js';
@@ -418,7 +419,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
     });
     // 개발용 키(?dev=1): H = 맨 앞 몬스터에게 석상 투사체 1발(피해 1), K = 남은 HP만큼(처치) - 몬스터 타격·사망 이펙트 확인.
     window.addEventListener('keydown', (e) => {
-      if (scene !== 'game' || (e.code !== 'KeyH' && e.code !== 'KeyK')) return;
+      if (scene !== 'game' || !devCheats.on || (e.code !== 'KeyH' && e.code !== 'KeyK')) return;
       renderer._battleRenderer.devShoot(controller?.battleState, e.code === 'KeyK');
     });
     // 개발용 콘솔 훅(?dev=1) - 화면 확인 때 실패/부활 등 상태를 직접 만든다.
@@ -456,7 +457,9 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
 // 하나씩 터뜨려 확인한다. core의 매치/스왑 규칙(line/bomb는 직접 스왑으로 발동 안 됨)을
 // 거치지 않고, gameState.js가 만드는 것과 같은 모양의 specialActivate effect를 직접
 // gameState.effects에 꽂는다 - CanvasRenderer._spawnSpecialFx는 이 effect를 실제 발동과
-// 구별하지 못한다(같은 입력이므로).
+// 구별하지 못한다(같은 입력이므로). 바로 꽂지 않고 다음 gameState.update 직후에 넣는다 - 프레임 사이에
+// 꽂으면 update가 elapsedMs를 먼저 올려서 battleBridge(elapsedMs===0만 처리)가 전투 기술을 놓친다.
+const devQueuedEffects = [];
 function devTriggerSpecialFx(kind) {
   const { board } = gameState;
   const position = { row: Math.floor(board.rows / 2), col: Math.floor(board.cols / 2) };
@@ -477,7 +480,9 @@ function devTriggerSpecialFx(kind) {
   } else {
     affected = [position, { row: 0, col: position.col }, { row: board.rows - 1, col: position.col }, { row: position.row, col: 0 }];
   }
-  gameState.effects.push({ type: 'specialActivate', kind, direction, position, color: null, affected, cascadeIndex: 1, durationMs: 280, elapsedMs: 0 });
+  // 전투 기술 색 = 가운데 칸 잼 색(방해요소·빈칸이면 영향 칸 중 첫 잼, 없으면 0). 컬러는 고른 색(color)으로 쓴다.
+  const gemColor = [position, ...affected].map((c) => board.get(c.row, c.col)).find((v) => v >= 0) ?? 0;
+  devQueuedEffects.push({ type: 'specialActivate', kind, direction, position, color: kind === 'color' ? gemColor : null, gemColor, affected, cascadeIndex: 1, durationMs: 280, elapsedMs: 0 });
 }
 
 // 개발용(?dev=1) - 특수 잼 조합(10종) 확인. 이건 가짜 effect를 꽂지 않고 보드 가운데에 두
@@ -783,7 +788,7 @@ function processInventoryHold(nowMs) {
   if (playerState.inventory.unequip(invPress.slot).ok) audio.play('ui_cancel');
 }
 
-// 재화 바 "+"(상점 자리)/일시정지 버튼/팝업 버튼/탑 탭 클릭 판정. 보드 스와이프
+// 일시정지 버튼(재화 바 오른쪽)/팝업 버튼/탑 탭 클릭 판정. 보드 스와이프
 // (PointerInput)와는 별개의 영역이라 겹치지 않는다.
 canvas.addEventListener('pointerdown', (e) => {
   if (fade) return; // 화면 전환 페이드 중에는 입력을 받지 않는다.
@@ -889,11 +894,6 @@ canvas.addEventListener('pointerdown', (e) => {
     return;
   }
 
-  if (pressButton(x, y, renderer.lastLayout?.currencyPlusButton)) {
-    // 상점 자리 - 지금은 자리만(추후 상점 연결).
-    return;
-  }
-
   if (controller?.items && !isBlocked()) {
     const slots = renderer.lastLayout?.itemSlots ?? [];
     for (let i = 0; i < slots.length; i++) {
@@ -937,6 +937,12 @@ function handleAudioSettingsPointerDown(rects, x, y) {
   }
   return false;
 }
+
+// 위 판정이 탭으로 DOM 입력 칸(쿠폰·랭킹 닉네임, render/ui/domInput.js)을 열어 포커스를 줬으면, 이어지는 mousedown
+// 기본 동작이 포커스를 빼앗지 않게 막는다(위 리스너 다음에 등록 = 판정 뒤에 실행).
+canvas.addEventListener('pointerdown', (e) => {
+  if (document.activeElement?.tagName === 'INPUT') e.preventDefault();
+});
 
 canvas.addEventListener('pointermove', (e) => {
   if (invDragMove(frameY(e))) return;
@@ -1273,6 +1279,8 @@ function buildBattleHud() {
     towerAttacks: playerState.towerLevels.map((lvl) => towerAttack(balance, lvl)),
     towerNextAttacks: playerState.towerLevels.map((lvl) => towerAttack(balance, lvl + 1)),
     maxLevel: balance.tower.maxLevel,
+    towerFxTiers: balance.towerFxTiers ?? null, // 수호자 레벨 구간 이펙트(guardianFx.js)
+    guardianFx: guardianFxSetting.enabled(),
   };
 }
 
@@ -1365,6 +1373,10 @@ function loop(now) {
     // 발동/조합 스프라이트가 아직 재생 중이면 중력/리필을 미룬다(GameState.settleHold 주석 참고).
     gameState.settleHold = assetsReady && renderer.isSpecialFxBusy();
     gameState.update(dt);
+    if (devQueuedEffects.length > 0) {
+      gameState.effects.push(...devQueuedEffects); // core가 이번 update에 낸 이펙트와 같은 시점(elapsedMs 0)
+      devQueuedEffects.length = 0;
+    }
     // 매 프레임: 북 버프 진행 + 예약된 낫·망치·섞기 - 실행되면 연출, 시간 초과로 취소되면 슬롯 흔들림 + "보드 정리 중".
     const items = controller?.items;
     if (items) {

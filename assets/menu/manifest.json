@@ -10,6 +10,7 @@
  "background": {
   "note": "static base + animated pieces; draw base, then each piece's current frame at (x,y), then particles, then UI. All native px (x3). menu_bg.png = full static fallback (frame 8).",
   "base": "menu_base.png",
+  "bleed": { "file": "menu_bleed.png", "w": 300, "h": 448, "note": "frame 밖 띠용(가운데 180x320 = base). tools/make_bleed.py로 base에서 생성 - base를 바꾸면 다시 돌린다." },
   "frameMs": 200,
   "loopFrames": 32,
   "loopMs": 6400,

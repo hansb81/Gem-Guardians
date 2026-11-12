@@ -3,9 +3,9 @@
 import { call, net, syncClaims } from './api.js';
 
 // 서버 응답 {txId, bundle} -> 기기 지급 -> claims-granted(실패해도 다음 실행 때 claims-pending으로 다시 옴).
-function grantClaim(inventory, res, src) {
+function grantClaim(inventory, res, src, callFn = call) {
   const g = inventory.grant(res.bundle, { src, txId: res.txId });
-  if (g.ok || g.reason === 'duplicate') call('claims-granted', { txIds: [res.txId] });
+  if (g.ok || g.reason === 'duplicate') callFn('claims-granted', { txIds: [res.txId] });
   return { ok: true, delta: g.ok ? g.delta : null };
 }
 
@@ -77,6 +77,40 @@ export class MailService {
       const m = this.list?.find((x) => x.id === id);
       if (m) m.claimed = true;
       return grantClaim(this.inventory, res, 'mail');
+    } finally {
+      this.busy = false;
+    }
+  }
+}
+
+// 쿠폰 코드 정규화(docs/coupon.md §2, 서버 coupon_normalize와 같은 규칙): NFKC -> 대문자 -> 영문·숫자 말고 제거. 4~20자 아니면 null.
+export function normalizeCoupon(s) {
+  const v = String(s ?? '').normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return v.length >= 4 && v.length <= 20 ? v : null;
+}
+
+// 쿠폰 입력(docs/coupon.md). 판정은 서버, 지급은 출석·우편과 같은 grantClaim(txId 'coupon:{campaign}').
+// api = { call, syncClaims } - 테스트가 가짜로 바꿔 끼운다.
+export class CouponService {
+  constructor(inventory, api = { call, syncClaims }) {
+    this.inventory = inventory;
+    this.api = api;
+    this.busy = false;
+  }
+
+  // -> { ok:true, delta, title:{ko,en} } | { ok:false, reason }
+  async redeem(code) {
+    if (this.busy) return { ok: false, reason: 'busy' };
+    if (!normalizeCoupon(code)) return { ok: false, reason: 'badCode' };
+    this.busy = true;
+    try {
+      const res = await this.api.call('coupon-redeem', { code });
+      if (!res.ok) {
+        // 이미 받음: 응답이 끊겨 못 받은 지급이 있을 수 있다 - pending으로 복구.
+        if (res.reason === 'already') await this.api.syncClaims(this.inventory);
+        return res;
+      }
+      return { ...grantClaim(this.inventory, res, 'coupon', this.api.call), title: res.title ?? null };
     } finally {
       this.busy = false;
     }

@@ -104,7 +104,8 @@ const HAPTIC = { light: 'tickWeak', medium: 'tap', heavy: 'tickMedium', success:
 const platform = {
   ...web,
   id: 'toss',
-  caps: { ...web.caps, iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, haptics: false, externalLinks: false, backButton: true, exit: true, restore: false, autoRestore: false },
+  caps: { ...web.caps, iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, haptics: false, externalLinks: false, backButton: true, exit: true, restore: false, autoRestore: false,
+    coupon: cfg.features.coupon !== false }, // 쿠폰 입력 - 토스 정책 확인 전까지 platform.toss.json에서 끔(docs/coupon.md §7)
 
   async init() {
     const f = cfg.features;

@@ -1,7 +1,8 @@
 // 게임 서버(docs/server.md S1)를 메뉴에 잇는 곳: 시작 시 hello -> 미지급 복구, 출석·우편 팝업 동작,
 // 플레이어 코드 복사, 데이터 삭제 요청. 서버가 꺼져 있으면(config/server.json enabled:false) 아무것도 안 한다.
 import { initNet, net, feature, syncClaims, call, forgetSession } from '../net/api.js';
-import { AttendanceService, MailService } from '../net/services.js';
+import { AttendanceService, MailService, CouponService } from '../net/services.js';
+import { platform } from '../platform/index.js';
 import { rewardFromDelta } from '../render/rewardPopup.js';
 import { storage } from '../platform/storage.js';
 import { audio } from '../audio/AudioManager.js';
@@ -30,6 +31,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
     ready, // 로그인 + hello 끝(실패해도 resolve)
     att: null,
     mail: null,
+    coupon: null,
     _holdTimer: null,
     devToggle: {
       label: () => `서버 ${net.enabled ? '끄기' : '켜기'} (새로고침)`,
@@ -44,8 +46,10 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
   const inv = player.inventory;
   ui.att = feature('attendance') ? new AttendanceService(inv) : null;
   ui.mail = feature('mail') ? new MailService(inv) : null;
+  const couponOn = () => feature('coupon') && platform.caps.coupon !== false;
+  ui.coupon = couponOn() ? new CouponService(inv) : null;
   const code = () => (net.playerId ? net.playerId.slice(0, 8) : null);
-  menu.server = { att: ui.att, mail: ui.mail, playerCode: code };
+  menu.server = { att: ui.att, mail: ui.mail, coupon: ui.coupon, playerCode: code };
   menu.attendanceBadge = () => !!ui.att?.canClaim();
   menu.mailBadge = () => (ui.mail?.unread() ?? 0) > 0;
 
@@ -53,6 +57,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
     // /hello의 features가 끈 기능은 팝업도 예전 자리로.
     if (!feature('attendance')) ui.att = menu.server.att = null;
     if (!feature('mail')) ui.mail = menu.server.mail = null;
+    if (!couponOn()) ui.coupon = menu.server.coupon = null;
     // 지난번에 지급 못 한 것 복구(팝업 없이 지급·저장) - 다이아가 왜 늘었는지 알게 토스트 한 줄.
     if ((await syncClaims(inv)).length) menu.showToast(t('net.recovered'));
     ui.att?.refresh();
@@ -73,6 +78,13 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
     else if (action === 'open:mail') ui.mail?.refresh();
     else if (action === 'attClaim') ui.att?.claim().then(showGrant);
     else if (typeof action === 'string' && action.startsWith('mailClaim:')) ui.mail?.claim(Number(action.slice(10))).then(showGrant);
+    else if (typeof action === 'string' && action.startsWith('couponRedeem:')) {
+      // 결과는 메뉴 한 곳(couponResult)으로 - 성공이면 메뉴가 설정으로 돌아가고 여기서 획득 팝업.
+      ui.coupon?.redeem(action.slice(13)).then((res) => {
+        menu.couponResult(res);
+        showGrant(res);
+      });
+    }
     else if (action === 'playerCodeDown') {
       clearTimeout(ui._holdTimer);
       ui._holdTimer = setTimeout(() => {
@@ -92,6 +104,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
     } else return false;
     return true;
   };
+  menu.dispatch = (action) => ui.handleMenuAction(action); // 쿠폰 입력 칸 Enter = 받기
   ui.pointerUp = () => clearTimeout(ui._holdTimer);
   return ui;
 }

@@ -14,7 +14,16 @@ export const ko = {
     ranking: '랭킹',
     icon: { attendance: '출석', event: '이벤트', mail: '우편', settings: '설정', shop: '상점' },
     mode: { title: '모드 선택', normal: '일반 모드', competitive: '경쟁 모드', locked: '잠김 — 해금 조건 추가 예정' },
-    settings: { title: '설정', sfx: '효과음', bgm: '배경음', mute: '음소거', unmute: '음소거 해제', help: '도움말', about: '게임 정보', hapticsOn: '진동: 켜짐', hapticsOff: '진동: 꺼짐', language: '언어: 한국어' },
+    settings: { title: '설정', sfx: '효과음', bgm: '배경음', mute: '음소거', unmute: '음소거 해제', help: '도움말', about: '게임 정보', hapticsOn: '진동: 켜짐', hapticsOff: '진동: 꺼짐', guardianFxOn: '수호자 이펙트: 켜짐', guardianFxOff: '수호자 이펙트: 꺼짐', language: '언어: 한국어' },
+    coupon: {
+      title: '쿠폰 입력', button: '쿠폰', hint: '받은 쿠폰 코드를 입력하세요', ok: '받기', busy: '확인 중…', cancel: '취소',
+      err: {
+        notFound: '없는 쿠폰이에요. 코드를 다시 확인해 주세요', already: '이미 사용한 쿠폰이에요', expired: '기간이 끝난 쿠폰이에요',
+        notStarted: '아직 사용할 수 없는 쿠폰이에요', soldOut: '선착순 수량이 모두 소진됐어요', platform: '이 버전에서는 쓸 수 없는 쿠폰이에요',
+        tooMany: '잘못 입력한 횟수가 많아요. 10분 뒤에 다시 해 주세요', badCode: '영문과 숫자만 입력해 주세요', offline: '인터넷 연결이 필요해요',
+        banned: '잠시 후 다시 시도해 주세요', error: '잠시 후 다시 시도해 주세요',
+      },
+    },
     exit: { title: '게임 종료', body: '게임을 종료할까요?', ok: '종료', cancel: '취소' },
     quitFloor: { title: '나가기', body: '전투를 끝내고 마을로 돌아갈까요?', ok: '마을로', cancel: '취소' },
     about: {
@@ -146,7 +155,6 @@ export const ko = {
     },
   },
   hud: {
-    cascade: '연쇄 x {count}',
     combo: 'COMBO x {count}',
   },
   puzzle: {

@@ -20,7 +20,9 @@ import { HUD_CONFIG } from '../config/hud.js';
 import { GAME_INFO } from '../config/gameInfo.js';
 import { platform } from '../platform/index.js';
 import { haptics } from '../platform/haptics.js';
+import { guardianFxSetting } from './guardianFx.js';
 import { drawImageSnapped, screen } from './screenFit.js';
+import { createDomInput, placeDomInput } from './ui/domInput.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -68,13 +70,14 @@ const BAR_BOX_H = 28;
 
 const POPUP_SIZES = {
   mode: [400, 330],
-  settings: [400, 496],
+  settings: [400, 552],
   help: [480, 820],
   about: [480, 820],
   attendance: [400, 180], // 서버가 켜져 있으면 ATT 높이(_popupCardBasis)
   event: [520, 640], // 폭 520 = 360dp 폰에서 320dp 배너(basis 480)+여백이 들어가게. 이벤트 목록은 스크롤, 광고 칸은 아래 고정.
   mail: [400, 180],
   exit: [400, 240],
+  coupon: [400, 312],
 };
 // 이벤트 팝업 광고 칸(docs/ads.md 3장): 안내 문구 아래 "광고" 라벨 + 테두리 칸. 칸 = 320x50dp 배너가 들어갈 basis 크기 + 여백 pad.
 // 칸 양옆·바로 위에는 버튼을 두지 않는다(AdMob: 버튼 옆 배너 금지) - 닫기 버튼(오른쪽 위)과는 100 이상 떨어져 있다.
@@ -83,8 +86,14 @@ const EVENT_AD = { labelGap: 12, pad: 4, bottom: 24, bannerW: 320, bannerH: 50, 
 // 이벤트 목록(배너 줄) - viewY부터 광고 라벨 위 gap까지 보이고 그 안에서 스크롤.
 const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12 };
 // 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
-const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 468, 320, 46] };
+const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 524, 320, 46] };
 const HAPTICS_EXTRA_H = 56;
+// 쿠폰(docs/coupon.md §1, 카드 왼쪽 위 기준). 버튼은 설정 카드 왼쪽 위(서버 쿠폰 기능이 켜졌을 때만).
+const COUPON_BTN = [14, 12, 100, 36];
+const COUPON = { hintY: 100, input: [40, 124, 320, 56], msgY: 206, cancel: [40, 236, 150, 46], ok: [210, 236, 150, 46], maxLength: 24 };
+export const COUPON_REASONS = ['notFound', 'already', 'expired', 'notStarted', 'soldOut', 'platform', 'tooMany', 'badCode', 'offline', 'banned'];
+// 도움말·게임 정보·쿠폰은 X·뒤로가기로 설정에 돌아간다.
+const BACK_TO_SETTINGS = new Set(['help', 'about', 'coupon']);
 // 종료 확인(뒤로가기 - 메뉴에서). 카드 왼쪽 위 기준.
 const EXIT = { bodyY: 110, cancel: [40, 160, 150, 46], ok: [210, 160, 150, 46] };
 
@@ -102,6 +111,7 @@ const SETTINGS = {
     { id: 'help', labelKey: 'menu.settings.help', rect: [40, 300, 320, 46] },
     { id: 'about', labelKey: 'menu.settings.about', rect: [40, 356, 320, 46] },
     { id: 'language', labelKey: 'menu.settings.language', rect: [40, 412, 320, 46] },
+    { id: 'guardianFx', labelKey: 'menu.settings.guardianFxOn', rect: [40, 468, 320, 46] },
   ],
 };
 // 도움말 팝업(카드 왼쪽 위 기준, 카드 480x820). 본문은 locale의 menu.help.pages(쪽마다 { title, image?, body: [문단] }).
@@ -180,7 +190,10 @@ export class MainMenuScreen {
     this._transform = null; // 최근 draw()의 {offsetX, offsetY, k} - 포인터 판정에 그대로 쓴다.
     this._assets = null; // CanvasRenderer.assets(uiImages/uiManifest) - draw()마다 받는다.
 
-    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' (보관함은 main.js의 정비 팝업)
+    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' | 'coupon' (보관함은 main.js의 정비 팝업)
+    this._couponInput = null; // 쿠폰 팝업의 DOM <input>(열 때 만들고, 팝업이 바뀌면 draw가 뗀다)
+    this._couponMsg = null; // 실패 reason - 입력 칸 아래 빨간 한 줄
+    this.dispatch = () => false; // serverUi: 메뉴 action 처리(쿠폰 입력 칸 Enter = 받기)
     this._modeLockHint = false;
     this._pressed = null; // 누르고 있는 버튼 id - _pressed 그림으로 바꿔 그린다.
     this._drag = null; // 설정 슬라이더를 끌고 있는 중 - { channel, rect } | null.
@@ -195,7 +208,7 @@ export class MainMenuScreen {
     this.mailBadge = () => false; // main.js: 서버가 켜져 있으면 "안 받은 우편 있음"
     this.attendanceBadge = () => true; // main.js: 서버가 켜져 있으면 "오늘 받을 수 있음"
     // 서버(출석·우편·플레이어 코드) - main.js가 채운다. null = 서버 꺼짐(출석·우편은 예전 자리 팝업).
-    // { att: { status, busy } | null, mail: { list, reason, busy } | null, playerCode: () => string|null } - 기능 스위치가 꺼진 것은 null
+    // { att: { status, busy } | null, mail: { list, reason, busy } | null, coupon: { busy } | null, playerCode: () => string|null } - 기능 스위치가 꺼진 것은 null
     this.server = null;
     this.aboutNotice = null; // { key, until } 플레이어 코드 줄에 잠깐 띄우는 글(복사했어요 등)
     this.popupAd = () => false; // main.js: 이벤트 팝업에 광고 칸을 그릴지(caps.popupBanner + 광고 제거 없음)
@@ -250,6 +263,7 @@ export class MainMenuScreen {
     this._drawToast(ctx, nowMs);
     if (this.popup) this._drawPopup(ctx, width, height);
     ctx.restore();
+    this._syncCouponInput(ctx.canvas);
   }
 
   // 메뉴 한 줄 알림(예: 받지 못한 보상 복구). 타이틀에서 불려도 메뉴가 보일 때부터 TOAST.ms 동안.
@@ -452,7 +466,8 @@ export class MainMenuScreen {
 
     const [cx, cy, cw] = card;
     // 문장(48x48)을 윗변 가운데에 반쯤 걸쳐서. 전용 문장이 없는 팝업은 설정 문장을 쓴다. 제목은 금색 #f2d264.
-    this._sprite(ctx, this.popup === 'mode' ? 'menu/emblem_mode.png' : 'menu/emblem_settings.png', cx + cw / 2 - 24, cy - 24);
+    const emblem = this.popup === 'mode' ? 'menu/emblem_mode.png' : this.popup === 'coupon' ? 'menu/emblem_coupon.png' : 'menu/emblem_settings.png';
+    if (!this._sprite(ctx, emblem, cx + cw / 2 - 24, cy - 24)) this._sprite(ctx, 'menu/emblem_settings.png', cx + cw / 2 - 24, cy - 24);
     const title = t(`menu.${this._popupKey()}.title`);
     this._text(ctx, title, cx + cw / 2, cy + 52, { size: 22, color: COLORS.title, align: 'center' });
 
@@ -466,6 +481,7 @@ export class MainMenuScreen {
     else if (this.popup === 'exit') this._drawExitPopup(ctx, card);
     else if (this.popup === 'attendance' && this.server?.att) this._drawAttendancePopup(ctx, card);
     else if (this.popup === 'mail' && this.server?.mail) this._drawMailPopup(ctx, card);
+    else if (this.popup === 'coupon') this._drawCouponPopup(ctx, card);
     else this._drawPlaceholderPopup(ctx, card);
   }
 
@@ -685,9 +701,101 @@ export class MainMenuScreen {
       const down = this._pressed === btn.id;
       const rect = [cx + bx, cy + by, bw, bh];
       if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
-      const label = btn.id === 'mute' && audio.muted ? 'menu.settings.unmute' : btn.id === 'haptics' ? (haptics.enabled() ? 'menu.settings.hapticsOn' : 'menu.settings.hapticsOff') : btn.labelKey;
+      const label = btn.id === 'mute' && audio.muted ? 'menu.settings.unmute' : btn.id === 'haptics' ? (haptics.enabled() ? 'menu.settings.hapticsOn' : 'menu.settings.hapticsOff') : btn.id === 'guardianFx' ? (guardianFxSetting.enabled() ? 'menu.settings.guardianFxOn' : 'menu.settings.guardianFxOff') : btn.labelKey;
       this._text(ctx, t(label), cx + bx + bw / 2, cy + by + bh / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
     }
+    if (this.server?.coupon) this._drawCouponButton(ctx, card);
+  }
+
+  _drawCouponButton(ctx, [cx, cy]) {
+    const [bx, by, bw, bh] = COUPON_BTN;
+    const down = this._pressed === 'coupon';
+    const rect = [cx + bx, cy + by, bw, bh];
+    if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+    const dy = down ? 2 : 0;
+    this._sprite(ctx, 'menu/icon_coupon.png', rect[0] + 8, rect[1] + 2 + dy); // 16x16 -> 화면 32
+    this._text(ctx, t('menu.coupon.button'), rect[0] + 8 + 32 + 6, rect[1] + bh / 2 + dy, { size: 15 });
+  }
+
+  // ---- 쿠폰 팝업 ----
+
+  _couponRect(card, r) {
+    return [card[0] + r[0], card[1] + r[1], r[2], r[3]];
+  }
+
+  _drawCouponPopup(ctx, card) {
+    const [cx, cy, cw] = card;
+    this._text(ctx, t('menu.coupon.hint'), cx + cw / 2, cy + COUPON.hintY, { size: 13, color: COLORS.dim, align: 'center' });
+    const box = this._couponRect(card, COUPON.input);
+    if (!this._nine(ctx, 'menu/inset.png', box)) this._panel(ctx, box, COLORS.bg2, COLORS.bg3);
+    if (this._couponMsg) this._text(ctx, couponErrorText(this._couponMsg), cx + cw / 2, cy + COUPON.msgY, { size: 13, color: COLORS.redLight, align: 'center' });
+    const busy = !!this.server?.coupon?.busy;
+    for (const [id, r, img, label] of [
+      ['couponCancel', COUPON.cancel, 'btn_secondary', 'menu.coupon.cancel'],
+      ['couponOk', COUPON.ok, 'btn_primary', busy ? 'menu.coupon.busy' : 'menu.coupon.ok'],
+    ]) {
+      const down = this._pressed === id;
+      const rect = this._couponRect(card, r);
+      if (!this._nine(ctx, `buttons/${img}${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+      this._text(ctx, t(label), rect[0] + r[2] / 2, rect[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+    }
+  }
+
+  // 설정의 쿠폰 버튼 -> 쿠폰 팝업 + DOM 입력(탭 동작 안이라 focus로 모바일 키보드가 뜬다).
+  _openCoupon() {
+    this.popup = 'coupon';
+    this._couponMsg = null;
+    this._couponInput?.remove();
+    this._couponInput = createDomInput({
+      maxLength: COUPON.maxLength,
+      placeholder: 'XXXX-XXXX-XXXX',
+      placeholderColor: COLORS.bg3,
+      ariaLabel: t('menu.coupon.title'),
+      align: 'center',
+      attrs: { autocapitalize: 'characters' },
+      onInput: (el) => {
+        // 대문자로 바꿔 보여 주되 커서 자리는 그대로.
+        const up = el.value.toUpperCase();
+        if (up !== el.value) {
+          const [a, b] = [el.selectionStart, el.selectionEnd];
+          el.value = up;
+          el.setSelectionRange(a, b);
+        }
+        this._couponMsg = null;
+      },
+      onEnter: () => {
+        const action = this._couponSubmit();
+        if (action) this.dispatch(action);
+      },
+    });
+  }
+
+  // 받기: 받는 중이면 무시. 입력값은 서버로 그대로(정규화는 CouponService·서버가 한다).
+  _couponSubmit() {
+    if (!this.server?.coupon || this.server.coupon.busy) return null;
+    this._couponMsg = null;
+    return `couponRedeem:${this._couponInput?.value ?? ''}`;
+  }
+
+  // serverUi가 결과를 돌려주는 한 곳. 성공 = 입력 지우고 설정으로(획득 팝업은 serverUi), 실패 = 빨간 한 줄.
+  couponResult(res) {
+    if (res?.ok) {
+      if (this._couponInput) this._couponInput.value = '';
+      if (this.popup === 'coupon') this.popup = 'settings';
+    } else if (res?.reason !== 'busy') this._couponMsg = res?.reason ?? 'error';
+  }
+
+  // 매 프레임: 쿠폰 팝업이면 입력 칸 자리에 DOM input을 겹치고, 아니면 뗀다.
+  _syncCouponInput(canvas) {
+    if (!this._couponInput) return;
+    if (this.popup !== 'coupon') {
+      this._couponInput.remove();
+      this._couponInput = null;
+      return;
+    }
+    if (!canvas?.getBoundingClientRect || !this._transform) return;
+    const r = this._toScreen(this._couponRect(this._popupCardBasis(), COUPON.input));
+    placeDomInput(this._couponInput, canvas, r, 1, 22 * this._transform.k);
   }
 
   _settingsButtons() {
@@ -940,7 +1048,7 @@ export class MainMenuScreen {
   closePopup() {
     if (!this.popup) return false;
     if (this.popup === 'exit' && this.exitKind === 'deleteData') this.popup = 'about';
-    else this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null;
+    else this.popup = BACK_TO_SETTINGS.has(this.popup) ? 'settings' : null;
     this._drag = null;
     return true;
   }
@@ -949,7 +1057,7 @@ export class MainMenuScreen {
     const card = this._popupCardBasis();
     if (pressButton(x, y, this._toScreen(this._closeRects(card).hit), 'cancel')) {
       this._pressed = 'close';
-      this.popup = this.popup === 'help' || this.popup === 'about' ? 'settings' : null; // 도움말·게임 정보 X는 설정으로 돌아간다.
+      this.popup = BACK_TO_SETTINGS.has(this.popup) ? 'settings' : null; // 도움말·게임 정보·쿠폰 X는 설정으로 돌아간다.
       return null;
     }
 
@@ -996,7 +1104,29 @@ export class MainMenuScreen {
       }
     }
 
+    if (this.popup === 'coupon') {
+      const hit = (r) => this._toScreen(this._couponRect(card, r));
+      if (pressButton(x, y, hit(COUPON.cancel), 'cancel')) {
+        this._pressed = 'couponCancel';
+        this.popup = 'settings';
+        return null;
+      }
+      if (pressButton(x, y, hit(COUPON.ok), 'none')) {
+        const action = this._couponSubmit();
+        if (action) {
+          this._pressed = 'couponOk';
+          audio.play('ui_click');
+        }
+        return action;
+      }
+    }
+
     if (this.popup === 'settings') {
+      if (this.server?.coupon && pressButton(x, y, this._toScreen(this._couponRect(card, COUPON_BTN)))) {
+        this._pressed = 'coupon';
+        this._openCoupon();
+        return null;
+      }
       for (const row of SETTINGS.rows) {
         const g = this._sliderGeom(card, row);
         if (!pointInRect(x, y, this._toScreen([g.hit.x, g.hit.y, g.hit.width, g.hit.height]))) continue;
@@ -1011,6 +1141,7 @@ export class MainMenuScreen {
           this._pressed = btn.id;
           if (btn.id === 'mute') audio.toggleMute();
           if (btn.id === 'haptics') haptics.setEnabled(!haptics.enabled());
+          if (btn.id === 'guardianFx') guardianFxSetting.setEnabled(!guardianFxSetting.enabled());
           if (btn.id === 'language') {
             const next = LOCALE_IDS[(LOCALE_IDS.indexOf(getLocale()) + 1) % LOCALE_IDS.length];
             setLocale(next);
@@ -1112,4 +1243,9 @@ export class MainMenuScreen {
     audio.play('ui_click');
     return altar ? 'openInventory' : 'openRanking';
   }
+}
+
+// 쿠폰 실패 reason -> 문구(모르는 reason은 err.error).
+export function couponErrorText(reason) {
+  return t(`menu.coupon.err.${COUPON_REASONS.includes(reason) ? reason : 'error'}`);
 }

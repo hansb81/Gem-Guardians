@@ -1,6 +1,7 @@
 {
   "_doc": "Gem Guardians 밸런스 파라미터. floors.json은 이 파일로 tools/gen_floors.py가 만든다. 101층부터는 게임이 같은 공식으로 즉석 생성한다. 단위: 거리 = 길 전체 길이 1.0(lane), 시간 = 초.",
   "version": 1,
+  "towerFxTiers": [10, 20, 35, 50, 70],
   "tower": {
     "_doc": "5개 탑 모두 같은 수치로 시작. 레벨업은 타워 강화 팝업에서 탑마다 따로, 가진 골드만큼 연속으로.",
     "baseAtk": 10,

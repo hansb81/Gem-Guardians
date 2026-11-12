@@ -4,6 +4,7 @@
 // CanvasRenderer는 이 결과가 비어있어도(this.assets===null과 동일하게) 색 도형으로
 // fallback해서 그릴 수 있어야 한다.
 import { audio } from '../audio/AudioManager.js';
+import { buildOutlineSheets, atkKey } from './guardianFx.js';
 
 async function fetchJson(path) {
   try {
@@ -110,7 +111,7 @@ export function tintSheet(img, maskColors, ramp) {
 // onProgress(loadedCount, totalCount)를 받아 로드 진행률을 알려준다.
 // 반환값: CanvasRenderer.setAssets()에 그대로 꽂아 쓸 수 있는 형태.
 export async function loadAssets(onProgress) {
-  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest, monsterFxManifest] = await Promise.all([
+  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest, monsterFxManifest, guardianFxManifest, guardianAtkManifest] = await Promise.all([
     fetchJson('assets/manifest.json'),
     fetchJson('assets/gems/manifest.json'),
     fetchJson('src/config/effects.json'),
@@ -129,6 +130,8 @@ export async function loadAssets(onProgress) {
     fetchJson('assets/ui/shop/manifest.json'),
     fetchJson('assets/ui/ranking/manifest.json'),
     fetchJson('assets/effects/monster/manifest.json'),
+    fetchJson('assets/guardians/fx/manifest.json'),
+    fetchJson('assets/guardians/fx/attack_manifest.json'),
   ]);
 
   const jobs = [];
@@ -266,6 +269,22 @@ export async function loadAssets(onProgress) {
     jobs.push({ bucket: 'monsterFx', key, src: `assets/effects/monster/${anim.sheet}`, anim });
   }
 
+  // 수호자 레벨 구간 이펙트(assets/guardians/fx) - ground/motes/shard/back 시트를 색마다. 키 "{종류}_{색}".
+  for (const color of statueManifest.colors ?? []) {
+    for (const kind of ['ground', 'motes', 'shard', 'back']) {
+      const file = guardianFxManifest[kind]?.file;
+      if (file) jobs.push({ bucket: 'guardianFx', key: `${kind}_${color}`, src: `assets/guardians/fx/${file.replace('{color}', color)}` });
+    }
+  }
+
+  // 수호자 일반 공격 연출(attack_manifest.json) - proj/cast/hit[tier][색], residue[색]. 키는 guardianFx.atkKey.
+  for (const kind of ['proj', 'cast', 'hit']) {
+    for (const [tier, byColor] of Object.entries(guardianAtkManifest[kind] ?? {})) {
+      for (const color of Object.keys(byColor)) jobs.push({ bucket: 'guardianAtk', key: atkKey(kind, tier, color), src: `assets/guardians/fx/atk_${kind}${tier}_${color}.png` });
+    }
+  }
+  for (const color of Object.keys(guardianAtkManifest.residue ?? {})) jobs.push({ bucket: 'guardianAtk', key: atkKey('residue', 0, color), src: `assets/guardians/fx/atk_residue_${color}.png` });
+
   const gemImages = new Map();
   const gemAnims = new Map();
   const enemySprites = new Map(); // monster id -> 프레임 state[](순서대로, 로드 완료 순서가 아니라 anim.frames 순서).
@@ -282,6 +301,8 @@ export async function loadAssets(onProgress) {
   const summonAnims = new Map();
   const skillAnims = new Map();
   const monsterFxAnims = new Map();
+  const guardianFxSheets = new Map();
+  const guardianAtkSheets = new Map();
   let gemColorImage = null;
 
   const total = jobs.length;
@@ -328,6 +349,12 @@ export async function loadAssets(onProgress) {
           fireFrame: job.anim.fireFrame,
           drawScale: job.anim.drawScale, // 있으면 칸 맞춤 대신 이 배율로 그린다(수호자)
           muzzle: job.anim.muzzle, // 공격 시트의 발사 위치(화면에서 보이는 방향 기준 원본 좌표)
+          // 수호자(drawScale 있는 시트)만 - 레벨 이펙트 tier 3+ 윤곽 { bright, dim } 스트립, 로드 때 한 번.
+          outline: (() => {
+            const colors = guardianFxManifest.outline?.colors?.[job.key.slice(job.key.lastIndexOf('_') + 1)];
+            if (!job.anim.drawScale || !colors || !state.loaded || state.failed) return null;
+            return buildOutlineSheets(state.img, job.anim.frameW, job.anim.frameH, job.anim.frames, colors);
+          })(),
         });
       } else if (job.bucket === 'towerProjectile') {
         towerProjectiles.set(job.key, {
@@ -373,7 +400,9 @@ export async function loadAssets(onProgress) {
         skillAnims.set(job.key, entry);
       } else if (job.bucket === 'monsterFx') {
         monsterFxAnims.set(job.key, { ...job.anim, state });
-      } else if (job.bucket === 'summonAnim') {
+      } else if (job.bucket === 'guardianFx') guardianFxSheets.set(job.key, state);
+      else if (job.bucket === 'guardianAtk') guardianAtkSheets.set(job.key, state);
+      else if (job.bucket === 'summonAnim') {
         summonAnims.set(job.key, { state, frameW: job.anim.frameW, frameH: job.anim.frameH, frames: job.anim.frames });
       }
     })
@@ -421,6 +450,12 @@ export async function loadAssets(onProgress) {
     // 몬스터 타격·사망(assets/effects/monster/README.md) - battleRenderer가 hit/death 타이밍·flashMap을 읽는다.
     monsterFxManifest,
     monsterFxAnims,
+    // 수호자 레벨 구간 이펙트(assets/guardians/fx/manifest.json) - guardianFx.js가 읽는다.
+    guardianFxManifest,
+    guardianFxSheets,
+    // 수호자 일반 공격 연출(attack_manifest.json) - 실패하면 battleRenderer가 proj_/hit_{색}으로 대체.
+    guardianAtkManifest,
+    guardianAtkSheets,
     // manifest.tileSize/bodySize/drawScale은 잼과 같은 규격(assets/obstacles/README.md) -
     // manifest 로드 실패 시에도 fallback 도형만 그리면 되므로 기본값을 그대로 둔다.
     obstacleTileSize: obstacleManifest.tileSize ?? 48,

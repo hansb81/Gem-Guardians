@@ -338,6 +338,9 @@
       "hitFrame": 2,
       "knockback": 0.05,
       "knockbackMs": 120,
+      "dropFrom": [-38, -44],
+      "dropFrame": 1,
+      "_note_drop": "위에서 꽂힘(렌더 전용): hitFrame 전까지 dropFrame(불꽃 없는 가시)을 dropFrom(원본 px, 가시 축 방향)에서 가속하며 내려 그린다. 피해 시점은 그대로.",
       "note": "가로·세로 라인 잼 공통 = 가시. 가장 앞 적 1마리. 촉(22,22)이 적 몸통 중심에 오게 프레임 중심을 (-12,-12)*scale 오프셋. 프레임 2에 피해 ×2.5 + 넉백(progress −0.05, knockbackImmune 제외). 라인 2개 동시면 두 번째는 그 다음 앞 적."
     },
     "bomb": {

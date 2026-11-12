@@ -14,3 +14,6 @@ dist/
 .env.local
 server/supabase/functions/.env
 preview/screen-fit/
+
+# Supabase CLI 로컬 상태(연결한 프로젝트 ref 등) - 기기마다 다름
+supabase/.temp/

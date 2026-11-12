@@ -171,6 +171,8 @@ export class SkillFx {
         x: event.skill === 'line' ? st?.bodyX : st?.footX,
         y: event.skill === 'line' ? st?.bodyY : st?.footY,
         shake: event.skill === 'bomb' && (color === 'red' || color === 'blue' || color === 'yellow') ? skill.shakeMs : 0,
+        drop: event.skill === 'line' ? skill.dropFrom ?? null : null, // 위에서 꽂히는 구간(원본 px)
+        dropFrame: skill.dropFrame ?? 1,
       });
     } else if (event.skill === 'box') {
       const souls = event.targets.map((id, i) => {
@@ -319,13 +321,14 @@ export class SkillFx {
   }
 
   // 진행 중 연출 그리기(적 다음, 석상 앞).
-  draw(ctx, bs, track, assets, now) {
+  // panel = 전투 패널 - 위(층 표시·성벽 HP 바)·오른쪽·아래는 패널 끝까지 덮어도 된다(운석·빛기둥·가시 낙하·영혼).
+  draw(ctx, bs, track, assets, now, panel = track) {
     const anims = assets?.skillAnims;
     const scale = assets?.enemySpriteRules?.displayScale ?? 2;
     ctx.save();
-    // 석상 쪽으로 넘어가지 않게 전투 길 안으로 자른다(성벽에 붙은 적의 가시 꼬리 등).
+    // 왼쪽만 전투 길에서 자른다 - 석상 쪽으로 넘어가지 않게(성벽에 붙은 적의 가시 꼬리 등).
     ctx.beginPath();
-    ctx.rect(track.x, track.y, track.width, track.height);
+    ctx.rect(track.x, panel.y, panel.x + panel.width - track.x, panel.height);
     ctx.clip();
     ctx.imageSmoothingEnabled = false;
     for (const fx of this._fx) {
@@ -340,9 +343,17 @@ export class SkillFx {
         const f = anim ? frameAt(anim, age) : -1;
         if (f >= 0) this._drawAnim(ctx, anim, f, fx.x - (anim.frameW * scale) / 2, fx.y - (anim.frameH * scale) / 2, scale, fx.color);
       } else if (fx.kind === 'line') {
-        // 촉(22,22)이 몸통 중심에 오게.
-        const f = frameAt(fx.anim, age);
-        if (f >= 0 && fx.x != null) this._drawAnim(ctx, fx.anim, f, fx.x - 22 * scale, fx.y - 22 * scale, scale);
+        // 촉(22,22)이 몸통 중심에 오게. 맞기 전(hitMs)까지는 dropFrame을 dropFrom에서 가속하며 내려 꽂는다.
+        let f = frameAt(fx.anim, age);
+        let ox = 0;
+        let oy = 0;
+        if (fx.drop && age < fx.hitMs) {
+          const k = 1 - (age / fx.hitMs) ** 2;
+          ox = fx.drop[0] * k * scale;
+          oy = fx.drop[1] * k * scale;
+          f = fx.dropFrame;
+        }
+        if (f >= 0 && fx.x != null) this._drawAnim(ctx, fx.anim, f, fx.x - 22 * scale + ox, fx.y - 22 * scale + oy, scale);
       } else if (fx.kind === 'bomb') {
         const f = frameAt(fx.anim, age);
         if (f >= 0 && fx.x != null) this._drawAnim(ctx, fx.anim, f, fx.x - (fx.anim.frameW * scale) / 2, fx.y - fx.anim.frameH * scale, scale);

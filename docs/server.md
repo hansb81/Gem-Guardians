@@ -164,6 +164,11 @@ ad_views (transaction_id text primary key, player_id uuid, placement text,
 -- 랭킹: ranking-proposal §13-2 그대로 (normal_best, comp_best, comp_runs, season_results)
 -- players 표가 위로 합쳐지므로 §13-2의 players는 생략
 
+-- 쿠폰 (docs/coupon.md §3): 코드 = 정규화 값, campaign 단위 계정당 1번(claims 'coupon:{campaign}'), 틀린 입력 기록은 7일 cron 삭제
+coupons (code text primary key, campaign text, title_ko text, title_en text, bundle jsonb, starts_at, ends_at,
+         max_uses int, uses int, platforms text[], enabled boolean, note text, created_at)
+coupon_tries (player_id uuid, at timestamptz, ok boolean)
+
 -- 운영 기록 (웹훅 원본 등, 90일 보관)
 server_log (id bigserial, at timestamptz default now(), source text, level text, body jsonb)
 ```
@@ -192,6 +197,7 @@ server_log (id bigserial, at timestamptz default now(), source text, level text,
 | `POST /webhook/revenuecat` | (RevenueCat이 호출) | 헤더 비밀값 확인 → 구매 기록·환불 표시 |
 | `GET /mail` · `POST /mail/claim` | id | 우편함 목록·수령 |
 | `GET /events` | – | 진행 중 이벤트 (메뉴 왼쪽 위 이벤트 버튼) |
+| `POST /coupon-redeem` | code | 쿠폰 판정(SQL `coupon_redeem`) → `{ ok, txId:'coupon:{campaign}', bundle, title }` 또는 reason (docs/coupon.md §3) |
 | `/rank/*` | – | ranking-proposal §13-3 그대로 (profile, normal, comp/start, comp/finish, top, me, result, claim) |
 
 **지급 흐름 (모든 보상 공통)**

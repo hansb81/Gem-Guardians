@@ -10,6 +10,7 @@ import { pickSummonFrame } from '../battle/summon.js';
 import { ditherPattern, drawItemIconFallback } from './itemBarRenderer.js';
 import { SkillFx } from './skillFx.js';
 import { MonsterFx, isBigMonster } from './monsterFx.js';
+import { FX_SLOT_STAGGER_MS, fxTier, GuardianAttackFx, atkCfg, atkFrame, drawAtkSprite, quantizeAngle, drawGuardianFxBack, drawGuardianFxBehind, drawGuardianFxFront, drawGuardianOutline } from './guardianFx.js';
 
 // tower.color 값('red'|'blue'|'yellow'|'green'|'purple')은 GEM_TYPES의 id와 같은 이름을
 // 쓰므로 그대로 색상표로 재사용한다(하드코딩 회피).
@@ -55,6 +56,20 @@ const DEFAULT_BG_FRAME_H = 80;
 const DEFAULT_BG_FRAMES = 8;
 const DEFAULT_BG_FRAME_MS = 200;
 const BG_FALLBACK_FILL = '#0d0a10';
+// 몬스터가 나오는 오른쪽 끝 어둠(체커 디더, 반투명 없음) - 안쪽부터 25/50/75/100%, 단계마다 원본 4px(논리 8px).
+const EDGE_FOG_STEP = 8;
+const EDGE_FOG_TILES = [[0], [0, 3], [0, 1, 3], [0, 1, 2, 3]]; // 4x4 타일의 2x2 칸 번호(0 왼위, 1 오위, 2 왼아래, 3 오아래)
+const _fogPatterns = [];
+function fogPattern(ctx, level) {
+  if (_fogPatterns[level]) return _fogPatterns[level];
+  const tile = document.createElement('canvas');
+  tile.width = 4;
+  tile.height = 4;
+  const t = tile.getContext('2d');
+  t.fillStyle = BG_FALLBACK_FILL;
+  for (const c of EDGE_FOG_TILES[level]) t.fillRect((c % 2) * 2, (c >> 1) * 2, 2, 2);
+  return (_fogPatterns[level] = ctx.createPattern(tile, 'repeat'));
+}
 const DEFAULT_PLINTH_FRAME_W = 23;
 const DEFAULT_PLINTH_FRAME_H = 12;
 const DEFAULT_PLINTH_FRAMES = 8;
@@ -132,9 +147,12 @@ export class BattleRenderer {
     this.particles = null;
     this.shake = null;
     this._frame = 0; // 결계 테두리 2프레임 교대용 카운터
-    this._brightProjectiles = new Map(); // color -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
+    this._brightProjectiles = new Map(); // 색(또는 공격 연출 시트 키) -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
+    this._brightSheetFn = (key, img) => this._brightSheet(key, img);
     this._seenRevives = new WeakSet(); // 이미 파편을 뿌린 wallRevived 이벤트
     this._monsterFx = new MonsterFx(); // 몬스터 타격·사망(assets/effects/monster)
+    this._atkFx = new GuardianAttackFx(); // 수호자 일반 공격 시전·명중·잔상(attack_manifest.json)
+    this._hud = null; // 투사체를 쏜 순간의 레벨·이펙트 설정(_spawnTowerProjectile)
     this._fxBattle = null; // 새 전투면 남은 사망 연출을 버린다
   }
 
@@ -173,7 +191,10 @@ export class BattleRenderer {
     if (battleState !== this._fxBattle) {
       this._fxBattle = battleState;
       this._monsterFx.reset();
+      this._atkFx.reset();
     }
+    this._hud = hud;
+    this._assets = assets;
 
     // 모래시계 정지 중 - 걷기 프레임을 정지 시작 시각에 고정한다(멈춘 적만).
     const frozen = !!battleState.frozen;
@@ -196,15 +217,20 @@ export class BattleRenderer {
     const towers = battleState.towers || [];
     this._dev = { layout, assets, now }; // devShoot용(마지막 프레임)
 
+    // 전투 그림은 패널 안에서만 - 넓은 화면에서 막 나온 몬스터가 패널 밖 검은 띠 위에 그려지지 않게.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rect.x, rect.y, rect.width, rect.height);
+    ctx.clip();
+
     const bg = this._drawBackground(ctx, layout.bgRect, assets, bgNow, hud?.floor ?? 1);
 
     this._drawFloorLabel(ctx, layout.floorLabel, hud, assets);
     this._drawWallHealthBar(ctx, layout.wallBar, battleState, assets);
-    this._drawPauseButton(ctx, layout.pauseButton, assets);
     this._drawTrack(ctx, layout.track);
     this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now, battleState);
     this._skillFx.update(battleState, layout.track, assets, now, this.particles, this.shake);
-    this._skillFx.draw(ctx, battleState, layout.track, assets, now);
+    this._skillFx.draw(ctx, battleState, layout.track, assets, now, rect);
     if (battleState.wallShieldSec > 0) {
       this._drawWallShield(ctx, layout.track, battleState.events || []);
       this._drawStatusIcon(ctx, layout.wallBar, itemIcons, 'barrier', String(Math.ceil(battleState.wallShieldSec)), frozen ? 1 : 0, assets);
@@ -217,11 +243,25 @@ export class BattleRenderer {
       this._drawStatusIcon(ctx, layout.wallBar, itemIcons, 'hourglass', String(Math.ceil(Math.max(battleState._freeze?.normal ?? 0, battleState._freeze?.boss ?? 0))), 0, assets);
     }
     this._updateTowerAnimations(battleState, layout, towers, assets, now);
-    this._drawTowers(ctx, layout.towerArea, towers, assets, now, hud, bg, battleState.summon, rect);
+    this._drawTowers(ctx, layout.towerArea, towers, assets, now, hud, bg, battleState.summon, rect, bgNow);
+    this._atkFx.drawCasts(ctx, assets, now); // 수호자 스프라이트 앞
     this._drawTowerProjectiles(ctx, assets, now, battleState);
     this._monsterFx.drawSprites(ctx, assets, now, assets?.enemySpriteRules?.displayScale ?? 2);
+    this._atkFx.drawHits(ctx, assets, now); // 몬스터 앞
+    this._drawEdgeFog(ctx, layout.bgRect); // 몬스터·이펙트 위 - 어둠 속에서 걸어 나온다
     this._drawEventOverlays(ctx, layout, battleState, assets);
     this._drawFloorStartBanner(ctx, layout.track, now);
+    ctx.restore();
+  }
+
+  // 전투 영역 오른쪽 끝 어둠 띠(EDGE_FOG_*). 바깥쪽일수록 촘촘하다.
+  _drawEdgeFog(ctx, bgRect) {
+    const right = bgRect.x + bgRect.width;
+    for (let level = 0; level < EDGE_FOG_TILES.length; level++) {
+      const x0 = snapPx(right - (EDGE_FOG_TILES.length - level) * EDGE_FOG_STEP);
+      ctx.fillStyle = fogPattern(ctx, level);
+      ctx.fillRect(x0, bgRect.y, snapPx(x0 + EDGE_FOG_STEP) - x0, bgRect.height);
+    }
   }
 
   // 결계 두루마리(docs/items.md B3, 7장 "성벽 앞 코드 사각형") - 방어선(track.x)에 세로 테두리. 적 공격이
@@ -388,16 +428,15 @@ export class BattleRenderer {
     const rowY = rect.y + 6;
     const gap = 6;
 
-    // 한 줄에 왼쪽부터 층 표시 - 성벽 HP 바 - 일시정지 버튼(docs 요청: 그 아래 HUD).
+    // 한 줄에 왼쪽부터 층 표시 - 성벽 HP 바(일시정지 버튼은 재화 바 오른쪽으로 옮김).
     // 층 배지는 box_floor(9-slice) 테두리가 위아래 5px씩 고정으로 먹어서 barHeight 그대로면
     // 글자가 테두리를 덮는다 - 배지만 더 높게 잡고 줄 높이를 거기에 맞춘다(탑 영역은 그만큼 내려간다).
     const floorHeight = barHeight + 12;
     const barY = rowY + (floorHeight - barHeight) / 2;
     // 폭은 "120층☠"(3자리 + 보스 마커)가 테두리 안에 들어갈 만큼(docs/balance.md §4·§6).
     const floorLabel = { x: rect.x + 6, y: rowY, width: Math.max(90, rect.width * 0.24), height: floorHeight };
-    const pauseButton = { x: rect.x + rect.width - 6 - barHeight, y: barY, width: barHeight, height: barHeight };
     const wallBarX = floorLabel.x + floorLabel.width + gap;
-    const wallBar = { x: wallBarX, y: barY, width: pauseButton.x - gap - wallBarX, height: barHeight };
+    const wallBar = { x: wallBarX, y: barY, width: rect.x + rect.width - 6 - wallBarX, height: barHeight };
 
     const contentY = rowY + floorHeight + 6;
     const contentHeight = rect.y + rect.height - contentY - 6;
@@ -424,7 +463,7 @@ export class BattleRenderer {
     // 층 배경은 패널(= frame) 가로 끝까지, 세로는 content만큼(_drawBackground).
     const bgRect = { x: rect.x, y: contentY, width: rect.width, height: contentHeight };
 
-    return { floorLabel, wallBar, pauseButton, towerArea, track, content, bgRect };
+    return { floorLabel, wallBar, towerArea, track, content, bgRect };
   }
 
   // assets/backgrounds - 전투 패널 안쪽에 가장 먼저 그리는 층별 배경. manifest.json이나 해당
@@ -503,29 +542,6 @@ export class BattleRenderer {
 
   // buttons/btn_pause(16x16 고정, 2배) - 일시정지 버튼(README). 이미지가 없으면 기존
   // 돌출 패널 + 막대 두 개(||) 도형으로 폴백한다.
-  _drawPauseButton(ctx, rect, assets) {
-    ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    const cx = rect.x + rect.width / 2;
-    const cy = rect.y + rect.height / 2;
-    const drawn = drawFixedImage(ctx, assets, 'buttons/btn_pause.png', cx, cy, 2);
-    if (!drawn) {
-      ctx.fillStyle = HUD_CONFIG.panel.raised;
-      ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
-      ctx.strokeStyle = HUD_CONFIG.panel.raisedBorder;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(rect.x + 0.5, rect.y + 0.5, rect.width - 1, rect.height - 1);
-
-      ctx.fillStyle = HUD_CONFIG.text.primary;
-      const barW = Math.max(2, rect.width * 0.14);
-      const barH = rect.height * 0.5;
-      const gap = rect.width * 0.12;
-      ctx.fillRect(cx - gap / 2 - barW, cy - barH / 2, barW, barH);
-      ctx.fillRect(cx + gap / 2, cy - barH / 2, barW, barH);
-    }
-    ctx.restore();
-  }
-
   // icons/wall(16x16 고정) + gauges/hp_frame(가로 3-slice) + fill_red/yellow/green(README).
   // HP 숫자는 계속 코드로 그린다. 이미지가 없으면 기존 2중 사각형 폴백.
   _drawWallHealthBar(ctx, barRect, battleState, assets) {
@@ -565,7 +581,9 @@ export class BattleRenderer {
       if (uiReady(fillState) && fillW > 0) {
         drawImageSnapped(ctx, fillState.img, 0, 0, fillState.img.width, fillState.img.height, gaugeX + fx * k, barRect.y + fy * k, fillW, fh * k);
       }
+      this._setWallGauge(gaugeX + fx * k, barRect.y + fy * k, w - fx * k - padRight * k, fh * k);
     } else {
+      this._setWallGauge(gaugeX, barRect.y, gaugeWidth, barRect.height);
       ctx.fillStyle = '#2a2f3a';
       ctx.fillRect(gaugeX, barRect.y, gaugeWidth, barRect.height);
       ctx.fillStyle = ratio > 0.5 ? '#2ecc71' : ratio > 0.2 ? '#f1c40f' : '#e74c3c';
@@ -579,8 +597,18 @@ export class BattleRenderer {
     ctx.font = getFontString(Math.max(9, barRect.height * 0.45));
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
-    drawText(ctx, `${Math.ceil(cur)} / ${max}`, gaugeX + gaugeWidth / 2, barRect.y + barRect.height / 2);
+    const g = this._wallGauge; // 게이지 안쪽 칸 가운데(틀 두께가 위아래 달라 바 가운데와 다르다)
+    drawText(ctx, `${Math.ceil(cur)} / ${max}`, g.x + g.width / 2, g.y + g.height / 2);
     ctx.restore();
+  }
+
+  // 피격 플래시(_drawEventOverlays)가 칠할 게이지 안쪽 칸 - 매 프레임 같은 객체를 고쳐 쓴다.
+  _setWallGauge(x, y, width, height) {
+    const g = (this._wallGauge ??= { x: 0, y: 0, width: 0, height: 0 });
+    g.x = x;
+    g.y = y;
+    g.width = width;
+    g.height = height;
   }
 
   // 탑 5개의 발 기준(bottom-center) 좌표. 왼쪽/오른쪽 2열 지그재그(TOWER_SLOTS), 위에서부터
@@ -652,13 +680,28 @@ export class BattleRenderer {
     return this._towerMuzzlePosition(towerArea, index, assets, towers[index].color);
   }
 
-  _drawTowers(ctx, towerArea, towers, assets, now, hud, bg, summon, panelRect) {
+  // fxNow = 일시정지 때 멈추는 시계(bgNow) - 레벨 구간 이펙트(guardianFx.js)용.
+  _drawTowers(ctx, towerArea, towers, assets, now, hud, bg, summon, panelRect, fxNow = now) {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     const { frameW, frameH, scale } = this._towerFrameSize(assets, towerArea);
     const feet = this._computeTowerFootPositions(towerArea, frameH);
     const summonReady = summon?.active && this._summonAssetsReady(assets);
     const summonCfg = summonReady ? { staggerMs: assets.summonManifest.staggerMs, frameMs: assets.summonManifest.frameMs } : null;
+    const fxTiers = hud?.guardianFx && assets?.guardianFxManifest ? hud.towerFxTiers : null;
+
+    // 레벨 구간 이펙트 fx_back(tier 5)은 모든 수호자·Lv 글자보다 먼저 - 큰 기운이 이웃 Lv 글자를 가린다.
+    for (let i = 0; fxTiers && i < towers.length; i++) {
+      const tower = towers[i];
+      const foot = feet[i];
+      const own = assets.towerAnims?.get(`tower_idle_${tower.color}`);
+      if (!foot || !own?.drawScale) continue;
+      const slot = summonCfg ? pickSummonFrame(summon.elapsedMs, i, summonCfg) : null;
+      if (slot && !slot.done) continue;
+      const fx = this._towerTapFx.get(tower.id);
+      const shakeX = fx?.shakeUntilMs > now ? Math.sin((fx.shakeUntilMs - now) * 0.9) * 2.5 : 0;
+      drawGuardianFxBack(ctx, assets, tower.color, fxTier(hud.towerLevels?.[i] ?? 0, fxTiers), snapPx(foot.x + shakeX), foot.y, own.drawScale, fxNow + i * FX_SLOT_STAGGER_MS);
+    }
 
     for (let i = 0; i < towers.length; i++) {
       const tower = towers[i];
@@ -693,21 +736,37 @@ export class BattleRenderer {
         const isAttackAnim = anim.mode === 'attack' && assets?.towerAnims?.has(attackKey);
         const animData = assets?.towerAnims?.get(isAttackAnim ? attackKey : `tower_idle_${tower.color}`);
 
-        ctx.save();
-        if (fx?.flashUntilMs > now) {
-          ctx.shadowColor = '#ffe066';
-          ctx.shadowBlur = frameW * 0.6;
-        }
+        const flash = fx?.flashUntilMs > now;
         if (animData && animData.state.loaded && !animData.state.failed) {
           const frame = this._towerFrameIndex(anim, animData, now, isAttackAnim);
+          const x0 = snapPx(drawX);
+          // 레벨 구간 이펙트(수호자만, 설정에서 끄면 0). 이펙트 시트는 좌우 대칭이라 반전 없이 그린다.
+          const tier = fxTiers && animData.drawScale ? fxTier(hud.towerLevels?.[i] ?? 0, fxTiers) : 0;
+          const fxT = fxNow + i * FX_SLOT_STAGGER_MS;
+          const s = animData.drawScale;
           // 석상 원본은 왼쪽을 보고 있다(assets/statues/README.md) - 적은 오른쪽에서 오므로
           // 좌우 반전해서 적을 보게 한다(ctx.scale(-1,1), 기존 적 스프라이트 반전과 같은 패턴).
-          ctx.translate(snapPx(drawX), 0);
+          ctx.save();
+          if (flash) {
+            ctx.shadowColor = '#ffe066';
+            ctx.shadowBlur = frameW * 0.6;
+          }
+          ctx.translate(x0, 0);
           ctx.scale(-1, 1);
           this._drawPlinth(ctx, assets, bg, tower.color, -frameW / 2, foot.y - frameH, scale);
+          ctx.restore();
+          if (tier) drawGuardianFxBehind(ctx, assets, tower.color, tier, x0, foot.y, s, fxT);
+          ctx.save();
+          ctx.translate(x0, 0);
+          ctx.scale(-1, 1);
           // 시트에 drawScale이 있으면(수호자 20x26) 그 배율로, 없으면 높이를 칸에 맞춘다. 폭은 시트 비율대로.
           const drawH = animData.drawScale ? animData.frameH * animData.drawScale : frameH;
           const drawW = animData.frameW * (drawH / animData.frameH);
+          if (tier) drawGuardianOutline(ctx, assets, animData, tier, frame, -drawW / 2, foot.y - drawH, s, fxT);
+          if (flash) {
+            ctx.shadowColor = '#ffe066';
+            ctx.shadowBlur = frameW * 0.6;
+          }
           drawImageSnapped(ctx, 
             animData.state.img,
             frame * animData.frameW,
@@ -719,10 +778,17 @@ export class BattleRenderer {
             drawW,
             drawH
           );
+          ctx.restore();
+          if (tier) drawGuardianFxFront(ctx, assets, tower.color, tier, x0, foot.y, s, fxT);
         } else {
+          ctx.save();
+          if (flash) {
+            ctx.shadowColor = '#ffe066';
+            ctx.shadowBlur = frameW * 0.6;
+          }
           this._drawTowerFallback(ctx, { x: drawX, y: foot.y }, frameW, frameH, tower.color);
+          ctx.restore();
         }
-        ctx.restore();
       }
 
       this._drawTowerLevelLabel(ctx, foot, frameW, hud, i);
@@ -904,7 +970,7 @@ export class BattleRenderer {
         const prevEnemy = enemies.find((e) => e.id === anim.targetEnemyId);
         const prevPos = prevEnemy ? this._enemyPixelPos(track, prevEnemy) : anim.fallbackTargetPos;
         const prevMuzzle = this._towerMuzzlePosition(towerArea, towerIndex, assets, tower.color);
-        if (prevPos && prevMuzzle) this._spawnTowerProjectile(tower, prevMuzzle, prevPos, now, anim.hitEvent);
+        if (prevPos && prevMuzzle) this._spawnTowerProjectile(tower, prevMuzzle, prevPos, now, anim.hitEvent, towerIndex);
       }
       anim.mode = 'attack';
       anim.attackStartMs = now;
@@ -931,7 +997,7 @@ export class BattleRenderer {
         const enemy = enemies.find((e) => e.id === anim.targetEnemyId);
         const targetPos = enemy ? this._enemyPixelPos(track, enemy) : anim.fallbackTargetPos;
         const muzzle = this._towerMuzzlePosition(towerArea, i, assets, tower.color);
-        if (targetPos && muzzle) this._spawnTowerProjectile(tower, muzzle, targetPos, now, anim.hitEvent);
+        if (targetPos && muzzle) this._spawnTowerProjectile(tower, muzzle, targetPos, now, anim.hitEvent, i);
       }
 
       if (frame >= frames) anim.mode = 'idle';
@@ -953,16 +1019,27 @@ export class BattleRenderer {
     if (!from) return false;
     this._spawnTowerProjectile(tower, from, to, d.now, {
       targetEnemyId: target.id, towerId: tower.id, color: tower.color, damage: kill ? Math.ceil(target.currentHealth) : 1, fromModifier: true,
-    });
+    }, this._devTurn);
     return true;
   }
 
-  _spawnTowerProjectile(tower, from, to, now, hitEvent) {
+  _spawnTowerProjectile(tower, from, to, now, hitEvent, index) {
     const speed = tower.stats?.projectileSpeed ?? DEFAULT_PROJECTILE_SPEED;
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
     const durationMs = Math.max(80, (dist / speed) * 1000);
+    // 공격 연출 tier는 쏜 순간의 레벨로 고정(비행 중 강화해도 이 발은 그대로). 설정을 끄면 0.
+    const hud = this._hud;
+    const atkTier = hud?.guardianFx && hud.towerFxTiers ? fxTier(hud.towerLevels?.[index] ?? 0, hud.towerFxTiers) : 0;
+    const assets = this._assets;
+    const atkScale = assets?.towerAnims?.get(`tower_attack_${tower.color}`)?.drawScale ?? assets?.towerAnims?.get(`tower_idle_${tower.color}`)?.drawScale ?? 0;
+    const atkFlip = to.x < from.x; // 시트는 오른쪽으로 쏘는 방향
+    if (atkScale && atkCfg(assets.guardianAtkManifest, 'cast', atkTier, tower.color)) this._atkFx.cast(atkTier, tower.color, from.x, from.y, atkScale, atkFlip, now);
     this._towerProjectiles.push({
       color: tower.color,
+      atkTier,
+      atkScale,
+      atkFlip,
+      atkRot: quantizeAngle(to.x - from.x, to.y - from.y), // 직선 비행이라 쏠 때 한 번
       buffed: !!hitEvent?.buffed, // 분노의 북 - 한 단계 밝은 시트
       fromX: from.x,
       fromY: from.y,
@@ -990,7 +1067,15 @@ export class BattleRenderer {
           const target = battleState.enemies?.find((e) => e.id === p.hitEvent.targetEnemyId && e.state === 'alive');
           if (target) {
             const st = this._skillFx.enemyState(target);
-            this._monsterFx.hit(p.color, st.frontX ?? p.toX, st.bodyY ?? p.toY, now);
+            const hx = st.frontX ?? p.toX;
+            const hy = st.bodyY ?? p.toY;
+            const m = assets?.guardianAtkManifest;
+            if (p.atkScale && atkCfg(m, 'hit', p.atkTier, p.color)) {
+              this._atkFx.hit(p.atkTier, p.color, hx, hy, p.atkScale, p.atkFlip, now);
+              if (p.atkTier >= (m.residue?.fromTier ?? 4) && atkCfg(m, 'residue', 0, p.color)) {
+                this._atkFx.residue(target.id, p.color, st.footX ?? hx, st.footY ?? p.toY, p.atkScale, p.atkFlip, now);
+              }
+            } else this._monsterFx.hit(p.color, hx, hy, now); // 새 에셋이 없으면 예전 hit_{색}
           }
           this._skillFx.onTowerHit(battleState, p.hitEvent, now);
           battleState.resolveTowerAttack(p.hitEvent);
@@ -1004,8 +1089,11 @@ export class BattleRenderer {
       const projData = assets?.towerProjectiles?.get(p.color);
 
       ctx.save();
-      if (projData && projData.state.loaded && !projData.state.failed) {
-        ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = false;
+      const atk = p.atkScale ? atkCfg(assets?.guardianAtkManifest, 'proj', p.atkTier, p.color) : null;
+      if (atk && drawAtkSprite(ctx, assets, 'proj', p.atkTier, p.color, atkFrame(atk, now - p.startMs), x, y, p.atkScale, p.atkFlip, p.buffed ? this._brightSheetFn : null, p.atkRot)) {
+        // 수호자 레벨 구간 투사체(그렸음). 새 에셋 로드 실패면 아래 예전 projectile_{색}.
+      } else if (projData && projData.state.loaded && !projData.state.failed) {
         const w = projData.frameW * scale;
         const h = projData.frameH * scale;
         const frame = Math.floor((now - p.startMs) / projData.frameMs) % projData.frames;
@@ -1068,6 +1156,7 @@ export class BattleRenderer {
     const hitKnockMs = hitFx.knockbackMs ?? 80;
     const hitKnockPx = (hitFx.knockbackPx ?? 1) * displayScale; // 원본 1px = 화면 배율만큼
 
+    this._atkFx.drawResidues(ctx, assets, now); // 바닥 잔상 - 몬스터 뒤, 바닥 위
     this._monsterFx.drawDying(ctx, assets, now); // 죽어 가는 몸은 살아 있는 몬스터 뒤에
 
     for (const enemy of enemies) {
@@ -1331,7 +1420,10 @@ export class BattleRenderer {
         ctx.save();
         ctx.globalAlpha = (1 - t) * 0.5;
         ctx.fillStyle = '#ff0000';
-        ctx.fillRect(wallBar.x, wallBar.y, wallBar.width, wallBar.height);
+        const g = this._wallGauge ?? wallBar; // HP 게이지 안쪽 칸에만(아이콘·틀 제외)
+        const x0 = snapPx(g.x);
+        const y0 = snapPx(g.y);
+        ctx.fillRect(x0, y0, snapPx(g.x + g.width) - x0, snapPx(g.y + g.height) - y0);
         ctx.restore();
         this._drawFloatingNumber(
           ctx,

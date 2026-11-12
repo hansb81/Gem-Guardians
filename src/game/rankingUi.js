@@ -10,6 +10,7 @@ import { audio } from '../audio/AudioManager.js';
 import { t } from '../config/i18n.js';
 import { platform } from '../platform/index.js';
 import { RANKING_TABS } from '../render/ui/rankingPopup.js';
+import { createDomInput, placeDomInput } from '../render/ui/domInput.js';
 
 const DRAG_PX = 8; // 보관함 목록과 같음 - 이만큼 넘게 움직이면 끌기
 const DEV_STATES = { 1: 'normal', 2: 'settle', 3: 'locked', 4: 'none' };
@@ -308,37 +309,23 @@ export class RankingUi {
   }
 
   _createInput() {
-    if (this._input || typeof document === 'undefined') return;
-    const el = document.createElement('input');
-    el.type = 'text';
-    el.maxLength = 12; // 10자를 넘겨 쳐도 잘리지 않고 "10자까지" 안내가 보이게
-    el.autocomplete = 'off';
-    el.spellcheck = false;
-    el.placeholder = t('ranking.nick.placeholder');
-    el.setAttribute('aria-label', t('ranking.nick.label'));
-    el.value = this.state.nick.draft;
-    el.style.cssText = 'position:fixed;z-index:50;margin:0;padding:0 4px;border:0;outline:0;background:transparent;color:#e8dcc0;caret-color:#f2d264;box-sizing:border-box;';
-    el.addEventListener('input', () => this._setDraft(el.value));
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') this._saveNick();
+    if (this._input) return;
+    const el = createDomInput({
+      maxLength: 12, // 10자를 넘겨 쳐도 잘리지 않고 "10자까지" 안내가 보이게
+      placeholder: t('ranking.nick.placeholder'),
+      ariaLabel: t('ranking.nick.label'),
+      value: this.state.nick.draft,
+      onInput: (e) => this._setDraft(e.value),
+      onEnter: () => this._saveNick(),
     });
-    document.body.appendChild(el);
+    if (!el) return;
     this._input = el;
     this.state.nick.domInput = true;
-    el.focus(); // 탭에서 열렸으면(사용자 동작 안) 모바일 키보드도 같이 뜬다
   }
 
   // 입력 칸 basis 사각형 -> 캔버스 위 CSS 위치.
   _placeInput(r, scale) {
-    const el = this._input;
-    if (!el) return;
-    const c = this.canvas.getBoundingClientRect();
-    scale *= c.u ?? 1; // 렌더 논리 px -> CSS px
-    const css = `${Math.round(c.left + r.x * scale)}px|${Math.round(c.top + r.y * scale)}px|${Math.round(r.width * scale)}px|${Math.round(r.height * scale)}px`;
-    if (el.dataset.pos === css) return;
-    el.dataset.pos = css;
-    const [l, tp, w, h] = css.split('|');
-    Object.assign(el.style, { left: l, top: tp, width: w, height: h, font: `${Math.round(22 * scale)}px 'Galmuri11', monospace` });
+    placeDomInput(this._input, this.canvas, r, scale);
   }
 
   _removeInput() {

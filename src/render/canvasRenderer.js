@@ -171,7 +171,7 @@ export class CanvasRenderer {
       case 'currencyBar': return L.currencyBar;
       case 'floorBox': return b?.floorLabel ?? null;
       case 'itemBar': return L.actionBar;
-      case 'topRightButton': return L.skipButton ?? b?.pauseButton ?? null;
+      case 'topRightButton': return L.skipButton ?? L.pauseButton ?? null;
       case 'battlePanel': return L.battle;
       case 'wallGauge': return b?.wallBar ?? null;
       case 'statues': return b?.towerArea ?? null;
@@ -183,7 +183,7 @@ export class CanvasRenderer {
   // 게임 화면(render) 위에 튜토리얼 오버레이 - 건너뛰기 버튼 rect를 먼저 정해 topRightButton 대상으로도 쓴다.
   drawTutorial(tut, now) {
     if (!this.lastLayout) return;
-    this.lastLayout.skipButton = this.tutorial.layoutSkip(this.ctx, this.lastLayout.battleParts?.pauseButton);
+    this.lastLayout.skipButton = this.tutorial.layoutSkip(this.ctx, this.lastLayout.pauseButton);
     this.tutorial.draw(this.ctx, this, tut, now);
   }
 
@@ -336,7 +336,6 @@ export class CanvasRenderer {
       this._particles.draw(ctx, this.assets?.effectsConfig?.settings?.boardParticlesOverBattle === false);
       ctx.restore();
     }
-    this.lastLayout.pauseButton = battleLayout?.pauseButton ?? null;
     this.lastLayout.battleParts = battleLayout;
     this.lastLayout.battle = battleLayout ? { ...layout.battle, towerArea: battleLayout.towerArea } : null;
     this._drawBoard(
@@ -2471,7 +2470,7 @@ export class CanvasRenderer {
     this._shakeY = Math.cos(nowMs / 53) * amp;
   }
 
-  // 최상단 재화 바 - 골드/다이아(아이콘+숫자) + 우측 "+"(상점) 버튼 자리. playerState는 main.js가
+  // 최상단 재화 바 - 골드/다이아(아이콘+숫자) + 우측 일시정지 버튼. playerState는 main.js가
   // 넘겨주는 단일 소스 - 저장/상점이 생기면 이 객체 값만 바뀌면 된다.
   _drawCurrencyBar(rect, playerState, goldMul = 1) {
     const { ctx } = this;
@@ -2480,7 +2479,8 @@ export class CanvasRenderer {
 
     const midY = rect.y + rect.height / 2;
     const iconSize = rect.height * 0.4;
-    const fontSize = Math.max(10, rect.height * 0.3);
+    const { fontRatio, fontMin } = HUD_CONFIG.currency;
+    const fontSize = Math.max(fontMin, rect.height * fontRatio);
     ctx.font = getFontString(fontSize, true);
 
     let x = rect.x + 10;
@@ -2510,10 +2510,10 @@ export class CanvasRenderer {
     const btnSize = rect.height * 0.64;
     const btnX = rect.x + rect.width - 10 - btnSize;
     const btnY = midY - btnSize / 2;
-    this._drawIconButton('buttons/btn_plus.png', btnX + btnSize / 2, midY, btnSize, '+');
+    this._drawIconButton('buttons/btn_pause.png', btnX + btnSize / 2, midY, btnSize, 'II');
 
     ctx.restore();
-    this.lastLayout.currencyPlusButton = { x: btnX, y: btnY, width: btnSize, height: btnSize };
+    this.lastLayout.pauseButton = { x: btnX, y: btnY, width: btnSize, height: btnSize };
   }
 
   // 재화 아이콘(골드/다이아) + 숫자 한 쌍을 그리고, 다음 요소가 시작할 x를 돌려준다. 이미지
@@ -2522,8 +2522,9 @@ export class CanvasRenderer {
     const { ctx } = this;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    const imgSize = 16 * 2; // icons/* 는 16x16 고정, 화면에는 2배
-    const drawn = drawFixedImage(ctx, this.assets, iconPath, x + imgSize / 2, midY, 2);
+    const k = HUD_CONFIG.currency.iconScale; // icons/* 는 16x16 고정
+    const imgSize = 16 * k;
+    const drawn = drawFixedImage(ctx, this.assets, iconPath, x + imgSize / 2, midY, k);
     const usedIconSize = drawn ? imgSize : iconSize;
     if (!drawn) {
       ctx.fillStyle = colors.body;
@@ -2578,7 +2579,7 @@ export class CanvasRenderer {
     return insetX + insetW + 4;
   }
 
-  // buttons/btn_plus·btn_pause(16x16 고정, 2배) - 아이콘 버튼 배경. 이미지가 없을 때만
+  // buttons/btn_pause(16x16 고정, 2배) - 아이콘 버튼 배경. 이미지가 없을 때만
   // 기존 돌출 패널 + 손으로 그린 글자/막대로 폴백한다.
   _drawIconButton(path, cx, cy, btnSize, fallbackGlyph) {
     const { ctx } = this;
@@ -2645,11 +2646,6 @@ export class CanvasRenderer {
     ctx.fillStyle = '#e8e8e8';
     drawText(ctx, scoreText, scoreTextX, midY);
 
-    // 옛 dim(#8a8296)은 바 배경(#15181f) 위에서 거의 안 보였다 - primary + 조금 크게.
-    ctx.fillStyle = HUD_CONFIG.text.primary;
-    ctx.font = getFontString(scoreFont * 0.72, true);
-    drawText(ctx, t('hud.cascade', { count: gameState.cascadeCount }), rect.x + rect.width * 0.4, midY);
-
     // 콤보(연속 스트릭)(§10) - 항상 gameState의 현재 값에서 직접 그린다(이벤트로 캐시한 값을
     // 쓰면 프레임 드롭 시 보드와 어긋날 수 있다).
     if (gameState.comboStreak > 0) {
@@ -2661,7 +2657,7 @@ export class CanvasRenderer {
       const barWidth = Math.min(80, rect.width * 0.22);
       const barHeight = Math.max(3, rect.height * 0.12);
       const barX = rect.x + rect.width - 10 - barWidth;
-      const barY = rect.y + rect.height * 0.62;
+      const barY = rect.y + rect.height * 0.62 - 4; // 4px 위로(콤보 글자와 간격)
       const ratio = Math.max(0, Math.min(1, gameState.comboStreakTimerMs / COMBO_CONFIG.timerMs));
       this._drawComboGauge(barX, barY, barWidth, barHeight, ratio);
     }

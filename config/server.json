@@ -3,5 +3,5 @@
   "enabled": true,
   "url": "https://jzpjqfbpqzghprqbqexp.supabase.co",
   "anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6cGpxZmJwcXpnaHBycWJxZXhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjEyMDMsImV4cCI6MjEwOTc5NzIwM30.7COmuSGr4ErbrCj6UDU6hJoeAOLfXm4PIIkzhCTWdx8",
-  "features": { "attendance": true, "mail": true, "compRanking": false, "iapStrict": false, "adSsv": false }
+  "features": { "attendance": true, "mail": true, "compRanking": false, "iapStrict": false, "adSsv": false, "coupon": true }
 }

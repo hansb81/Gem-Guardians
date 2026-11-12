@@ -193,6 +193,18 @@
    "h": 24,
    "use": "모드 선택 팝업 윗변 가운데 문장 24x24"
   },
+  "emblem_coupon": {
+   "file": "emblem_coupon.png",
+   "w": 24,
+   "h": 24,
+   "use": "쿠폰 팝업 윗변 가운데 문장 24x24"
+  },
+  "icon_coupon": {
+   "file": "icon_coupon.png",
+   "w": 16,
+   "h": 16,
+   "use": "설정 팝업 쿠폰 버튼 아이콘 16x16"
+  },
   "btn_close": {
    "file": "btn_close.png",
    "w": 16,

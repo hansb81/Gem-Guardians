@@ -1,0 +1,101 @@
+{
+ "tiers": [
+  {
+   "tier": 0,
+   "minLevel": 1
+  },
+  {
+   "tier": 1,
+   "minLevel": 10
+  },
+  {
+   "tier": 2,
+   "minLevel": 20
+  },
+  {
+   "tier": 3,
+   "minLevel": 35
+  },
+  {
+   "tier": 4,
+   "minLevel": 50
+  },
+  {
+   "tier": 5,
+   "minLevel": 70
+  }
+ ],
+ "anchor": "feet-center (frame bottom-center = guardian frame bottom-center)",
+ "ground": {
+  "file": "fx_ground_{color}.png",
+  "w": 24,
+  "h": 8,
+  "frames": 6,
+  "frameMs": 140,
+  "layer": "back",
+  "offsetY": 2,
+  "fromTier": 1
+ },
+ "motes": {
+  "file": "fx_motes_{color}.png",
+  "w": 24,
+  "h": 32,
+  "frames": 8,
+  "frameMs": 110,
+  "layer": "front",
+  "offsetY": 0,
+  "fromTier": 2
+ },
+ "outline": {
+  "generated": true,
+  "fromTier": 3,
+  "pulseMs": 480,
+  "colors": {
+   "red": {
+    "dim": "#b82a3c",
+    "bright": "#ff2b4e"
+   },
+   "blue": {
+    "dim": "#386cbc",
+    "bright": "#3ff0ff"
+   },
+   "green": {
+    "dim": "#3a8a3c",
+    "bright": "#b8ff3c"
+   },
+   "purple": {
+    "dim": "#7a3cae",
+    "bright": "#d94dff"
+   },
+   "yellow": {
+    "dim": "#c28a20",
+    "bright": "#ffe14a"
+   }
+  }
+ },
+ "shard": {
+  "file": "fx_shard_{color}.png",
+  "w": 7,
+  "h": 7,
+  "frames": 4,
+  "frameMs": 120,
+  "fromTier": 4,
+  "orbit": {
+   "count": 3,
+   "rx": 14,
+   "ry": 4,
+   "centerY": -12,
+   "periodMs": 1800
+  }
+ },
+ "back": {
+  "file": "fx_back_{color}.png",
+  "w": 32,
+  "h": 38,
+  "frames": 6,
+  "frameMs": 120,
+  "layer": "back",
+  "offsetY": 0,
+  "fromTier": 5
+ }
+}

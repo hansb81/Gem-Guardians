@@ -1,4 +1,5 @@
 import { playerState } from './playerState.js';
+import { storage } from '../platform/storage.js';
 
 // 개발용 패널(?dev=1에서만 생성) - 밸런스를 직접 확인하려고 쓰는 것(docs/balance.md §5).
 // 층 이동, 골드 +10000, 탑 레벨 일괄 설정, 2배속. 캔버스가 아니라 평범한 DOM 오버레이로
@@ -27,6 +28,9 @@ const SKILL_BUTTONS = [
   ['궁극기', 'color'],
   ['대폭발', 'color_color'],
 ];
+
+// 치트 켜기/끄기(?dev=1에서 오른쪽 위 버튼) - 끄면 패널을 숨기고 H/K 키와 배속을 끈다. 이 기기에만 기억(저장 키 'devCheats').
+export const devCheats = { on: true };
 
 export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null, server = null }) {
   const panel = document.createElement('div');
@@ -192,6 +196,26 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
   }
 
   document.body.appendChild(panel);
+
+  const cheatBtn = document.createElement('button');
+  cheatBtn.style.cssText = 'position:fixed;top:0;right:0;z-index:10000;font:11px monospace;';
+  const apply = () => {
+    panel.style.display = devCheats.on ? 'flex' : 'none';
+    cheatBtn.textContent = devCheats.on ? '치트 ON' : '치트 OFF';
+    if (!devCheats.on) {
+      setTimeScale(1);
+      speedCheck.checked = false;
+      slowCheck.checked = false;
+    }
+  };
+  cheatBtn.onclick = () => {
+    devCheats.on = !devCheats.on;
+    storage.save('devCheats', devCheats.on);
+    apply();
+  };
+  devCheats.on = storage.load('devCheats') !== false; // initStorage 뒤에 불리므로 여기서 읽는다
+  apply();
+  document.body.appendChild(cheatBtn);
 }
 
 // 랭킹(docs/ranking.md) - 가짜 명단 켜기/끄기, 경쟁 탭 상태 1~4, 시각 앞당기기(정산 대기·초기화), 지난 시즌 결과, 닉네임 초기화.

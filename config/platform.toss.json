@@ -1,7 +1,7 @@
 {
   "_doc": "토스 미니앱(앱인토스) 빌드 설정 - src/platform/toss가 읽는다. 값은 전부 placeholder: 콘솔에서 받은 값으로 바꾼다. features = 기능 스위치(false면 그 기능을 숨김, 토스 앱 버전이 지원 안 해도 숨김). 광고 id는 개발 중엔 반드시 ait-ad-test-* 테스트 id(실제 id로 개발 테스트 금지). appName은 apps-in-toss.config.ts도 이 값을 읽는다.",
   "appName": "gem-guardians-placeholder",
-  "features": { "iap": true, "ads": true, "banner": false, "rewarded": false, "leaderboard": true, "haptics": true },
+  "features": { "iap": true, "ads": true, "banner": false, "rewarded": false, "leaderboard": true, "haptics": true, "coupon": false },
   "ads": {
     "interstitial": "ait-ad-test-interstitial-id",
     "rewarded": "ait-ad-test-rewarded-id",

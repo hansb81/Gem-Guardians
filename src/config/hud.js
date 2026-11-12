@@ -8,6 +8,10 @@ export const HUD_CONFIG = {
   currency: {
     gold: { body: '#f2d264', border: '#c28a20' },
     diamond: { body: '#8cc4ee', border: '#386cbc' },
+    // 인게임 재화 바: 아이콘 배율(16px 그림 x iconScale 논리 px), 숫자 폰트 = 바 높이 x fontRatio(최소 fontMin).
+    iconScale: 1.5,
+    fontRatio: 0.25,
+    fontMin: 8,
   },
 
   popup: {

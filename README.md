@@ -6,16 +6,17 @@ Match-3 퍼즐 + 방치형 디펜스. HTML + CSS + JavaScript(ES Modules), 빌�
 
 ## 실행 방법
 
-ES Modules는 `file://`로 직접 열면 CORS 때문에 동작하지 않는다. 로컬 정적 서버로 띄워야 한다.
+Vite 개발 서버로 띄운다(처음 한 번은 `npm install`).
 
 ```bash
-# 아무거나 하나
-npx serve .
-# 또는
-python -m http.server 8000
+npm run dev
 ```
 
-그 다음 브라우저에서 `http://localhost:<port>` 접속.
+그 다음 화면에 나오는 주소(보통 `http://localhost:5173`)로 접속. 개발 패널은 주소 뒤에 `?dev=1`.
+
+`python -m http.server`나 `npx serve .` 같은 정적 서버는 쓰지 않는다. 게임 서버 로그인에 쓰는
+`@supabase/supabase-js`를 Vite가 연결해 줘야 하는데, 정적 서버에서는 이 라이브러리를 못 불러와서
+로그인이 조용히 실패한다. 그러면 출석·우편·쿠폰이 전부 "인터넷 연결이 필요해요"로 나온다.
 
 ## 테스트 실행
 

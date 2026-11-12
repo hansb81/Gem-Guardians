@@ -13,7 +13,16 @@ export const en = {
     ranking: 'Ranking',
     icon: { attendance: 'Attend', event: 'Event', mail: 'Mail', settings: 'Settings', shop: 'Shop' },
     mode: { title: 'Select Mode', normal: 'Normal Mode', competitive: 'Competitive Mode', locked: 'Locked — unlock condition TBD' },
-    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM', mute: 'Mute', unmute: 'Unmute', help: 'Help', about: 'Game Info', hapticsOn: 'Vibration: On', hapticsOff: 'Vibration: Off', language: 'Language: English' },
+    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM', mute: 'Mute', unmute: 'Unmute', help: 'Help', about: 'Game Info', hapticsOn: 'Vibration: On', hapticsOff: 'Vibration: Off', guardianFxOn: 'Guardian FX: On', guardianFxOff: 'Guardian FX: Off', language: 'Language: English' },
+    coupon: {
+      title: 'Enter Coupon', button: 'Coupon', hint: 'Enter your coupon code', ok: 'Redeem', busy: 'Checking…', cancel: 'Cancel',
+      err: {
+        notFound: 'Invalid code. Please check and try again.', already: "You've already used this coupon.", expired: 'This coupon has expired.',
+        notStarted: "This coupon isn't active yet.", soldOut: 'This coupon has run out.', platform: "This coupon can't be used on this platform.",
+        tooMany: 'Too many attempts. Try again in 10 minutes.', badCode: 'Letters and numbers only.', offline: 'Internet connection required.',
+        banned: 'Please try again later.', error: 'Please try again later.',
+      },
+    },
     exit: { title: 'Quit Game', body: 'Quit the game?', ok: 'Quit', cancel: 'Cancel' },
     quitFloor: { title: 'Leave', body: 'End the battle and return to the village?', ok: 'Village', cancel: 'Cancel' },
     about: {
@@ -144,7 +153,6 @@ export const en = {
     },
   },
   hud: {
-    cascade: 'Chain x {count}',
     combo: 'COMBO x {count}',
   },
   puzzle: {

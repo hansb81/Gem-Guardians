@@ -113,6 +113,7 @@ const platform = {
     rewarded: false,
     leaderboard: false,
     haptics: !!cfg.features.haptics,
+    coupon: cfg.features.coupon !== false, // 쿠폰 입력(docs/coupon.md §7) - iOS는 platform.ios.json에서 끔
     externalLinks: true,
     backButton: isAndroid,
     // iOS는 앱이 스스로 끄는 걸 애플이 권하지 않는다 - 종료 확인 모달(종료 버튼)을 안 띄운다.
