@@ -488,7 +488,8 @@ ${wasteCauseTable(runs)}`);
           outOfRange.push(`벽: T4 ${player}:${strategy} ${stoppedFloors.join('/')}층에서 멈춤(${HARD_STOP_RETRIES}연패)`);
         }
       }
-      if (wallFloors.length > 0) outOfRange.push(`벽: T4 ${player}:${strategy} 층 ${wallFloors.join(', ')}에서 재도전 ${sim.targets.retriesPerFloor.wallFlag}회 이상(보스층 기준이 따로 있으면 ${sim.targets.retriesPerFloor.bossWallFlagByPlayer?.[player] ?? '-'}회, 보스 시간 기준이 있으면 보스층은 ${sim.targets.bossWallMinutesByPlayer?.[player] ?? '-'}분 초과)`);
+      // v12-8b: seedWallInfoOnlyByPlayer면 시드 하나 기준 벽 층은 표시(wallFloors 열)만.
+      if (wallFloors.length > 0 && !sim.targets.retriesPerFloor.seedWallInfoOnlyByPlayer?.[player]) outOfRange.push(`벽: T4 ${player}:${strategy} 층 ${wallFloors.join(', ')}에서 재도전 ${sim.targets.retriesPerFloor.wallFlag}회 이상(보스층 기준이 따로 있으면 ${sim.targets.retriesPerFloor.bossWallFlagByPlayer?.[player] ?? '-'}회, 보스 시간 기준이 있으면 보스층은 ${sim.targets.bossWallMinutesByPlayer?.[player] ?? '-'}분 초과)`);
     }
   }
 
@@ -499,6 +500,9 @@ ${wasteCauseTable(runs)}`);
     })
     .sort((a, b) => a.player.localeCompare(b.player) || a.strategy.localeCompare(b.strategy) || a.floor - b.floor);
   for (const r of bossRows) {
+    // v12-8: 보스층 하나라도 시드 평균 재도전이 bossWallAvgByPlayer 이상이면 벽(slow).
+    const wallAvg = sim.targets.retriesPerFloor.bossWallAvgByPlayer?.[r.player];
+    if (wallAvg != null && r.retries >= wallAvg) outOfRange.push(`벽: T4 ${r.player}:${r.strategy} ${r.floor}층 보스 평균 재도전 ${r.retries.toFixed(2)} (기준 ${wallAvg}회 미만)`);
     csvRows.push({
       player: r.player,
       strategy: r.strategy,

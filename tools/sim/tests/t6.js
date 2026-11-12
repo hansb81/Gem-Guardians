@@ -70,8 +70,9 @@ export async function run(env) {
       });
 
       const t = sim.targets.items ?? { bossRetriesSaved: [0.5, 1.5], goldShareMax: 0.2, timeSavedMax: 0.15 };
-      if (policy === 'boss' && dRetries != null && (dRetries < t.bossRetriesSaved[0] || dRetries > t.bossRetriesSaved[1])) {
-        outOfRange.push(`${dRetries < t.bossRetriesSaved[0] ? '아이템 효과 약함' : '아이템 효과 과함'}: T6 ${player}:boss 보스 재도전 ${dRetries.toFixed(2)}회 감소 (목표 ${t.bossRetriesSaved[0]}~${t.bossRetriesSaved[1]})`);
+      const saved = Array.isArray(t.bossRetriesSaved) ? t.bossRetriesSaved : t.bossRetriesSaved[player]; // v12-8: 플레이어별
+      if (policy === 'boss' && saved && dRetries != null && (dRetries < saved[0] || dRetries > saved[1])) {
+        outOfRange.push(`${dRetries < saved[0] ? '아이템 효과 약함' : '아이템 효과 과함'}: T6 ${player}:boss 보스 재도전 ${dRetries.toFixed(2)}회 감소 (목표 ${saved[0]}~${saved[1]})`);
       }
       if (policy !== 'none' && itemGoldPct > t.goldShareMax) outOfRange.push(`과함: T6 ${player}:${policy} 아이템 골드 비율 ${(itemGoldPct * 100).toFixed(1)}% (기준 ${t.goldShareMax * 100}% 이하)`);
       if (policy !== 'none' && dTime != null && dTime > t.timeSavedMax) outOfRange.push(`과함: T6 ${player}:${policy} 100층 시간 단축 ${(dTime * 100).toFixed(1)}% (기준 ${t.timeSavedMax * 100}% 이하)`);

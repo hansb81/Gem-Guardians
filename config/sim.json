@@ -114,7 +114,8 @@
     ]
   },
   "targets": {
-    "_doc": "판정 기준 v8(2026-11-06), v12-7(2026-11-12)에 고침. 판정은 탑 구매 always(층이 끝날 때마다 탑 레벨업, --towerbuy 기본값)로 잰 T4 기준이다(onfail은 참고). 보스층(10의 배수)이 관문. normal: 보스 재도전 0.8~1.5(v12-7, 전 0.8~2), 보스 needPower(T2, 기대 레벨, 10~100 전 보스층) 0.75~0.95, 100층 115~180분(v12-6, 2026-11-11), 층 시간 = T4 진행에서 클리어한 판 시간의 전체 중앙값 55초 이상·80초 이하(v12-7, 전에는 T3 구간 평균 55~80초. normal·slow 판정), 첫 클리어 레벨 2~5. slow: 100층까지 멈추지 않음, 보스 재도전 1~4, 100층 180~320분(v12-6). 허공 사격 (a)+(b)+(c) ≤ 8%(wastedDamage). T3 첫 클리어 레벨은 normal/slow만 판정. worst(무작위)는 참고용(판정 제외).",
+    "_doc": "판정 기준 v8(2026-11-06), v12-7(2026-11-12)에 고침. 판정은 탑 구매 always(층이 끝날 때마다 탑 레벨업, --towerbuy 기본값)로 잰 T4 기준이다(onfail은 참고). 보스층(10의 배수)이 관문. normal: 보스 재도전 0.8~1.5(v12-7, 전 0.8~2), 보스 needPower(T2, 기대 레벨, 10~100 전 보스층) 0.75~0.95, 100층 115~180분(v12-6, 2026-11-11), 층 시간 = T4 진행에서 클리어한 판 시간의 전체 중앙값 55초 이상·80초 이하(v12-7, 전에는 T3 구간 평균 55~80초. normal·slow 판정), 첫 클리어 레벨 2~5. slow: 100층까지 멈추지 않음, 보스 재도전 1~4, 100층 180~320분(v12-6). 허공 사격 (a)+(b)+(c) ≤ 8%(wastedDamage). T3 첫 클리어 레벨은 normal/slow만 판정. worst(무작위)는 참고용(판정 제외). v12-8(2026-11-12): 보스 재도전을 T7 기준 승률 60~75%와 맞는 값(≤ (1-p)/p, normal 0.4~1.0·slow 1~3)으로, 층 시간을 즉시 등장(emptySpawn predict) 뒤 값 45~75초로, 100층 시간을 always 기준(normal 90~150·slow 150~280분)으로 고쳤다(옛 값은 _oldV12_7). v12-8b(2026-11-12): normal 보스 재도전 하한 0.4 -> 0.3(상한 (1-p)/p 평균 0.40이라 0.4는 경계값), slow 층별 판정은 T7 기준으로 하고 T4는 평균 재도전·보스층 평균 4회 이상 벽만 판정.",
+    "_oldV12_7": { "_doc": "v12-7 목표(옛 판정 열용, 시뮬 코드는 안 읽음)", "retriesBoss": [0.8, 1.5], "retriesBossSlow": [1, 4], "floorSeconds": [55, 80], "minutesTo100": { "normal": [115, 180], "slow": [180, 320] }, "luckSlow": { "0": [0.4, 0.7], "4": [0.7, 1] }, "bossRetriesSaved": [0.5, 1.5] },
     "noLevelReach": {
       "fast": [
         15,
@@ -126,8 +127,8 @@
       ]
     },
     "floorSeconds": [
-      55,
-      80
+      45,
+      75
     ],
     "wallLeftOnClear": {
       "tooEasyAbove": 0.95,
@@ -143,29 +144,37 @@
         1
       ],
       "boss": [
-        0.8,
-        1.5
+        0.3,
+        1.0
       ],
       "wallFlag": 4,
       "bossWallFlagByPlayer": {
         "slow": 6,
-        "_doc": "slow 보스 목표가 재도전 1~4라 4회는 정상 범위. 목표 상한을 넘어 6회 이상일 때만 벽으로 표시"
+        "_doc": "slow 보스 목표가 재도전 1~4라 4회는 정상 범위. 목표 상한을 넘어 6회 이상일 때만 벽으로 표시(시드 하나 기준, 벽 층 열)"
+      },
+      "bossWallAvgByPlayer": {
+        "slow": 4,
+        "_doc": "v12-8: 보스층 하나라도 시드 평균 재도전이 이 값 이상이면 벽(판정)"
+      },
+      "seedWallInfoOnlyByPlayer": {
+        "slow": true,
+        "_doc": "v12-8b: true면 T4 시드 하나 기준 벽 층(wallFlag·bossWallFlagByPlayer)은 표시만 하고 판정하지 않는다. slow 층별 판정은 T7, T4는 평균 재도전과 bossWallAvgByPlayer만"
       },
       "bossByPlayer": {
         "slow": [
           1,
-          4
+          3
         ]
       }
     },
     "minutesTo100": {
       "normal": [
-        115,
-        180
+        90,
+        150
       ],
       "slow": [
-        180,
-        320
+        150,
+        280
       ]
     },
     "wastedDamage": {
@@ -191,7 +200,7 @@
     },
     "items": {
       "_doc": "T6 아이템 봇(boss 정책) 기준: 보스 재도전 감소 회수, 아이템 골드 비율 상한, 100층 시간 단축 상한",
-      "bossRetriesSaved": [0.5, 1.5],
+      "bossRetriesSaved": { "normal": [0.3, 1.0], "slow": [0.5, 1.5] },
       "goldShareMax": 0.2,
       "timeSavedMax": 0.15
     },
@@ -203,10 +212,10 @@
       "borderline": 0.05,
       "winRate": {
         "normal": { "0": [0.6, 0.75], "2": [0.75, 1], "4": [0.8, 1], "items": [0.85, 1] },
-        "slow": { "0": [0.4, 0.7], "4": [0.7, 1] }
+        "slow": { "0": [0.3, 0.6], "4": [0.6, 1], "items": [0.75, 1] }
       },
       "floorOverride": { "normal": { "10": { "0": [0.75, 0.85] } } },
-      "luckyFloorBelow": { "normal": 0.8, "slow": 0.7 },
+      "luckyFloorBelow": { "normal": 0.8, "slow": 0.6 },
       "timeSpreadMax": 1.8
     },
     "skillEquiv": {
