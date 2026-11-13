@@ -26,7 +26,7 @@ import { pressButton } from './render/uiKit.js';
 import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup } from './render/ui/prepPopup.js';
 import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
 import { resolveFloorSpawns } from './core/balance/floorGen.js';
-import { platform } from './platform/index.js';
+import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
 import { recoverPending, restore, syncServerIap } from './shop/iap.js';
 import { storage } from './platform/storage.js';
 import { guardianFxSetting } from './render/guardianFx.js';
@@ -302,8 +302,7 @@ function handleTutorialPointerDown(x, y) {
 let serverUi = { enabled: false, handleMenuAction: () => false, pointerUp: () => {} };
 Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
   if (!battleData || !balanceData) return;
-  const devMode = new URLSearchParams(location.search).get('dev') === '1';
-  serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: devMode }) };
+  serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE }) };
   controller = new BattleController({
     balance: balanceData.balance,
     enemies: balanceData.enemies,
@@ -406,7 +405,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
     resetPuzzleBoard(floor.obstacles);
   };
 
-  if (new URLSearchParams(location.search).get('dev') === '1') {
+  if (DEV_MODE) {
     setupDevPanel(controller, {
       setTimeScale: (v) => {
         timeScale = v;
@@ -1476,7 +1475,7 @@ Promise.all([
     renderer.setAssets(assets);
     assetsReady = true;
     renderer.tutorial.load();
-    if (new URLSearchParams(location.search).has('sfxtest')) setupSfxTestPanel();
+    if (DEV_ALLOWED && new URLSearchParams(location.search).has('sfxtest')) setupSfxTestPanel();
   })
   .catch(() => {
     // 방어적 - loadAssets 내부에서 이미 모든 실패를 흡수하지만, 혹시라도 던지면 그냥 fallback으로 진행.

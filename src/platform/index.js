@@ -6,6 +6,10 @@ import { defaultPlatform } from './interface.js';
 // eslint-disable-next-line no-undef
 export const PLATFORM_ID = typeof __PLATFORM__ === 'undefined' ? 'web' : __PLATFORM__;
 
+// 개발 기능(?dev=1 가짜 결제·개발 패널, ?sfxtest)은 vite dev·serve.py에서만 - 프로덕션 번들(vite build)은 URL로 못 켠다.
+export const DEV_ALLOWED = !import.meta.env?.PROD;
+export const DEV_MODE = DEV_ALLOWED && typeof location !== 'undefined' && new URLSearchParams(location.search).get('dev') === '1';
+
 /** @type {import('./interface.js').Platform} */
 export const platform = defaultPlatform();
 
@@ -22,7 +26,7 @@ export function initPlatform({ dev = false } = {}) {
   ready ??= loadAdapter().then(async ({ default: adapter }) => {
     let p = adapter;
     // 가짜 결제는 웹 빌드에서만 - 실제 결제가 있는 마켓 빌드에서 ?dev=1로 공짜 지급이 열리면 안 된다.
-    if (dev && PLATFORM_ID === 'web') p = (await import('./dev/index.js')).withDev(p);
+    if (dev && DEV_ALLOWED && PLATFORM_ID === 'web') p = (await import('./dev/index.js')).withDev(p);
     await p.init();
     Object.assign(platform, p);
   });
