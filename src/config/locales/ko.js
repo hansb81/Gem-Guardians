@@ -14,7 +14,7 @@ export const ko = {
     ranking: '랭킹',
     icon: { attendance: '출석', event: '이벤트', mail: '우편', settings: '설정', shop: '상점' },
     mode: { title: '모드 선택', normal: '일반 모드', competitive: '경쟁 모드', locked: '잠김 — 해금 조건 추가 예정' },
-    settings: { title: '설정', sfx: '효과음', bgm: '배경음', mute: '음소거', unmute: '음소거 해제', help: '도움말', about: '게임 정보', hapticsOn: '진동: 켜짐', hapticsOff: '진동: 꺼짐', guardianFxOn: '수호자 이펙트: 켜짐', guardianFxOff: '수호자 이펙트: 꺼짐', language: '언어: 한국어' },
+    settings: { title: '설정', sfx: '효과음', bgm: '배경음', mute: '음소거', unmute: '음소거 해제', help: '도움말', about: '게임 정보', hapticsOn: '진동: 켜짐', hapticsOff: '진동: 꺼짐', guardianFxOn: '수호자 이펙트: 켜짐', guardianFxOff: '수호자 이펙트: 꺼짐', language: '언어: 한국어', webDataNote: '브라우저 데이터를 지우면 진행 상황이 사라져요' },
     coupon: {
       title: '쿠폰 입력', button: '쿠폰', hint: '받은 쿠폰 코드를 입력하세요', ok: '받기', busy: '확인 중…', cancel: '취소',
       err: {

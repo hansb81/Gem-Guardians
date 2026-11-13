@@ -18,7 +18,7 @@ import { storage } from '../platform/storage.js';
 import { audio } from '../audio/AudioManager.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { GAME_INFO } from '../config/gameInfo.js';
-import { platform } from '../platform/index.js';
+import { platform, PLATFORM_ID } from '../platform/index.js';
 import { haptics } from '../platform/haptics.js';
 import { guardianFxSetting } from './guardianFx.js';
 import { drawImageSnapped, screen } from './screenFit.js';
@@ -88,6 +88,8 @@ const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12 };
 // 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
 const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 524, 320, 46] };
 const HAPTICS_EXTRA_H = 56;
+// 웹 빌드만: 설정 맨 아래 "브라우저 데이터를 지우면 진행이 사라진다" 안내 한 줄(저장이 localStorage뿐).
+const WEB_NOTE_H = PLATFORM_ID === 'web' ? 30 : 0;
 // 쿠폰(docs/coupon.md §1, 카드 왼쪽 위 기준). 버튼은 설정 카드 왼쪽 위(서버 쿠폰 기능이 켜졌을 때만).
 const COUPON_BTN = [14, 12, 100, 36];
 const COUPON = { hintY: 100, input: [40, 124, 320, 56], msgY: 206, cancel: [40, 236, 150, 46], ok: [210, 236, 150, 46], maxLength: 24 };
@@ -444,7 +446,7 @@ export class MainMenuScreen {
   // 팝업 카드(basis 540x960 가운데 정렬) - 종류별로 크기가 다르다.
   _popupCardBasis() {
     const [w, h0] = POPUP_SIZES[this.popup] ?? [400, 200];
-    let h = this.popup === 'settings' && platform.caps.haptics ? h0 + HAPTICS_EXTRA_H : h0;
+    let h = this.popup === 'settings' ? h0 + WEB_NOTE_H + (platform.caps.haptics ? HAPTICS_EXTRA_H : 0) : h0;
     if (this.server?.att && this.popup === 'attendance') h = ATT.claim[1] + ATT.claim[3] + 32;
     if (this.server?.mail && this.popup === 'mail') h = MAIL.y + MAIL.rows * MAIL.rowH + 24;
     return [(BASIS_W - w) / 2, (BASIS_H - h) / 2, w, h];
@@ -705,6 +707,7 @@ export class MainMenuScreen {
       this._text(ctx, t(label), cx + bx + bw / 2, cy + by + bh / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
     }
     if (this.server?.coupon) this._drawCouponButton(ctx, card);
+    if (WEB_NOTE_H) this._text(ctx, t('menu.settings.webDataNote'), cx + card[2] / 2, cy + card[3] - 24, { size: 11, align: 'center', color: COLORS.dim });
   }
 
   _drawCouponButton(ctx, [cx, cy]) {

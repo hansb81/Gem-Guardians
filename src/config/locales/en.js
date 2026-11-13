@@ -13,7 +13,7 @@ export const en = {
     ranking: 'Ranking',
     icon: { attendance: 'Attend', event: 'Event', mail: 'Mail', settings: 'Settings', shop: 'Shop' },
     mode: { title: 'Select Mode', normal: 'Normal Mode', competitive: 'Competitive Mode', locked: 'Locked — unlock condition TBD' },
-    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM', mute: 'Mute', unmute: 'Unmute', help: 'Help', about: 'Game Info', hapticsOn: 'Vibration: On', hapticsOff: 'Vibration: Off', guardianFxOn: 'Guardian FX: On', guardianFxOff: 'Guardian FX: Off', language: 'Language: English' },
+    settings: { title: 'Settings', sfx: 'SFX', bgm: 'BGM', mute: 'Mute', unmute: 'Unmute', help: 'Help', about: 'Game Info', hapticsOn: 'Vibration: On', hapticsOff: 'Vibration: Off', guardianFxOn: 'Guardian FX: On', guardianFxOff: 'Guardian FX: Off', language: 'Language: English', webDataNote: 'Clearing browser data will erase your progress' },
     coupon: {
       title: 'Enter Coupon', button: 'Coupon', hint: 'Enter your coupon code', ok: 'Redeem', busy: 'Checking…', cancel: 'Cancel',
       err: {
