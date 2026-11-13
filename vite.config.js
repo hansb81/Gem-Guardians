@@ -33,7 +33,7 @@ function writeWebFiles(dir) {
     .sort();
   const hash = createHash('sha256');
   for (const f of files) hash.update(f).update(readFileSync(`${dir}/${f}`));
-  const precache = files.filter((f) => !f.startsWith('assets/') && f !== 'platform.txt');
+  const precache = files.filter((f) => !f.startsWith('assets/') && f !== 'platform.txt').map((f) => (f === 'index.html' ? './' : f));
   const sw = readFileSync('public/sw.js', 'utf8')
     .replace('__SW_VERSION__', hash.digest('hex').slice(0, 12))
     .replace('__SW_PRECACHE__', JSON.stringify(precache));

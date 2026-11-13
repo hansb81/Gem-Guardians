@@ -18,7 +18,8 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin || req.headers.has('range')) return;
   const nav = req.mode === 'navigate';
   e.respondWith(caches.open(CACHE).then(async (cache) => {
-    const hit = await cache.match(nav ? 'index.html' : req, { ignoreSearch: nav });
+    // 페이지는 './'로 받는다: Pages가 /index.html을 /로 308 리다이렉트하는데, 리다이렉트된 응답을 페이지 이동에 주면 브라우저가 거부한다.
+    const hit = await cache.match(nav ? './' : req, { ignoreSearch: nav });
     if (hit) return hit;
     const res = await fetch(req);
     if (res.status === 200 && !nav) cache.put(req, res.clone());
