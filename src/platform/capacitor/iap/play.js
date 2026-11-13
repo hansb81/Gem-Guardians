@@ -65,6 +65,10 @@ export default function playIap({ platform, cfg, isAndroid, warn }) {
           warn('logIn', e);
         }
       },
+      // 결제 직전 기록이 남은 수(계정 바꾸기 전 확인용, src/shop/iap.js pendingCount).
+      async pendingCount() {
+        return (await getPendings()).length;
+      },
       async getProducts() {
         const ids = Object.keys(products).filter((k) => !k.startsWith('_')).map(storeIdOf).filter(Boolean);
         if (!platform.caps.iap || ids.length === 0) return [];

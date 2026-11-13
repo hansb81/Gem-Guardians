@@ -15,8 +15,13 @@ self.addEventListener('activate', (e) => e.waitUntil(
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   // 같은 출처 GET만 - Supabase 등 서버 호출은 손대지 않는다.
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin || req.headers.has('range')) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== location.origin || req.headers.has('range')) return;
   const nav = req.mode === 'navigate';
+  // 게임 페이지(./, index.html)만 캐시의 './'로. privacy.html·delete-account.html 같은 다른 페이지는 브라우저가 그대로 받는다
+  // (안 그러면 게임을 한 번 연 브라우저에서 계정 삭제 안내를 열어도 게임이 뜬다).
+  const root = new URL('./', self.registration.scope).pathname;
+  if (nav && url.pathname !== root && url.pathname !== `${root}index.html`) return;
   e.respondWith(caches.open(CACHE).then(async (cache) => {
     // 페이지는 './'로 받는다: Pages가 /index.html을 /로 308 리다이렉트하는데, 리다이렉트된 응답을 페이지 이동에 주면 브라우저가 거부한다.
     const hit = await cache.match(nav ? './' : req, { ignoreSearch: nav });

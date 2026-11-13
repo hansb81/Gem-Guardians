@@ -5,6 +5,9 @@
 import { platform, PLATFORM_ID } from '../platform/index.js';
 
 const TIMEOUT_MS = 8000;
+// Supabase 인증(세션 읽기·갱신, 익명 로그인)은 자체 타임아웃이 없다 - 느리면 hello·결제 확인·클라우드 판정이 끝없이 밀린다.
+const AUTH_TIMEOUT_MS = 8000;
+const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('auth timeout')), ms))]);
 const OFFLINE = Object.freeze({ ok: false, reason: 'offline' });
 
 export const net = {
@@ -12,11 +15,22 @@ export const net = {
   enabled: false, // 설정상 켜짐(로그인 전에도) - 꺼져 있으면 서버 UI를 아예 안 보인다
   features: {},
   playerId: null,
+  user: null, // Supabase 세션 사용자(identities로 게스트/연결 판정 - src/net/account.js)
   hello: null, // 마지막 /hello 응답
+  googleWebClientId: '', // config/server.json - 비면 계정 연결 버튼 숨김
 };
 
 let cfg = null;
 let client = null;
+// 계정 서비스(src/net/account.js)가 linkIdentity·signInWithIdToken·setSession에 쓴다. 로그인 전이면 null.
+export const authClient = () => client;
+// 세션이 바뀐 뒤(연결·계정 전환·되돌리기) net.playerId·user를 다시 맞춘다.
+export async function refreshSessionUser() {
+  const { data } = (await client?.auth.getSession().catch(() => null)) ?? {};
+  net.user = data?.session?.user ?? null;
+  net.playerId = net.user?.id ?? null;
+  return data?.session ?? null;
+}
 
 // enabled + 기능 스위치(/hello가 덮어씀).
 export const feature = (key) => net.enabled && !!net.features[key];
@@ -44,7 +58,7 @@ async function request(url, init) {
 // Edge Function 호출: POST {url}/functions/v1/{name}. 서버가 꺼져 있거나 로그인 전이면 offline.
 export async function call(name, body = {}) {
   if (!client) return OFFLINE;
-  const { data } = await client.auth.getSession().catch(() => ({ data: {} })); // 만료면 여기서 갱신
+  const { data } = await withTimeout(client.auth.getSession(), AUTH_TIMEOUT_MS).catch(() => ({ data: {} })); // 만료면 여기서 갱신
   const token = data?.session?.access_token;
   if (!token) return OFFLINE;
   return request(`${cfg.url}/functions/v1/${name}`, {
@@ -56,10 +70,12 @@ export async function call(name, body = {}) {
 
 // 시작할 때 한 번: 설정 읽기 -> 익명 로그인 -> /hello. 실패해도 던지지 않는다(오프라인으로 계속).
 // override = 개발 패널 스위치(true/false/null). legacyId = 기존 로컬 랭킹 playerId(문의 대응용).
-export async function initNet(config, { override = null, legacyId = '', appVersion = '' } = {}) {
+// authTimeoutMs = 세션 읽기·익명 로그인 상한(넘으면 오프라인으로 계속 - net.on false).
+export async function initNet(config, { override = null, legacyId = '', appVersion = '', authTimeoutMs = AUTH_TIMEOUT_MS } = {}) {
   cfg = config;
   net.enabled = override ?? !!config?.enabled;
   net.features = { ...config?.features };
+  net.googleWebClientId = config?.googleWebClientId ?? '';
   if (!net.enabled || !config.url || !config.anonKey) {
     net.enabled = false;
     return net;
@@ -73,14 +89,20 @@ export async function initNet(config, { override = null, legacyId = '', appVersi
         storage: { getItem: (k) => store.get(k), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.remove(k) },
         persistSession: true,
         autoRefreshToken: true,
-        detectSessionInUrl: false,
+        // 웹(dev 포함)만 Google 리다이렉트(PKCE ?code=)를 돌아와서 처리한다(docs/auth.md §5-5). 앱 빌드는 ID 토큰 방식이라 그대로.
+        ...(PLATFORM_ID === 'web' ? { detectSessionInUrl: true, flowType: 'pkce' } : { detectSessionInUrl: false }),
       },
     });
-    let { data } = await client.auth.getSession();
-    if (!data.session) ({ data } = await client.auth.signInAnonymously());
-    net.playerId = data?.session?.user?.id ?? null;
+    let { data } = await withTimeout(client.auth.getSession(), authTimeoutMs);
+    if (!data.session) ({ data } = await withTimeout(client.auth.signInAnonymously(), authTimeoutMs));
+    net.user = data?.session?.user ?? null;
+    net.playerId = net.user?.id ?? null;
   } catch (e) {
     console.warn('[net] 로그인 실패 - 오프라인으로 계속', e);
+  }
+  if (!net.playerId) {
+    net.on = false; // 로그인 못 함(시간 초과 포함) - hello도 안 부른다
+    return net;
   }
   await sayHello(legacyId, appVersion);
   return net;
@@ -98,18 +120,12 @@ export async function sayHello(legacyId = '', appVersion = '') {
   return res;
 }
 
-// 데이터 삭제 후: 이 기기의 익명 세션을 버린다 - 다음 실행 때 새 플레이어 id로 시작.
-export async function forgetSession() {
-  await client?.auth.signOut({ scope: 'local' }).catch(() => {});
-  net.on = false;
-  net.playerId = null;
-}
-
 // 서버에 기록됐는데 기기가 아직 지급 안 한 것(claims-pending) -> grant -> claims-granted.
 // 실패하면 그대로 두고 다음 실행 때 다시(서버 granted_at이 비어 있는 한 계속 내려온다). txId라 중복 지급 없음.
-export async function syncClaims(inventory) {
+// pending = 시작 때 hello에 같이 온 claims-pending 응답(있으면 따로 안 부름).
+export async function syncClaims(inventory, pending = null) {
   if (!net.on) return [];
-  const res = await call('claims-pending');
+  const res = pending ?? (await call('claims-pending'));
   if (!res.ok || !res.claims?.length) return [];
   const done = [];
   const deltas = [];

@@ -78,6 +78,10 @@ const POPUP_SIZES = {
   mail: [400, 180],
   exit: [400, 240],
   coupon: [400, 312],
+  saveConflict: [480, 470], // [취소]가 있으면(L2) CONFLICT_CANCEL_H 더
+  account: [400, 380],
+  deleteAccount: [440, 470],
+  linkNudge: [400, 250],
 };
 // 이벤트 팝업 광고 칸(docs/ads.md 3장): 안내 문구 아래 "광고" 라벨 + 테두리 칸. 칸 = 320x50dp 배너가 들어갈 basis 크기 + 여백 pad.
 // 칸 양옆·바로 위에는 버튼을 두지 않는다(AdMob: 버튼 옆 배너 금지) - 닫기 버튼(오른쪽 위)과는 100 이상 떨어져 있다.
@@ -88,6 +92,22 @@ const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12 };
 // 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
 const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 524, 320, 46] };
 const HAPTICS_EXTRA_H = 56;
+// 계정 줄(docs/auth.md §5 - 서버 켜짐 + caps.login이 있을 때만). 진동 줄보다 위, 있으면 진동 줄을 한 칸 내린다.
+const ACCOUNT_BUTTON = { id: 'account', labelKey: 'menu.settings.account', rect: [40, 524, 320, 46] };
+const ACCOUNT_EXTRA_H = 56;
+// 계정 팝업(카드 왼쪽 위 기준). google = Google 브랜드 버튼(흰 바탕·G 로고 - 픽셀 아트로 다시 그리지 않음, assets/ui/auth/CREDITS.md).
+const ACCOUNT = {
+  line1Y: 100, noteY: [132, 152], msgY: 256,
+  google: [60, 190, 280, 40], signOut: [100, 186, 200, 46], deleteY: 330,
+  confirmY: [110, 138, 166], cancel: [40, 220, 150, 46], ok: [210, 220, 150, 46],
+};
+// 연결 권유(docs/auth.md §8 끝) - 종료 확인과 같은 틀.
+// 계정 삭제 확인(docs/auth.md §6): 설명 4줄 -> "삭제" 입력(DOM input, 쿠폰과 같은 방식) -> [삭제]가 켜짐.
+const DEL = { bodyY: [96, 122, 148, 174], hintY: 222, input: [70, 244, 300, 52], msgY: 318, cancel: [40, 350, 170, 46], ok: [230, 350, 170, 46], maxLength: 12 };
+// 계정 팝업 맨 아래 [계정 삭제](빨간 작은 글씨) 터치 영역.
+const ACCOUNT_DEL_HIT = [120, 312, 160, 36];
+const NUDGE = { bodyY: [100, 126], later: [40, 170, 150, 46], ok: [210, 170, 150, 46] };
+const CONFLICT_CANCEL_H = 60;
 // 웹 빌드만: 설정 맨 아래 "브라우저 데이터를 지우면 진행이 사라진다" 안내 한 줄(저장이 localStorage뿐).
 const WEB_NOTE_H = PLATFORM_ID === 'web' ? 30 : 0;
 // 쿠폰(docs/coupon.md §1, 카드 왼쪽 위 기준). 버튼은 설정 카드 왼쪽 위(서버 쿠폰 기능이 켜졌을 때만).
@@ -95,7 +115,7 @@ const COUPON_BTN = [14, 12, 100, 36];
 const COUPON = { hintY: 100, input: [40, 124, 320, 56], msgY: 206, cancel: [40, 236, 150, 46], ok: [210, 236, 150, 46], maxLength: 24 };
 export const COUPON_REASONS = ['notFound', 'already', 'expired', 'notStarted', 'soldOut', 'platform', 'tooMany', 'badCode', 'offline', 'banned'];
 // 도움말·게임 정보·쿠폰은 X·뒤로가기로 설정에 돌아간다.
-const BACK_TO_SETTINGS = new Set(['help', 'about', 'coupon']);
+const BACK_TO_SETTINGS = new Set(['help', 'about', 'coupon', 'account']);
 // 종료 확인(뒤로가기 - 메뉴에서). 카드 왼쪽 위 기준.
 const EXIT = { bodyY: 110, cancel: [40, 160, 150, 46], ok: [210, 160, 150, 46] };
 
@@ -139,7 +159,28 @@ const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13,
 // 본문 줄 높이: 소제목 / 링크 버튼({ link } - 누르면 GAME_INFO.links[link]를 새 창으로) / 문단.
 const aboutLineH = (l) => (l.head ? ABOUT.headH : l.link ? ABOUT.linkH : ABOUT.lineH);
 // 서버가 켜져 있으면 게임 정보 아래에 플레이어 코드(길게 누르면 복사)와 데이터 삭제 요청 버튼(docs/server.md §10, §14-3).
-const ABOUT_NET = { viewBottom: 680, code: [30, 692, 420, 40], del: [90, 744, 300, 46] };
+// cloudY = 클라우드 저장 한 줄(작은 글씨, 코드 칸과 삭제 버튼 사이).
+const ABOUT_NET = { viewBottom: 716, code: [30, 722, 420, 40], cloudY: 780 };
+// 저장 충돌(docs/auth.md §4-2, 카드 왼쪽 위 기준). 두 카드(서버 쪽 / 이 기기) + 각 [이걸로 계속]. confirm = 이 기기 고른 뒤 확인.
+const CONFLICT = {
+  bodyY: [92, 116],
+  cards: [[24, 146, 210, 262], [246, 146, 210, 262]],
+  lineY: [30, 76, 104, 132, 160, 184], // 카드 제목, 최고 층, 다이아, 석상 합, 저장 시각, 플랫폼
+  pick: [15, 206, 180, 44],
+  lostY: 436,
+  confirmY: [150, 180, 210],
+  cancel: [40, 270, 190, 46],
+  ok: [250, 270, 190, 46],
+  close: [140, 466, 200, 46], // L2 [취소]
+};
+const fmt = (n) => (Number.isFinite(n) ? n.toLocaleString('en-US') : '0');
+// 'MM/DD HH:mm'(기기 시간대).
+function shortTime(ms) {
+  if (!ms) return '-';
+  const d = new Date(ms);
+  const p = (v) => String(v).padStart(2, '0');
+  return `${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
 
 // 출석(7일판) - 카드 왼쪽 위 기준. 1줄 4칸 + 2줄 3칸, 아래 받기 버튼.
 const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], claim: [100, 318, 200, 50] };
@@ -192,7 +233,12 @@ export class MainMenuScreen {
     this._transform = null; // 최근 draw()의 {offsetX, offsetY, k} - 포인터 판정에 그대로 쓴다.
     this._assets = null; // CanvasRenderer.assets(uiImages/uiManifest) - draw()마다 받는다.
 
-    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' | 'coupon' (보관함은 main.js의 정비 팝업)
+    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' | 'coupon' | 'saveConflict' (보관함은 main.js의 정비 팝업)
+    this.account = null; // main.js: { state(), cloud(), googleOn(), busy, msg, confirm } - 서버 켜짐 + caps.login 있을 때만
+    this._googleG = null;
+    loadImage('assets/ui/auth/google_g_light_square.png').then((st) => (this._googleG = st));
+    this.conflict = null; // 저장 충돌 팝업 인자 { bodyKey, titles:[서버 쪽, 이 기기], server:{요약, updatedAt, platform}, device:{요약}, confirm }
+    this._delInput = null; // 계정 삭제 팝업의 DOM <input>("삭제" 입력)
     this._couponInput = null; // 쿠폰 팝업의 DOM <input>(열 때 만들고, 팝업이 바뀌면 draw가 뗀다)
     this._couponMsg = null; // 실패 reason - 입력 칸 아래 빨간 한 줄
     this.dispatch = () => false; // serverUi: 메뉴 action 처리(쿠폰 입력 칸 Enter = 받기)
@@ -266,6 +312,7 @@ export class MainMenuScreen {
     if (this.popup) this._drawPopup(ctx, width, height);
     ctx.restore();
     this._syncCouponInput(ctx.canvas);
+    this._syncDeleteInput(ctx.canvas);
   }
 
   // 메뉴 한 줄 알림(예: 받지 못한 보상 복구). 타이틀에서 불려도 메뉴가 보일 때부터 TOAST.ms 동안.
@@ -446,7 +493,8 @@ export class MainMenuScreen {
   // 팝업 카드(basis 540x960 가운데 정렬) - 종류별로 크기가 다르다.
   _popupCardBasis() {
     const [w, h0] = POPUP_SIZES[this.popup] ?? [400, 200];
-    let h = this.popup === 'settings' ? h0 + WEB_NOTE_H + (platform.caps.haptics ? HAPTICS_EXTRA_H : 0) : h0;
+    let h = this.popup === 'settings' ? h0 + WEB_NOTE_H + (platform.caps.haptics ? HAPTICS_EXTRA_H : 0) + (this._accountOn() ? ACCOUNT_EXTRA_H : 0) : h0;
+    if (this.popup === 'saveConflict' && this.conflict?.cancel) h += CONFLICT_CANCEL_H;
     if (this.server?.att && this.popup === 'attendance') h = ATT.claim[1] + ATT.claim[3] + 32;
     if (this.server?.mail && this.popup === 'mail') h = MAIL.y + MAIL.rows * MAIL.rowH + 24;
     return [(BASIS_W - w) / 2, (BASIS_H - h) / 2, w, h];
@@ -484,6 +532,10 @@ export class MainMenuScreen {
     else if (this.popup === 'attendance' && this.server?.att) this._drawAttendancePopup(ctx, card);
     else if (this.popup === 'mail' && this.server?.mail) this._drawMailPopup(ctx, card);
     else if (this.popup === 'coupon') this._drawCouponPopup(ctx, card);
+    else if (this.popup === 'saveConflict') this._drawSaveConflictPopup(ctx, card);
+    else if (this.popup === 'account' && this.account) this._drawAccountPopup(ctx, card);
+    else if (this.popup === 'deleteAccount' && this.account) this._drawDeleteAccountPopup(ctx, card);
+    else if (this.popup === 'linkNudge') this._drawNudgePopup(ctx, card);
     else this._drawPlaceholderPopup(ctx, card);
   }
 
@@ -801,14 +853,29 @@ export class MainMenuScreen {
     placeDomInput(this._couponInput, canvas, r, 1, 22 * this._transform.k);
   }
 
+  // 계정 줄 = 서버가 켜져 있으면 늘(계정 삭제는 모든 빌드에 있어야 함). Google 연결 부분은 caps.login이 있을 때만.
+  _accountOn() {
+    return !!this.account;
+  }
+
+  _loginOn() {
+    return (platform.caps.login?.length ?? 0) > 0;
+  }
+
   _settingsButtons() {
-    return platform.caps.haptics ? [...SETTINGS.buttons, HAPTICS_BUTTON] : SETTINGS.buttons;
+    const out = [...SETTINGS.buttons];
+    if (this._accountOn()) out.push(ACCOUNT_BUTTON);
+    if (platform.caps.haptics) {
+      const r = HAPTICS_BUTTON.rect;
+      out.push(this._accountOn() ? { ...HAPTICS_BUTTON, rect: [r[0], r[1] + ACCOUNT_EXTRA_H, r[2], r[3]] } : HAPTICS_BUTTON);
+    }
+    return out;
   }
 
   // 로케일 키 - 종료 확인은 종류(exitKind)마다 문구가 다르다.
   _popupKey() {
     if (this.popup !== 'exit') return this.popup;
-    return { floor: 'quitFloor', deleteData: 'deleteData' }[this.exitKind] ?? 'exit';
+    return { floor: 'quitFloor' }[this.exitKind] ?? 'exit';
   }
 
   _drawExitPopup(ctx, [cx, cy, cw]) {
@@ -820,6 +887,320 @@ export class MainMenuScreen {
       if (!this._nine(ctx, `buttons/btn_secondary${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
       this._text(ctx, t(`menu.${key}.${id === 'exitOk' ? 'ok' : 'cancel'}`), rect[0] + r[2] / 2, rect[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
     }
+  }
+
+  // ---- 저장 충돌 팝업(docs/auth.md §4-2) ----
+
+  // L1: 같은 계정 두 기기(main.js가 시작 판정 뒤 메뉴에서 연다). L2(Google 계정 충돌)도 titles·bodyKey만 바꿔 쓴다.
+  // c = { bodyKey, titles, server, device, purchases?, cancel?, onPick?(keep:'server'|'device'|'cancel') }.
+  // onPick이 있으면(L2) 고른 결과를 그쪽으로(액션 문자열 대신), X·뒤로가기·[취소] = 'cancel'.
+  openSaveConflict(c) {
+    this.conflict = { ...c, confirm: null };
+    this.popup = 'saveConflict';
+  }
+
+  // X·뒤로가기로 돌아갈 곳.
+  _backOf(popup) {
+    if (popup === 'deleteAccount') return 'account';
+    return BACK_TO_SETTINGS.has(popup) ? 'settings' : null;
+  }
+
+  // 팝업이 X·뒤로가기로 닫힐 때.
+  _onPopupClosed(was) {
+    if (was === 'saveConflict' && this.conflict?.onPick) this._conflictDone('cancel');
+  }
+
+  _conflictDone(keep) {
+    const c = this.conflict;
+    this.popup = null;
+    this.conflict = null;
+    if (c?.onPick) {
+      c.onPick(keep);
+      return null;
+    }
+    return keep === 'server' ? 'cloudUseServer' : keep === 'device' ? 'cloudUseDevice' : null;
+  }
+
+  // 추천 = 최고 층이 높은 쪽, 같으면 서버 쪽. 0 = 서버, 1 = 이 기기.
+  _conflictPick() {
+    return this.conflict.device.bestFloor > this.conflict.server.bestFloor ? 1 : 0;
+  }
+
+  _drawButton(ctx, rect, id, img, label) {
+    const down = this._pressed === id;
+    if (!this._nine(ctx, `buttons/${img}${down ? '_pressed' : ''}.png`, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+    this._text(ctx, label, rect[0] + rect[2] / 2, rect[1] + rect[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+  }
+
+  _drawSaveConflictPopup(ctx, [cx, cy, cw]) {
+    const c = this.conflict;
+    if (!c) return;
+    const at = (r) => [cx + r[0], cy + r[1], r[2], r[3]];
+    if (c.confirm) {
+      const [y1, y2, y3] = CONFLICT.confirmY;
+      // device = 이 기기로 덮기 확인, server = 이 기기 결제 상품 안내(§4-2, 이 기기에 결제가 있을 때)
+      const lines = c.confirm === 'device'
+        ? [t('menu.saveConflict.confirm1', { name: c.titles[0], n: fmt(c.server.bestFloor) }), t('menu.saveConflict.confirm2'), t('menu.saveConflict.confirm3')]
+        : t('menu.saveConflict.paidConfirm');
+      lines.forEach((l, i) => this._text(ctx, l, cx + cw / 2, cy + [y1, y2, y3][i], { size: i === 2 ? 13 : 15, align: 'center', color: i === 2 ? COLORS.redLight : COLORS.bone }));
+      this._drawButton(ctx, at(CONFLICT.cancel), 'conflictCancel', 'btn_secondary', t('menu.saveConflict.cancel'));
+      this._drawButton(ctx, at(CONFLICT.ok), 'conflictOk', c.confirm === 'device' ? 'btn_danger' : 'btn_primary',
+        t(c.confirm === 'device' ? 'menu.saveConflict.ok' : 'menu.saveConflict.continue'));
+      return;
+    }
+    const body = t(c.bodyKey);
+    (Array.isArray(body) ? body : [body]).forEach((line, i) => this._text(ctx, line, cx + cw / 2, cy + CONFLICT.bodyY[i], { size: 14, align: 'center' }));
+    const pick = this._conflictPick();
+    [c.server, c.device].forEach((s, i) => {
+      const r = at(CONFLICT.cards[i]);
+      if (!this._nine(ctx, 'panels/panel_inset.png', r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
+      if (i === pick) {
+        // 추천 쪽 금색 테두리
+        const sr = this._toScreen(r);
+        const w = Math.max(2, 3 * this._transform.k);
+        ctx.strokeStyle = COLORS.title;
+        ctx.lineWidth = w;
+        ctx.strokeRect(sr.x + w / 2, sr.y + w / 2, sr.width - w, sr.height - w);
+      }
+      const x = r[0] + r[2] / 2;
+      const ly = CONFLICT.lineY;
+      const lines = [
+        [c.titles[i], 15, COLORS.title],
+        [t('menu.saveConflict.best', { n: fmt(s.bestFloor) }), 14],
+        [t('menu.saveConflict.dia', { n: fmt(s.diamonds) }), 13],
+        [t('menu.saveConflict.statue', { n: fmt(s.towerSum) }), 13],
+        [i === 0 ? t('menu.saveConflict.savedAt', { time: shortTime(s.updatedAt) }) : t('menu.saveConflict.now'), 12, COLORS.dim],
+        [i === 0 && s.platform ? `(${t(`menu.saveConflict.platform.${s.platform}`)})` : i === 1 && c.purchases > 0 ? t('menu.saveConflict.paid', { n: c.purchases }) : '', 12, COLORS.dim],
+      ];
+      lines.forEach(([text, size, color], j) => text && this._text(ctx, text, x, r[1] + ly[j], { size, align: 'center', color: color ?? COLORS.bone }));
+      const p = CONFLICT.pick;
+      this._drawButton(ctx, [r[0] + p[0], r[1] + p[1], p[2], p[3]], `conflict${i}`, i === pick ? 'btn_primary' : 'btn_secondary', t('menu.saveConflict.pick'));
+    });
+    this._text(ctx, t('menu.saveConflict.lost'), cx + cw / 2, cy + CONFLICT.lostY, { size: 13, align: 'center', color: COLORS.dim });
+    if (c.cancel) this._drawButton(ctx, at(CONFLICT.close), 'conflictClose', 'btn_secondary', t('menu.saveConflict.cancel'));
+  }
+
+  // 'cloudUseServer' | 'cloudUseDevice'(확인 뒤) | null
+  _conflictPointerDown(x, y, card) {
+    const c = this.conflict;
+    const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+    if (c.confirm) {
+      if (pressButton(x, y, at(CONFLICT.cancel), 'cancel')) {
+        this._pressed = 'conflictCancel';
+        c.confirm = null;
+      } else if (pressButton(x, y, at(CONFLICT.ok))) {
+        this._pressed = 'conflictOk';
+        return this._conflictDone(c.confirm);
+      }
+      return null;
+    }
+    if (c.cancel && pressButton(x, y, at(CONFLICT.close), 'cancel')) {
+      this._pressed = 'conflictClose';
+      return this._conflictDone('cancel');
+    }
+    for (let i = 0; i < 2; i++) {
+      const cr = CONFLICT.cards[i];
+      const p = CONFLICT.pick;
+      if (!pressButton(x, y, at([cr[0] + p[0], cr[1] + p[1], p[2], p[3]]))) continue;
+      this._pressed = `conflict${i}`;
+      if (i === 1) {
+        c.confirm = 'device'; // 이 기기 = 한 번 더 확인
+        return null;
+      }
+      if (c.purchases > 0) {
+        c.confirm = 'server'; // 이 기기 결제 상품 안내 한 번
+        return null;
+      }
+      return this._conflictDone('server');
+    }
+    return null;
+  }
+
+  // ---- 계정 팝업(docs/auth.md §5) ----
+
+  // Google 브랜드 버튼(라이트 테마): 흰 바탕·#747775 테두리·G 로고(공식 PNG)·#1F1F1F 글자, 시스템 글꼴(Roboto 계열).
+  _drawGoogleButton(ctx, rect) {
+    const r = this._toScreen(rect);
+    const down = this._pressed === 'accountGoogle';
+    const k = this._transform.k;
+    ctx.save();
+    ctx.fillStyle = down ? '#F2F2F2' : '#FFFFFF';
+    ctx.strokeStyle = '#747775';
+    ctx.lineWidth = Math.max(1, k);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.width, r.height, 4 * k);
+    else ctx.rect(r.x, r.y, r.width, r.height);
+    ctx.fill();
+    ctx.stroke();
+    if (uiReady(this._googleG)) {
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this._googleG.img, r.x, r.y, r.height, r.height); // 정사각 G 타일(자체 흰 바탕·테두리)
+    }
+    // 브랜드 가이드: Roboto Medium, 없으면 시스템 sans(Android = Roboto·Noto CJK). 번들 'Noto Sans'는 라틴 Regular뿐이라 한글은 시스템 글꼴로.
+    ctx.font = `500 ${14 * k}px Roboto, 'Noto Sans', system-ui, sans-serif`;
+    ctx.fillStyle = '#1F1F1F';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(t('menu.account.google'), r.x + (r.width + r.height) / 2, r.y + r.height / 2);
+    ctx.restore();
+  }
+
+  _drawAccountPopup(ctx, [cx, cy, cw]) {
+    const a = this.account;
+    const at = (r) => [cx + r[0], cy + r[1], r[2], r[3]];
+    const mid = cx + cw / 2;
+    if (a.confirm) {
+      t('menu.account.signOutConfirm').forEach((l, i) => this._text(ctx, l, mid, cy + ACCOUNT.confirmY[i], { size: 14, align: 'center' }));
+      this._drawButton(ctx, at(ACCOUNT.cancel), 'accountCancel', 'btn_secondary', t('menu.account.cancel'));
+      this._drawButton(ctx, at(ACCOUNT.ok), 'accountOk', 'btn_danger', t('menu.account.signOut'));
+    } else {
+      const st = a.state();
+      if (st.kind === 'linked') {
+        this._text(ctx, st.email ? t('menu.account.linked', { email: st.email }) : t('menu.account.linkedNoEmail'), mid, cy + ACCOUNT.line1Y, { size: 14, align: 'center' });
+        const cs = a.cloud?.();
+        const line = cs?.on && cs.lastSyncAt ? t('menu.saveConflict.line', { time: shortTime(cs.lastSyncAt) }) : t('menu.saveConflict.pending');
+        this._text(ctx, line, mid, cy + ACCOUNT.noteY[0], { size: 12, align: 'center', color: COLORS.dim });
+        this._drawButton(ctx, at(ACCOUNT.signOut), 'accountSignOut', 'btn_secondary', t('menu.account.signOut'));
+      } else if (this._loginOn()) {
+        this._text(ctx, t('menu.account.guest'), mid, cy + ACCOUNT.line1Y, { size: 15, align: 'center' });
+        t('menu.account.guestNote').forEach((l, i) => this._text(ctx, l, mid, cy + ACCOUNT.noteY[i], { size: 11, align: 'center', color: COLORS.dim }));
+        if (a.googleOn()) this._drawGoogleButton(ctx, at(ACCOUNT.google));
+      }
+      if (a.msg) this._text(ctx, t(`menu.account.fail.${a.msg}`), mid, cy + ACCOUNT.msgY, { size: 13, align: 'center', color: COLORS.redLight });
+      this._text(ctx, t('menu.account.delete'), mid, cy + ACCOUNT.deleteY, { size: 12, align: 'center', color: this._pressed === 'accountDelete' ? COLORS.title : COLORS.redLight });
+    }
+    if (a.busy) {
+      const r = this._toScreen([cx, cy, cw, POPUP_SIZES.account[1]]);
+      ctx.fillStyle = COLORS.overlay;
+      ctx.fillRect(r.x, r.y, r.width, r.height);
+      this._text(ctx, t('menu.account.busy'), mid, cy + POPUP_SIZES.account[1] / 2, { size: 18, align: 'center', color: COLORS.title });
+    }
+  }
+
+  // 'accountLink' | 'accountSignOut'(확인 뒤) | null
+  _accountPointerDown(x, y, card) {
+    const a = this.account;
+    const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+    if (a.confirm) {
+      if (pressButton(x, y, hit(ACCOUNT.cancel), 'cancel')) {
+        this._pressed = 'accountCancel';
+        a.confirm = false;
+      } else if (pressButton(x, y, hit(ACCOUNT.ok))) {
+        this._pressed = 'accountOk';
+        a.confirm = false;
+        return 'accountSignOut';
+      }
+      return null;
+    }
+    const st = a.state();
+    if (st.kind === 'linked' && pressButton(x, y, hit(ACCOUNT.signOut))) {
+      this._pressed = 'accountSignOut';
+      a.confirm = true; // §5-3 확인 한 번
+      return null;
+    }
+    if (pressButton(x, y, hit(ACCOUNT_DEL_HIT), 'cancel')) {
+      this._pressed = 'accountDelete';
+      this._openDeleteAccount();
+      return null;
+    }
+    if (st.kind !== 'linked' && this._loginOn() && a.googleOn() && pressButton(x, y, hit(ACCOUNT.google))) {
+      this._pressed = 'accountGoogle';
+      a.msg = null;
+      return 'accountLink';
+    }
+    if (!pointInRect(x, y, this._toScreen(card))) {
+      this.popup = 'settings';
+      audio.play('ui_cancel');
+    }
+    return null;
+  }
+
+  // ---- 계정 삭제(docs/auth.md §6) ----
+
+  _deleteWord() {
+    return t('menu.deleteAccount.word');
+  }
+
+  _deleteReady() {
+    return (this._delInput?.value ?? '').trim().toUpperCase() === this._deleteWord().toUpperCase();
+  }
+
+  _openDeleteAccount() {
+    this.popup = 'deleteAccount';
+    this.account.msg = null;
+    this._delInput?.remove();
+    this._delInput = createDomInput({
+      maxLength: DEL.maxLength,
+      placeholder: this._deleteWord(),
+      placeholderColor: COLORS.bg3,
+      ariaLabel: t('menu.deleteAccount.title'),
+      align: 'center',
+      onInput: () => {
+        this.account.msg = null;
+      },
+      onEnter: () => {
+        if (this._deleteReady() && !this.account.busy) this.dispatch('accountDelete');
+      },
+    });
+  }
+
+  _syncDeleteInput(canvas) {
+    if (!this._delInput) return;
+    if (this.popup !== 'deleteAccount') {
+      this._delInput.remove();
+      this._delInput = null;
+      return;
+    }
+    if (!canvas?.getBoundingClientRect || !this._transform) return;
+    const r = this._toScreen(this._couponRect(this._popupCardBasis(), DEL.input));
+    placeDomInput(this._delInput, canvas, r, 1, 22 * this._transform.k);
+  }
+
+  _drawDeleteAccountPopup(ctx, card) {
+    const [cx, cy, cw] = card;
+    const mid = cx + cw / 2;
+    const a = this.account;
+    t('menu.deleteAccount.body').forEach((l, i) => this._text(ctx, l, mid, cy + DEL.bodyY[i], { size: 13, align: 'center' }));
+    this._text(ctx, t('menu.deleteAccount.hint', { word: this._deleteWord() }), mid, cy + DEL.hintY, { size: 13, align: 'center', color: COLORS.redLight });
+    const box = this._couponRect(card, DEL.input);
+    if (!this._nine(ctx, 'menu/inset.png', box)) this._panel(ctx, box, COLORS.bg2, COLORS.bg3);
+    if (a.msg) this._text(ctx, t(`menu.account.fail.${a.msg}`), mid, cy + DEL.msgY, { size: 13, align: 'center', color: COLORS.redLight });
+    this._drawButton(ctx, this._couponRect(card, DEL.cancel), 'delCancel', 'btn_secondary', t('menu.account.cancel'));
+    const ready = this._deleteReady() && !a.busy;
+    const okRect = this._couponRect(card, DEL.ok);
+    if (ready) this._drawButton(ctx, okRect, 'delOk', 'btn_danger', t('menu.deleteAccount.ok'));
+    else {
+      this._panel(ctx, okRect, COLORS.bg2, COLORS.bg3); // 꺼진 [삭제]
+      this._text(ctx, t('menu.deleteAccount.ok'), okRect[0] + okRect[2] / 2, okRect[1] + okRect[3] / 2, { size: 15, align: 'center', color: COLORS.bg3 });
+    }
+    if (a.busy) {
+      const r = this._toScreen(card);
+      ctx.fillStyle = COLORS.overlay;
+      ctx.fillRect(r.x, r.y, r.width, r.height);
+      this._text(ctx, t('menu.deleteAccount.busy'), mid, cy + card[3] / 2, { size: 18, align: 'center', color: COLORS.title });
+    }
+  }
+
+  // 'accountDelete' | null
+  _deleteAccountPointerDown(x, y, card) {
+    const hit = (r) => this._toScreen(this._couponRect(card, r));
+    if (pressButton(x, y, hit(DEL.cancel), 'cancel')) {
+      this._pressed = 'delCancel';
+      this.popup = 'account';
+      return null;
+    }
+    if (this._deleteReady() && pressButton(x, y, hit(DEL.ok))) {
+      this._pressed = 'delOk';
+      return 'accountDelete';
+    }
+    return null;
+  }
+
+  _drawNudgePopup(ctx, [cx, cy, cw]) {
+    const at = (r) => [cx + r[0], cy + r[1], r[2], r[3]];
+    t('menu.linkNudge.body').forEach((l, i) => this._text(ctx, l, cx + cw / 2, cy + NUDGE.bodyY[i], { size: 14, align: 'center' }));
+    this._drawButton(ctx, at(NUDGE.later), 'nudgeLater', 'btn_secondary', t('menu.linkNudge.later'));
+    this._drawButton(ctx, at(NUDGE.ok), 'nudgeOk', 'btn_primary', t('menu.linkNudge.ok'));
   }
 
   _drawHelpPopup(ctx, card) {
@@ -897,11 +1278,11 @@ export class MainMenuScreen {
     if (!this._nine(ctx, 'panels/panel_inset.png', [cx + c[0], cy + c[1], c[2], c[3]])) this._panel(ctx, [cx + c[0], cy + c[1], c[2], c[3]], COLORS.bg2, COLORS.bg3);
     const text = notice ?? (code ? t('net.about.code', { code }) : t('net.about.noCode'));
     this._text(ctx, text, cx + cw / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
-    const d = ABOUT_NET.del;
-    const r = [cx + d[0], cy + d[1], d[2], d[3]];
-    const down = this._pressed === 'deleteData';
-    if (!this._nine(ctx, `buttons/btn_danger${down ? '_pressed' : ''}.png`, r)) this._panel(ctx, r, COLORS.bg2, COLORS.redLight);
-    this._text(ctx, t('net.about.delete'), r[0] + r[2] / 2, r[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+    const cs = this.server.cloud?.();
+    if (cs && (cs.on || cs.offline)) {
+      const line = cs.on && cs.lastSyncAt ? t('menu.saveConflict.line', { time: shortTime(cs.lastSyncAt) }) : t('menu.saveConflict.pending');
+      this._text(ctx, line, cx + cw / 2, cy + ABOUT_NET.cloudY, { size: 11, align: 'center', color: COLORS.dim });
+    }
   }
 
   // 본문을 { head } / { text } 줄 목록으로 자른다. '{versionLine}'은 GAME_INFO로 채운다.
@@ -1050,17 +1431,20 @@ export class MainMenuScreen {
   // 뒤로가기(main.js 핸들러 스택): 열린 팝업을 X와 같은 규칙으로 닫는다. 닫았으면 true.
   closePopup() {
     if (!this.popup) return false;
-    if (this.popup === 'exit' && this.exitKind === 'deleteData') this.popup = 'about';
-    else this.popup = BACK_TO_SETTINGS.has(this.popup) ? 'settings' : null;
+    if ((this.popup === 'account' || this.popup === 'deleteAccount') && this.account?.busy) return true; // 진행 중에는 닫지 않음
+    this._onPopupClosed(this.popup);
+    this.popup = this._backOf(this.popup);
     this._drag = null;
     return true;
   }
 
   _handlePopupPointerDown(x, y) {
     const card = this._popupCardBasis();
+    if ((this.popup === 'account' || this.popup === 'deleteAccount') && this.account?.busy) return null; // "연결 중…"·"삭제 중…" - 입력 막음
     if (pressButton(x, y, this._toScreen(this._closeRects(card).hit), 'cancel')) {
       this._pressed = 'close';
-      this.popup = BACK_TO_SETTINGS.has(this.popup) ? 'settings' : null; // 도움말·게임 정보·쿠폰 X는 설정으로 돌아간다.
+      this._onPopupClosed(this.popup);
+      this.popup = this._backOf(this.popup); // 도움말·게임 정보·쿠폰·계정 X는 설정으로, 계정 삭제는 계정으로.
       return null;
     }
 
@@ -1098,12 +1482,6 @@ export class MainMenuScreen {
       if (this.server) {
         const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
         if (pointInRect(x, y, at(ABOUT_NET.code))) return 'playerCodeDown'; // main.js: 0.5초 누르고 있으면 복사
-        if (pressButton(x, y, at(ABOUT_NET.del))) {
-          this._pressed = 'deleteData';
-          this.exitKind = 'deleteData';
-          this.popup = 'exit'; // 확인 모달(종료 확인과 같은 틀)
-          return null;
-        }
       }
     }
 
@@ -1158,6 +1536,11 @@ export class MainMenuScreen {
             this.popup = 'help';
             this._helpPage = 0;
           }
+          if (btn.id === 'account') {
+            this.popup = 'account';
+            this.account.msg = null;
+            this.account.confirm = false;
+          }
           return null;
         }
       }
@@ -1167,15 +1550,34 @@ export class MainMenuScreen {
       const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
       if (pressButton(x, y, hit(EXIT.cancel), 'cancel')) {
         this._pressed = 'exitCancel';
-        this.popup = this.exitKind === 'deleteData' ? 'about' : null;
+        this.popup = null;
       } else if (pressButton(x, y, hit(EXIT.ok))) {
         this._pressed = 'exitOk';
-        this.popup = this.exitKind === 'deleteData' ? 'about' : null;
+        this.popup = null;
         // main.js: 마을로 / me-delete / platform.lifecycle.exit()
-        return { floor: 'quitFloor', deleteData: 'deleteData' }[this.exitKind] ?? 'exitApp';
+        return { floor: 'quitFloor' }[this.exitKind] ?? 'exitApp';
       }
       return null;
     }
+
+    if (this.popup === 'account' && this.account) return this._accountPointerDown(x, y, card);
+    if (this.popup === 'deleteAccount' && this.account) return this._deleteAccountPointerDown(x, y, card);
+    if (this.popup === 'linkNudge') {
+      const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+      if (pressButton(x, y, hit(NUDGE.later), 'cancel')) {
+        this._pressed = 'nudgeLater';
+        this.popup = null;
+      } else if (pressButton(x, y, hit(NUDGE.ok))) {
+        this._pressed = 'nudgeOk';
+        this.popup = 'account';
+        this.account.msg = null;
+        this.account.confirm = false;
+        return 'accountLink';
+      }
+      return null;
+    }
+    // 저장 충돌: 둘 중 하나는 골라야 한다(취소 없음). X·뒤로가기 = 다음 실행 때 다시 물음, 바깥 탭은 무시.
+    if (this.popup === 'saveConflict') return this.conflict ? this._conflictPointerDown(x, y, card) : null;
 
     if (this.popup === 'attendance' && this.server?.att) {
       const r = [card[0] + ATT.claim[0], card[1] + ATT.claim[1], ATT.claim[2], ATT.claim[3]];

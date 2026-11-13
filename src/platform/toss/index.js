@@ -105,7 +105,9 @@ const platform = {
   ...web,
   id: 'toss',
   caps: { ...web.caps, iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, haptics: false, externalLinks: false, backButton: true, exit: true, restore: false, autoRestore: false,
-    coupon: cfg.features.coupon !== false }, // 쿠폰 입력 - 토스 정책 확인 전까지 platform.toss.json에서 끔(docs/coupon.md §7)
+    coupon: cfg.features.coupon !== false, login: [] }, // 쿠폰 입력 - 토스 정책 확인 전까지 platform.toss.json에서 끔(docs/coupon.md §7)
+  // 토스 계정이 곧 로그인(docs/auth.md §2-1) - 계정 연결 없음.
+  auth: { providers: [], redirect: false, getIdToken: async () => ({ ok: false, reason: 'unavailable' }) },
 
   async init() {
     const f = cfg.features;

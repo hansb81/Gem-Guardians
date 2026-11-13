@@ -169,6 +169,10 @@ coupons (code text primary key, campaign text, title_ko text, title_en text, bun
          max_uses int, uses int, platforms text[], enabled boolean, note text, created_at)
 coupon_tries (player_id uuid, at timestamptz, ok boolean)
 
+-- 클라우드 저장 (docs/auth.md §3, 마이그레이션 20261113000000_saves.sql): save.v2 한 덩어리 + 백업(사람당 최근 3개, 30일 cron 삭제)
+saves (player_id uuid pk, data jsonb, save_version, rev bigint, summary jsonb, device_id, platform, app_version, updated_at)
+save_backups (id, player_id, data, rev, reason daily|overwrite|merge|restore, created_at)
+
 -- 운영 기록 (웹훅 원본 등, 90일 보관)
 server_log (id bigserial, at timestamptz default now(), source text, level text, body jsonb)
 ```

@@ -5,7 +5,8 @@
 // initStorage 전(node 테스트 등)에는 메모리에만 있고 아무 데도 쓰지 않는다.
 
 // 읽을 키 전부 - 새 키를 쓰면 여기에 추가해야 다음 실행 때 읽힌다(platform.storage에 키 목록 API가 없다).
-const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'guardianFx', 'leaderboardSubmitted', 'devServer', 'devCheats', 'pendingVerify', 'adContinue'];
+const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'guardianFx', 'leaderboardSubmitted', 'devServer', 'devCheats', 'pendingVerify', 'adContinue', 'locale', 'cloudMeta'];
+// adContinue = 옛 키(지금은 save 안 playerState.adContinue) - 한 번 읽어 옮기고 지운다. cloudMeta = 클라우드 저장 기기 기록(src/net/cloudSave.js).
 // 전체 데이터 초기화: 이 값을 올리면 모든 접속자의 저장 데이터가 다음 실행 때 한 번 비워진다.
 const DATA_EPOCH = 1;
 const FLUSH_MS = 300;
@@ -41,6 +42,11 @@ export const storage = {
     cache.set(key, JSON.stringify(value));
     dirty.add(key);
     if (backend && !timer) timer = setTimeout(() => storage.flush(), FLUSH_MS);
+  },
+  remove(key) {
+    cache.delete(key);
+    dirty.delete(key);
+    return backend ? backend.remove(key).catch(() => {}) : Promise.resolve();
   },
   // 쓰기 실패(용량 초과, 프라이버시 모드 등)는 어댑터가 삼킨다 - 진행은 메모리상으로 계속된다.
   flush() {

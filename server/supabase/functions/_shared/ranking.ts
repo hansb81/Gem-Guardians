@@ -23,3 +23,17 @@ export async function hasEntries(db: any, seasonId: string) {
   const { count } = await db.from("comp_best").select("player_id", { count: "exact", head: true }).eq("season_id", seasonId);
   return (count ?? 0) > 0;
 }
+
+// 일반 모드 최고 층 제출(rank-normal과 save-put body.rank가 같이 씀). 이전보다 높을 때만 갱신 -> { ok, updated }.
+// 도달 시각은 서버 시각(기기 시각은 안 믿음).
+// shortcut: 층 상승 속도 상한(docs/server.md §9 hidden)은 없음 - 서버 랭킹을 일반 사용자에게 공개하기 전에 추가(쑹 2026-11-09).
+// deno-lint-ignore no-explicit-any
+export async function submitNormal(db: any, uid: string, floor: number) {
+  if (!Number.isInteger(floor) || floor < 1 || floor > 9999) return { ok: false, reason: "badRequest" };
+  const p = await db.from("players").select("banned").eq("id", uid).maybeSingle();
+  if (p.error) throw new Error(JSON.stringify(p.error));
+  if (p.data?.banned) return { ok: false, reason: "banned" };
+  const r = await db.rpc("rank_normal_submit", { p_player: uid, p_floor: floor });
+  if (r.error) throw new Error(JSON.stringify(r.error));
+  return r.data;
+}

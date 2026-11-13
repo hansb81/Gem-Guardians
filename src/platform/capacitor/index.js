@@ -6,6 +6,7 @@ import { App } from '@capacitor/app';
 import { Preferences } from '@capacitor/preferences';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { AdMob, AdmobConsentStatus, BannerAdPosition, BannerAdSize, BannerAdPluginEvents, RewardAdPluginEvents } from '@capacitor-community/admob';
+import { SocialLogin } from '@capgo/capacitor-social-login';
 import web from '../web/index.js';
 import androidCfg from '../../../config/platform.android.json';
 import iosCfg from '../../../config/platform.ios.json';
@@ -23,6 +24,20 @@ const iapModule = isOneStore ? import('./iap/onestore.js') : import('./iap/play.
 // 적응형 배너(앵커) 높이 추정 - 폭/6.4, 50~90 그리고 화면 높이 15% 이하(Google 적응형 배너 규칙).
 // shortcut: 실제 높이는 SizeChanged로 오지만, 자리(배율)는 이 추정으로 미리 고정한다 - 차이가 크면 실기기에서 보정.
 const slotHeight = () => Math.round(Math.max(50, Math.min(90, window.innerWidth / 6.4, window.innerHeight * 0.15)));
+
+// Google 로그인(계정 연결) 도우미.
+let googleInitFor = null;
+const randomNonce = () => [...crypto.getRandomValues(new Uint8Array(16))].map((b) => b.toString(16).padStart(2, '0')).join('');
+async function sha256Hex(s) {
+  const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+// 플러그인 거절: 취소 = code USER_CANCELLED. Google Play 서비스·Google 계정 없음 = unavailable(원스토어 단말 등, docs/auth.md §10-4).
+function googleFailReason(e) {
+  if (e?.code === 'USER_CANCELLED' || /cancel/i.test(e?.message ?? '')) return 'cancel';
+  if (/NoCredential|ProviderConfiguration|play services|no google account|unavailable/i.test(`${e?.message ?? ''} ${e?.code ?? ''}`)) return 'unavailable';
+  return 'error';
+}
 
 const pauseCbs = [];
 const resumeCbs = [];
@@ -122,6 +137,32 @@ const platform = {
     autoRestore: false, // Android + 결제 켜짐이면 init에서 켠다(Play는 로그인 팝업 없이 구매 기록을 읽을 수 있다).
     // 평가하기·업데이트 안내 링크는 자기 마켓으로만(원스토어 심사: 다른 마켓 링크 금지).
     storeLinks: isOneStore ? 'onestore' : isAndroid ? 'play' : 'appstore',
+    // 계정 연결(docs/auth.md §2-1): Android(Play·원스토어) Google. iOS는 L4(Apple 필수)에서 ['apple','google'].
+    login: isAndroid ? ['google'] : [],
+  },
+
+  // 기기 Google 로그인 창(Credential Manager) -> ID 토큰. Supabase에는 raw nonce, Google에는 그 sha256(hex)을 준다.
+  // scopes는 안 넘긴다: 기본 BridgeActivity에서 scopes를 주면 플러그인이 거절한다(email·profile은 기본 포함).
+  auth: {
+    providers: isAndroid ? ['google'] : [],
+    redirect: false,
+    async getIdToken(provider, { webClientId } = {}) {
+      if (provider !== 'google' || !isAndroid || !webClientId) return { ok: false, reason: 'unavailable' };
+      try {
+        if (googleInitFor !== webClientId) {
+          await SocialLogin.initialize({ google: { webClientId } });
+          googleInitFor = webClientId;
+        }
+        const nonce = randomNonce();
+        const res = await SocialLogin.login({ provider: 'google', options: { nonce: await sha256Hex(nonce) } });
+        const idToken = res?.result?.idToken;
+        if (!idToken) return { ok: false, reason: 'error' };
+        return { ok: true, idToken, nonce, accessToken: res.result.accessToken?.token };
+      } catch (e) {
+        warn('google login', e);
+        return { ok: false, reason: googleFailReason(e) };
+      }
+    },
   },
 
   async init() {

@@ -1,5 +1,16 @@
 {
   "appId": "com.teamsdb.gemguardians",
   "appName": "Gem Guardians",
-  "webDir": "dist"
+  "webDir": "dist",
+  "plugins": {
+    "SocialLogin": {
+      "providers": {
+        "google": true,
+        "facebook": false,
+        "apple": false,
+        "twitter": false
+      },
+      "logLevel": 1
+    }
+  }
 }

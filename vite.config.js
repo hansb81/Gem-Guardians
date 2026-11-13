@@ -26,6 +26,9 @@ function copyRuntimeFiles(platform) {
 // 토스·Capacitor 빌드에는 넣지 않는다(서비스 워커·매니페스트가 필요 없고 WebView에서 오히려 캐시가 꼬인다).
 function writeWebFiles(dir) {
   cpSync('public', dir, { recursive: true });
+  // 개인정보처리방침·계정 삭제 안내(docs/auth.md §6) - https://gem-guardians.pages.dev/privacy.html, /delete-account.html.
+  // Play 콘솔 "계정 삭제 URL"이 delete-account.html. 원본은 docs/(GitHub Pages에도 같은 파일).
+  for (const f of ['privacy.html', 'delete-account.html']) cpSync(`docs/${f}`, `${dir}/${f}`);
   const files = readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((f) => f.isFile())
     .map((f) => relative(dir, join(f.parentPath, f.name)).replaceAll(sep, '/'))

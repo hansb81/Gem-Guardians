@@ -36,11 +36,18 @@ const canVibrate = () => typeof navigator.vibrate === 'function' && matchMedia('
 
 export default createPlatform({
   id: 'web',
-  caps: { iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, externalLinks: true, haptics: canVibrate(), backButton: false, exit: false },
+  caps: { iap: false, ads: false, banner: false, rewarded: false, leaderboard: false, externalLinks: true, haptics: canVibrate(), backButton: false, exit: false, login: ['google'] },
+  // 웹 = Supabase OAuth 리다이렉트(src/net/account.js). ID 토큰 방식은 안 씀.
+  auth: { providers: ['google'], redirect: true, getIdToken: async () => ({ ok: false, reason: 'unavailable' }) },
   storage: {
     get: async (key) => safeStorage(() => localStorage.getItem(key), null),
     set: async (key, str) => safeStorage(() => localStorage.setItem(key, str)),
     remove: async (key) => safeStorage(() => localStorage.removeItem(key)),
+  },
+  session: {
+    get: (key) => safeStorage(() => sessionStorage.getItem(key), null),
+    set: (key, str) => safeStorage(() => sessionStorage.setItem(key, str)),
+    remove: (key) => safeStorage(() => sessionStorage.removeItem(key)),
   },
   identity: {
     async getUserId() {

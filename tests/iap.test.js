@@ -55,7 +55,7 @@ test('서버 ok -> 지급 -> iap-granted', async () => {
 test('오프라인 + iapStrict=false -> 지급 + pendingVerify, hello 뒤 재확인으로 비움', async () => {
   const { calls, onGrant } = setup([{ ok: false, reason: 'offline' }, { ok: true, txId: 'iap:dia.0:o2' }]);
   assert.ok(await withVerify(onGrant)('dia.0', 'o2'));
-  assert.deepEqual(storage.load('pendingVerify'), [{ store: 'dev', productKey: 'dia.0', orderId: 'o2', bundle: { diamonds: 120 } }]);
+  assert.deepEqual(storage.load('pendingVerify'), [{ store: 'dev', productKey: 'dia.0', orderId: 'o2', bundle: { diamonds: 120 }, granted: true }]);
   await syncServerIap({ onGrant, onRevoke: () => assert.fail(), grantedTx: () => [] });
   assert.deepEqual(storage.load('pendingVerify'), []);
   assert.deepEqual(calls.granted, [['iap:dia.0:o2', { diamonds: 120 }]]); // 재확인 땐 duplicate라 처음 준 bundle

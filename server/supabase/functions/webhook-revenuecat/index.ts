@@ -22,10 +22,11 @@ Deno.serve(async (req) => {
     const key = ev.product_id ? keyOfStoreProductId(store, ev.product_id) : null;
     // app_user_id = Purchases.logIn 한 서버 플레이어 id. 로그인 전 결제($RCAnonymousID)면 aliases에서 찾는다.
     const ids = [ev.app_user_id, ...(ev.aliases ?? [])].filter((s) => typeof s === "string" && UUID.test(s));
+    // 계정 합치기(account-merge)로 지워진 A id면 B로 따라간다(player_merges, docs/auth.md §4-3).
     let player: string | null = null;
     if (ids.length) {
-      const { data } = await db.from("players").select("id").in("id", ids).limit(1);
-      player = data?.[0]?.id ?? null;
+      const { data } = await db.rpc("player_resolve", { p_ids: ids });
+      player = data ?? null;
     }
     const { data, error } = await db.rpc("iap_webhook", {
       p_event_id: ev.id, p_type: ev.type, p_store: store, p_order_id: ev.transaction_id ?? null, p_player: player,

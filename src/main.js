@@ -27,12 +27,17 @@ import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup 
 import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
 import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
-import { recoverPending, restore, syncServerIap } from './shop/iap.js';
+import { restore, flushPendingPurchases, startPendingPurchases } from './shop/iap.js';
 import { storage } from './platform/storage.js';
 import { guardianFxSetting } from './render/guardianFx.js';
 import { loadServerConfig, setupServer } from './game/serverUi.js';
 import { showRewarded } from './game/ads.js';
 import { continueOptions, recordUse } from './game/adContinue.js';
+import { CloudSave, saveSummary } from './net/cloudSave.js';
+import { net, call, sayHello, refreshSessionUser, authClient } from './net/api.js';
+import { Account } from './net/account.js';
+import { pruneGrantedTx } from './core/inventory/inventory.js';
+import { GAME_INFO } from './config/gameInfo.js';
 
 setLocale(storage.load('locale') ?? 'ko'); // 설정 팝업의 언어 버튼이 저장한 값.
 const canvas = document.getElementById('game-canvas');
@@ -143,6 +148,9 @@ function startExitToMenu() {
     prepLastTab = null; // 판이 끝나면 다음 판은 석상 탭부터.
     upgradeHold = null;
     scene = 'menu';
+    CloudSave.flush('menu');
+    nudgeCheck = true; // 15층 첫 클리어 뒤 메뉴 복귀 = 연결 권유 한 번
+
   });
 }
 // 상점(메뉴 오른쪽 위 아이콘) - 전체 화면 scene. 뒤로 가기(브라우저/안드로이드)로도 닫히도록 history에
@@ -298,11 +306,161 @@ function handleTutorialPointerDown(x, y) {
   else if (tutorial.guideSwap && !pointInRect(x, y, renderer.lastLayout?.board)) tutorial.events.push({ type: 'tutorialHintPulse' });
 }
 
+// 클라우드 저장(docs/auth.md §3, src/net/cloudSave.js). 시작 때 저장(initShop·initItems·90일 정리)이 끝난 뒤 init해야
+// 그 저장들이 dirty로 잡히지 않는다(진짜 진행만 dirty). 판정은 hello -> 미지급 복구·출석·우편 다음.
+let cloudConflict = null;
+let iapEnv = null; // 결제 지급·회수 콜백(상점 준비 뒤) - 계정 전환 전 결제 대기열 비우기에도 씀 // 메뉴에 띄울 충돌 팝업 인자(메뉴에 다른 팝업이 없을 때 연다)
+function startCloudSave() {
+  const tx = playerState.inventory.data.grantedTx;
+  const kept = pruneGrantedTx(tx, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)); // KST 오늘
+  if (kept.length !== tx.length) {
+    tx.splice(0, tx.length, ...kept);
+    playerState.save();
+  }
+  CloudSave.init({
+    playerState,
+    storage,
+    net,
+    call,
+    reload: () => location.reload(),
+    deviceId: platform.identity.getUserId().catch(() => null), // platformUserId(웹·Capacitor 공통)
+    appVersion: GAME_INFO.version,
+  });
+  if (CloudSave.takeLoadedNotice()) mainMenuScreen.showToast(t('menu.saveConflict.loaded'));
+  Account.init({
+    client: authClient,
+    net,
+    call,
+    sayHello: () => sayHello(playerState.ranking.profile.playerId, GAME_INFO.version),
+    refreshUser: refreshSessionUser,
+    cloud: CloudSave,
+    playerState,
+    storage,
+    platformAuth: platform.auth,
+    flushPurchases: () => (iapEnv ? flushPendingPurchases(iapEnv) : { ok: true, left: 0 }),
+    iapLogIn: (id) => platform.iap.logIn?.(id),
+    restorePurchases: () => (platform.caps.iap && iapEnv ? restore(iapEnv.onGrant, iapEnv.onRevoke) : null),
+    chooseConflict: ({ server, device, purchases }) =>
+      new Promise((resolve) => {
+        cloudConflict = {
+          bodyKey: 'menu.saveConflict.bodyGoogle',
+          titles: [t('menu.saveConflict.google'), t('menu.saveConflict.thisDevice')],
+          server: { ...server.summary, updatedAt: server.updatedAt, platform: server.platform },
+          device,
+          purchases,
+          cancel: true,
+          onPick: resolve,
+        };
+      }),
+    session: platform.session,
+    location: () => window.location,
+    replaceUrl: (u) => history.replaceState(history.state, '', u),
+    reload: () => location.reload(),
+  });
+  if (Account.takeDeletedNotice()) mainMenuScreen.showToast(t('menu.deleteAccount.deletedToast'));
+  // 설정 > 계정(서버가 켜져 있으면 늘 - 계정 삭제는 모든 빌드. Google 연결 부분은 caps.login이 있을 때만).
+  if (serverUi.enabled) {
+    const dispatch = mainMenuScreen.dispatch;
+    mainMenuScreen.dispatch = (action) => accountAction(action) || dispatch(action);
+    mainMenuScreen.account = {
+      state: () => Account.state(),
+      cloud: () => CloudSave.status(),
+      googleOn: () => !!net.googleWebClientId && platform.caps.login.includes('google') && (platform.auth.redirect || platform.auth.providers.includes('google')),
+      busy: false,
+      msg: null,
+      confirm: false,
+    };
+  }
+  const inv = playerState.inventory;
+  const grant = inv.grant.bind(inv);
+  inv.grant = (...args) => {
+    const r = grant(...args);
+    if (r.ok) CloudSave.flush('grant'); // 결제·보상 지급 직후 바로 올림
+    if (r.ok && String(args[1]?.txId ?? '').startsWith('iap:')) pendingNudge = 'firstPurchase'; // 첫 결제 지급 직후 연결 권유
+    return r;
+  };
+  platform.lifecycle.onPause(() => CloudSave.flush('pause'));
+  serverUi.started?.then(async () => {
+    if (accountResume?.action === 'redirect') return null; // Google로 다시 다녀오는 중
+    if (accountResume?.action === 'resume') {
+      // 웹: B로 로그인해 돌아옴 -> 진행 고르기. 취소·실패면 A로 돌아와 평소 시작 판정.
+      const r = await runAccount(() => Account.resumeSwitch(accountResume.intent));
+      accountResume = null;
+      if (r?.ok) return null;
+    }
+    return CloudSave.syncOnStart(net.hello?.save ?? null);
+  }).then((r) => {
+    if (r?.action !== 'conflict' || !r.server) return;
+    const owner = r.kind === 'owner'; // 기기 save 주인 != 지금 계정
+    cloudConflict = {
+      bodyKey: owner ? 'menu.saveConflict.bodyAccount' : 'menu.saveConflict.bodyDevice',
+      titles: [t(owner ? 'menu.saveConflict.thisAccount' : 'menu.saveConflict.other'), t('menu.saveConflict.thisDevice')],
+      server: { ...r.server.summary, updatedAt: r.server.updatedAt, platform: r.server.platform },
+      device: saveSummary(playerState.snapshot()),
+    };
+  });
+}
+
+// 계정 연결(docs/auth.md §5, src/net/account.js).
+let accountResume = null; // 웹 리다이렉트에서 돌아온 결과 { action:'redirect'|'resume', intent? }
+// hello 뒤, 미지급 복구 전(serverUi beforeStart): 웹 Google 리다이렉트에서 돌아왔으면 처리.
+async function accountRedirect() {
+  if (!platform.caps.login?.length || !platform.auth.redirect) return null;
+  const r = await Account.handleRedirect();
+  if (r.action === 'linked') mainMenuScreen.showToast(t('menu.account.linkedToast'));
+  else if (r.action === 'failed' && r.reason !== 'cancel') mainMenuScreen.showToast(t(`menu.account.fail.${r.reason}`));
+  if (r.action === 'redirect' || r.action === 'resume') {
+    accountResume = r;
+    return { skipStart: true };
+  }
+  return null;
+}
+const ACCOUNT_FAILS = new Set(['offline', 'unavailable', 'error']);
+// 계정 동작 하나: 팝업 "연결 중…"(입력 막음) -> 결과 토스트/실패 문구.
+async function runAccount(fn) {
+  const acc = mainMenuScreen.account;
+  if (acc?.busy) return null;
+  if (acc) Object.assign(acc, { busy: true, msg: null });
+  let r;
+  try {
+    r = await fn();
+  } catch (e) {
+    console.warn('[account]', e);
+    r = { ok: false, reason: 'error' };
+  } finally {
+    if (acc) acc.busy = false;
+  }
+  if (r?.ok && r.kind === 'linked') mainMenuScreen.showToast(t(r.switched ? 'menu.account.switchedToast' : 'menu.account.linkedToast'));
+  else if (r && !r.ok && r.reason !== 'cancel' && acc) acc.msg = ACCOUNT_FAILS.has(r.reason) ? r.reason : 'error';
+  return r;
+}
+// 메뉴의 계정 동작(계정 팝업·연결 권유·삭제 입력 칸 Enter). 처리했으면 true.
+function accountAction(action) {
+  if (action === 'accountLink') runAccount(() => Account.link('google'));
+  else if (action === 'accountSignOut') runAccount(() => Account.signOut());
+  else if (action === 'accountDelete') runAccount(() => Account.deleteAccount());
+  else return false;
+  return true;
+}
+// 연결 권유(docs/auth.md §8 끝): 15층 첫 클리어 뒤 메뉴 복귀 1번, 첫 결제 지급 직후 1번. 게스트·로그인 수단·서버 켜짐일 때만.
+let nudgeCheck = false;
+let pendingNudge = null;
+function maybeNudge() {
+  const id = pendingNudge ?? (nudgeCheck && playerState.bestFloor > 15 ? 'floor15' : null);
+  nudgeCheck = false;
+  pendingNudge = null;
+  const acc = mainMenuScreen.account;
+  if (!id || !acc || !net.on || !acc.googleOn() || Account.state().kind !== 'guest' || playerState.nudges.includes(id)) return;
+  playerState.nudges.push(id);
+  playerState.save();
+  mainMenuScreen.popup = 'linkNudge';
+}
+
 // 게임 서버(docs/server.md S1) - config/server.json enabled:false면 아무 요청 없음.
 let serverUi = { enabled: false, handleMenuAction: () => false, pointerUp: () => {} };
 Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
   if (!battleData || !balanceData) return;
-  serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE }) };
+  serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE, beforeStart: accountRedirect }) };
   controller = new BattleController({
     balance: balanceData.balance,
     enemies: balanceData.enemies,
@@ -322,6 +480,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
       deferSkillHits: true,
     },
   });
+  startCloudSave();
   if (balanceData.ranking) {
     // 참여 보상 골드 = 층 기준가 x 3(config/ranking.json tiers part.goldFloorMul) - 기준가는 상점과 같은 normalFloorReward.
     // 서버 랭킹은 일반 모드만, 마켓 리더보드가 있는 빌드(토스)는 그대로 마켓 리더보드(docs/server.md §9).
@@ -369,21 +528,14 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
       itemIcons: () => renderer.itemAssets?.icons,
     });
     // 결제는 됐는데 지급 전에 꺼진 주문(토스 getPendingOrders 등) - 상점 데이터가 준비된 지금 다시 지급한다.
-    if (platform.caps.iap) {
-      const onGrant = (key, orderId) => shopScreen.grantPaid(key, orderId);
-      recoverPending(onGrant).then(() => {
-        // 토스: 복원 버튼이 없고 앱을 지우면 Storage도 지워진다 - 시작할 때 완료 주문으로 비소모성을 되살린다(txId라 중복 없음).
-        if (platform.caps.autoRestore) restore(onGrant, (key, orderId) => shopScreen.revokePaid(key, orderId));
-      });
-      // 서버(S2): RevenueCat logIn, 환불 회수(hello revoke), 서버 확인 못 한 결제(pendingVerify) 다시 확인.
-      serverUi.ready?.then(() =>
-        syncServerIap({
-          onGrant,
-          onRevoke: (key, orderId) => shopScreen.revokePaid(key, orderId),
-          grantedTx: () => playerState.inventory.data.grantedTx,
-        })
-      );
-    }
+    iapEnv = {
+      onGrant: (key, orderId) => shopScreen.grantPaid(key, orderId),
+      onRevoke: (key, orderId) => shopScreen.revokePaid(key, orderId),
+      grantedTx: () => playerState.inventory.data.grantedTx,
+    };
+    // 미지급 주문 복구는 바로(hello 안 기다림), 서버(S2) - RevenueCat logIn, 환불 회수, pendingVerify 재확인 - 는 hello 뒤.
+    // 계정 전환 전에는 같은 두 단계를 차례로 부르는 flushPendingPurchases(docs/auth.md §5-4).
+    if (platform.caps.iap) startPendingPurchases(iapEnv, serverUi.ready, { autoRestore: platform.caps.autoRestore });
   }
 
   // 생성자가 이미 첫 _resetBattleState를 한 번 돌렸지만(그때는 onBattleStateChanged가
@@ -416,6 +568,25 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
       triggerShuffle: () => gameState.shuffleBoard(),
       ranking: ranking.service ? ranking.dev() : null,
       server: serverUi.devToggle,
+      cloud: serverUi.enabled
+        ? {
+            upload: async () => {
+              CloudSave.markDirty(); // 바뀐 게 없어도 올려 본다
+              const res = await CloudSave.flush('account');
+              return res ? (res.ok ? `rev ${res.rev}` : res.reason) : '꺼짐·충돌 중';
+            },
+            pull: async () => {
+              const res = await call('save-get');
+              if (!res.ok || !res.save) return res.reason ?? '서버 save 없음';
+              await CloudSave.applyServer(res.save);
+            },
+            fakeConflict: async () => {
+              CloudSave.devFakeConflict();
+              await storage.flush();
+              location.reload();
+            },
+          }
+        : null,
     });
     // 개발용 키(?dev=1): H = 맨 앞 몬스터에게 석상 투사체 1발(피해 1), K = 남은 HP만큼(처치) - 몬스터 타격·사망 이펙트 확인.
     window.addEventListener('keydown', (e) => {
@@ -670,6 +841,7 @@ function handlePrepPointerDown(x, y) {
       if (hit.action === 'next') {
         keepBoardOnFloorChange = true;
         controller?.advanceFloor();
+        CloudSave.flush('floor');
       } else if (hit.action === 'retry') controller?.retryFloor();
       else startExitToMenu(); // 마을로 - 나가기와 같은 길(층을 되감고 메뉴로).
       return;
@@ -829,7 +1001,7 @@ canvas.addEventListener('pointerdown', (e) => {
     else if (action === 'openShopGold') enterShop('dia', 'goldex');
     else if (action === 'openShopDia') enterShop('dia');
     else if (action === 'exitApp') platform.lifecycle.exit();
-    else serverUi.handleMenuAction(action);
+    else if (!accountAction(action)) serverUi.handleMenuAction(action);
     return;
   }
 
@@ -1214,7 +1386,6 @@ function togglePreFloor(id) {
 
 // 패배 팝업 이어하기(docs/ads.md 2장) - 깃털·광고 버튼 판정은 continueOptions 하나.
 // mode: 경쟁 모드는 아직 잠김(플레이 경로 없음) - 열리면 여기서 그 판의 모드를 넘긴다.
-const AD_CONTINUE_KEY = 'adContinue';
 let adBusy = false; // 광고 띄우는 중(연타·재진입 금지, 일시정지 팝업 안 띄움)
 function continueState() {
   const cfg = controller?.itemsConfig?.adContinue;
@@ -1226,7 +1397,7 @@ function continueState() {
     featherOk: controller.canRevive(),
     floorLeft: controller.adContinueLeft(),
     adReady: platform.caps.rewarded || playerState.inventory.isUnlocked('adFree'),
-    save: storage.load(AD_CONTINUE_KEY),
+    save: playerState.adContinue,
     nowMs: Date.now(),
   });
 }
@@ -1246,7 +1417,10 @@ async function startAdContinue() {
     // 보상 이벤트를 받았을 때만, 그 사이 층이 바뀌지 않았을 때만(중간에 닫으면 아무 일 없음).
     if (!r.rewarded || controller.battleState !== bs) return;
   }
-  if (controller.adContinue()) storage.save(AD_CONTINUE_KEY, recordUse(storage.load(AD_CONTINUE_KEY), Date.now()));
+  if (controller.adContinue()) {
+    playerState.adContinue = recordUse(playerState.adContinue, Date.now());
+    playerState.save();
+  }
 }
 
 function buildItemUi() {
@@ -1348,6 +1522,12 @@ function loop(now) {
     drawPrep(now);
     // 메뉴에 있는 동안 1초마다 시즌 넘김 확인 -> 지난 시즌 결과 팝업(다른 팝업이 없을 때).
     ranking.tick(now, !prep && !mainMenuScreen.popup && !fade);
+    // 계정 전환 중 고르기(onPick)는 계정 팝업 위로 바로.
+    const popupFree = !mainMenuScreen.popup || (cloudConflict?.onPick && mainMenuScreen.popup === 'account');
+    if (cloudConflict && !prep && popupFree && !fade && !ranking.isOpen && !rewardPopup.active) {
+      mainMenuScreen.openSaveConflict(cloudConflict);
+      cloudConflict = null;
+    } else if ((nudgeCheck || pendingNudge) && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) maybeNudge();
     renderer.drawRankingPopup(ranking, now);
     renderer.drawRewardPopup(rewardPopup); // 출석·우편 받기
     drawFade(rawDtMs);

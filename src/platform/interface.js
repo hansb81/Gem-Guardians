@@ -20,15 +20,21 @@
  * @property {boolean} dev   개발용 가짜 결제를 덮어쓴 상태(src/platform/dev) - 상점이 마켓 상품 id 없이도 현금 상품을 보여 준다
  * @property {{ iap:boolean, ads:boolean, banner:boolean, rewarded:boolean, leaderboard:boolean,
  *              externalLinks:boolean, haptics:boolean, popupBanner:boolean, backButton:boolean, exit:boolean, restore:boolean, autoRestore:boolean,
- *              storeLinks:'play'|'onestore'|'appstore'|null, coupon:boolean }} caps
+ *              storeLinks:'play'|'onestore'|'appstore'|null, coupon:boolean, login:string[] }} caps
  *   restore = 상점에 "구매 내역 복원"을 보일지(iOS 필수). autoRestore = 시작할 때 restore를 자동으로 돌릴지(토스 - 복원 버튼 없음,
  *   앱을 지우면 Storage도 지워지므로 재설치 때 비소모성을 되살린다).
  *   exit = lifecycle.exit()로 앱을 닫을 수 있는지(종료 확인 모달을 띄울지). android: App.exitApp, toss: 미니앱 닫기,
  *   ios: false(애플은 앱이 스스로 끄는 걸 권하지 않음 - 종료 버튼 없음).
  *   storeLinks = 평가하기·업데이트 안내 링크를 보낼 마켓(자기 마켓만 - 원스토어 심사는 다른 마켓 링크 금지). null = 링크 없음.
  *   coupon = 설정 팝업 쿠폰 입력(docs/coupon.md §7). 기본 켬, iOS는 platform.ios.json features.coupon=false로 끔.
+ *   login = 계정 연결에 쓸 로그인 수단(docs/auth.md §2-1). 비면 설정의 계정 줄을 숨긴다(토스 - 토스 계정이 곧 로그인).
+ * @property {{ providers:string[], redirect:boolean,
+ *              getIdToken(provider:string, opts:{webClientId:string}):Promise<{ok:true, idToken:string, nonce?:string, accessToken?:string}|{ok:false, reason:'cancel'|'unavailable'|'error'}> }} auth
+ *   redirect = 웹: Supabase OAuth로 Google 페이지에 갔다 온다(getIdToken 안 씀). 앱: 기기 Google 로그인 창 -> ID 토큰.
  * @property {() => Promise<void>} init
  * @property {{ get(key:string):Promise<string|null>, set(key:string, str:string):Promise<void>, remove(key:string):Promise<void> }} storage
+ * @property {{ get(key:string):string|null, set(key:string, str:string):void, remove(key:string):void }} session
+ *   탭 하나 동안만(동기) - 웹 Google 리다이렉트 왕복 기록(src/net/account.js authIntent). 앱 빌드는 리다이렉트가 없어 안 씀.
  * @property {{ getUserId():Promise<string>, getAnonymousKey?():Promise<string|null> }} identity  getAnonymousKey = 토스만(실패 null)
  * @property {{ getProducts():Promise<Product[]>, purchase(productKey:string, onGrant:OnGrant):Promise<PurchaseResult>,
  *              restore(onGrant:OnGrant, onRevoke:OnRevoke):Promise<PurchaseResult[]>, recoverPending(onGrant:OnGrant):Promise<PurchaseResult[]>,
@@ -62,9 +68,11 @@ export function defaultPlatform() {
     id: 'web',
     dev: false,
     adTesting: false,
-    caps: { iap: false, ads: false, banner: false, popupBanner: false, rewarded: false, leaderboard: false, externalLinks: false, haptics: false, backButton: false, exit: false, restore: false, autoRestore: false, storeLinks: null, coupon: true },
+    caps: { iap: false, ads: false, banner: false, popupBanner: false, rewarded: false, leaderboard: false, externalLinks: false, haptics: false, backButton: false, exit: false, restore: false, autoRestore: false, storeLinks: null, coupon: true, login: [] },
+    auth: { providers: [], redirect: false, getIdToken: resolved({ ok: false, reason: 'unavailable' }) },
     init: resolved(undefined),
     storage: { get: resolved(null), set: resolved(undefined), remove: resolved(undefined) },
+    session: { get: () => null, set: noop, remove: noop },
     identity: { getUserId: resolved('') },
     iap: {
       getProducts: resolved([]),

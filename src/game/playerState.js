@@ -13,6 +13,8 @@ import { migrateTutorialSave } from '../tutorial/tutorial.js';
 // 키 v2: 상점(shop) 추가 때 올린 저장 키. 예전 키(v1)만 있으면 그걸 읽어 v2 키로 저장한다.
 // 저장 형식 버전(saveVersion)은 키와 별개 - 2 = 아이템·장착·예약·젬 스킬이 inv 묶음(docs/inventory.md 2장).
 const STORAGE_KEY = 'gemGuardians.save.v2';
+// 보상 광고 이어하기 하루 기록 { day, count } - 예전엔 save 밖 키였다(docs/auth.md §1-B: save 안으로).
+const OLD_AD_CONTINUE_KEY = 'adContinue';
 const LEGACY_KEYS = ['gemGuardians.save.v1'];
 const TOWER_COUNT = 5;
 
@@ -46,10 +48,28 @@ class PlayerState {
     // 랭킹(docs/ranking.md 7-1) - 읽고 쓰는 곳은 src/ranking/rankingService.js(LocalRankingService) 하나.
     this.ranking = normalizeRanking(this.ranking, { bestFloor: this.bestFloor, nowMs: Date.now() });
     this.ranking.profile.playerId ||= newPlayerId();
+    const oldAd = storage.load(OLD_AD_CONTINUE_KEY);
+    if (oldAd) {
+      this.adContinue ??= oldAd;
+      storage.remove(OLD_AD_CONTINUE_KEY);
+      this.save();
+    }
+    this.adContinue ??= null;
+    // 본 적 있는 권유 팝업 id(계정 연결 권유 'floor15'·'firstPurchase' - docs/auth.md §8). save 안이라 클라우드로 같이 간다.
+    if (!Array.isArray(this.nudges)) this.nudges = [];
+    this.onSaved = null; // 클라우드 저장(src/net/cloudSave.js)이 dirty 표시용으로 끼운다 - playerState는 net을 모른다.
+    this.saveBlocked = false; // 서버 save를 받아 다시 불러오기 직전 - 그 사이 저장이 받은 save를 덮지 않게.
   }
 
   save() {
-    storage.save(STORAGE_KEY, {
+    if (this.saveBlocked) return;
+    storage.save(STORAGE_KEY, this.snapshot());
+    this.onSaved?.();
+  }
+
+  // 저장(과 클라우드 업로드)하는 객체 그대로.
+  snapshot() {
+    return {
       saveVersion: SAVE_VERSION,
       gold: this.gold,
       diamonds: this.diamonds,
@@ -60,7 +80,9 @@ class PlayerState {
       inv: this.inventory.data,
       ranking: this.ranking,
       tutorial: this.tutorial,
-    });
+      adContinue: this.adContinue,
+      nudges: this.nudges,
+    };
   }
 
   // 상점 저장 상태(config/shop.json) - 없는 키만 채운다. 젬 스킬 기본 레벨(색 1, 특수 기술 해금 전 0)도

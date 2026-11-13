@@ -32,7 +32,7 @@ const SKILL_BUTTONS = [
 // 치트 켜기/끄기(?dev=1에서 오른쪽 위 버튼) - 끄면 패널을 숨기고 H/K 키와 배속을 끈다. 이 기기에만 기억(저장 키 'devCheats').
 export const devCheats = { on: true };
 
-export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null, server = null }) {
+export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null, server = null, cloud = null }) {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:fixed;top:0;left:0;z-index:9999;background:rgba(0,0,0,0.75);color:#fff;' +
@@ -193,6 +193,18 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
     b.textContent = server.label();
     b.onclick = () => server.toggle();
     panel.append(b);
+  }
+  // 클라우드 저장(docs/auth.md §8 L1 테스트) - 서버가 켜져 있을 때만. 결과는 버튼 글자에 잠깐.
+  if (cloud) {
+    for (const [label, fn] of [['클라우드 올리기', cloud.upload], ['서버 save로 덮기(받기)', cloud.pull], ['rev 충돌 흉내(새로고침)', cloud.fakeConflict]]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = async () => {
+        b.textContent = `${label}: ${(await fn()) ?? '…'}`;
+        setTimeout(() => (b.textContent = label), 3000);
+      };
+      panel.append(b);
+    }
   }
 
   document.body.appendChild(panel);

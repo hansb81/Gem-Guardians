@@ -30,7 +30,9 @@ export function withDev(base) {
     ...base,
     dev: true, // 상점이 마켓 상품 id 없이도 현금 상품을 보여 준다.
     adTesting: true,
-    caps: { ...base.caps, iap: true, rewarded: true, popupBanner: true },
+    caps: { ...base.caps, iap: true, rewarded: true, popupBanner: true, login: ['google'] },
+    // 가짜 토큰은 안 준다 - dev 빌드도 웹 리다이렉트 경로(실제 Google)로 연결한다.
+    auth: { providers: ['google'], redirect: true, getIdToken: async () => ({ ok: false, reason: 'unavailable' }) },
     iap: {
       ...base.iap,
       purchase: async (productKey, onGrant) => {

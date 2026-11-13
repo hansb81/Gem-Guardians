@@ -4,6 +4,7 @@
 // 서버가 꺼져 있으면(config/server.json) 이 클래스를 안 쓴다 - rankingUi.init이 Local을 고른다.
 import { LocalRankingService } from './rankingService.js';
 import { call } from '../net/api.js';
+import { CloudSave } from '../net/cloudSave.js';
 
 export class ServerRankingService extends LocalRankingService {
   constructor(opts) {
@@ -15,7 +16,10 @@ export class ServerRankingService extends LocalRankingService {
 
   async submit(mode, run) {
     const res = await super.submit(mode, run);
-    if (mode === 'normal' && res.updated) call('rank-normal', { floor: this._r.normal.bestFloor }); // 실패해도 me()가 다시 보냄
+    // 새 최고 층은 다음 save-put에 실어 보낸다(docs/auth.md §1-E 2번). 클라우드 저장이 꺼졌으면 예전처럼 따로.
+    // 실패해도 me()(랭킹 팝업 열 때)가 다시 보냄.
+    const n = this._r.normal;
+    if (mode === 'normal' && res.updated && !CloudSave.noteRank(n.bestFloor, n.reachedAt)) call('rank-normal', { floor: n.bestFloor });
     return res;
   }
 

@@ -54,7 +54,7 @@ export class MailService {
   }
 
   unread() {
-    return this.list ? this.list.filter((m) => !m.claimed).length : net.hello?.mail ?? 0;
+    return this.list ? this.list.filter((m) => !m.claimed).length : 0;
   }
 
   async refresh() {
