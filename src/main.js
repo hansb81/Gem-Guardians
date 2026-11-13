@@ -347,6 +347,7 @@ Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([ba
       floorObstacles,
     });
     gameState.setReduceEffects(!!renderer.assets?.effectsConfig?.settings?.reduceMotion);
+    controller.gameState = gameState;
     if (controller.items) controller.items.gameState = gameState;
     battleBridge.reset();
     animator.reset();

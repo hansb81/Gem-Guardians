@@ -6,6 +6,7 @@ import { dirname, join } from 'node:path';
 import { loadConfigs, parseArgs, applySets } from './config.js';
 import { skillsFor, skillArgsAtFor } from './skills.js';
 import { writeCsv, todayTag } from './report.js';
+import { setupCombo, combo } from './combo.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
@@ -25,6 +26,7 @@ async function main() {
   const configs = loadConfigs();
   const args = parseArgs(process.argv.slice(2), configs.sim);
   const sets = applySets(configs, args.set);
+  const comboTag = setupCombo(args, configs.balance); // tools/sim/combo.js. 콤보 골드 기본 = config(게임 그대로), 데미지 배율 기본 off
   // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
   const env = {
     configs,
@@ -47,6 +49,7 @@ async function main() {
     strategies: args.strategies,
     skillLvAll: args.skillLvAll,
     flight: args.flight, // --flight=on: 측정 전용 탄 비행 시간 근사(T4·T7·T2/T2s, floorSim shotFlight)
+    t7base: args.t7base, // --t7base=<t7 csv>: T7 기준 Lv·스킬 Lv를 그 파일(기준 열) 값으로 고정(다시 잡지 않음)
     emptySpawn: args.emptySpawn ?? configs.balance.floorShape.emptySpawn ?? 'off', // 빈 전장 즉시 등장: 기본 = balance.json floorShape.emptySpawn(게임 그대로), --emptySpawn=off|on|predict로 덮어쓰기
   };
   const dateTag = todayTag();
@@ -83,6 +86,10 @@ async function main() {
 - 메모리 덮어쓰기(--set, 파일은 그대로): ${sets.join(', ')}` : ''),
   ];
   const allOutOfRange = [];
+  if (comboTag !== 'combo=off window=3s') {
+    console.log(comboTag);
+    summaryParts.push(`- 콤보(측정 전용, tools/sim/combo.js): ${comboTag}${env.t7base ? ` / T7 기준 Lv 고정: ${env.t7base}` : ''}`);
+  }
 
   for (const testId of args.tests) {
     const mod = TEST_MODULES[testId];
@@ -108,6 +115,7 @@ async function main() {
     summaryParts.push(`## 기준 벗어남\n${allOutOfRange.map((s) => `- ${s}`).join('\n')}`);
   }
 
+  if (combo.rows) writeCsv(join(REPORT_DIR, `combo_${dateTag}.csv`), combo.rows);
   const summaryPath = join(REPORT_DIR, 'summary.md');
   const { writeFileSync, mkdirSync } = await import('node:fs');
   mkdirSync(REPORT_DIR, { recursive: true });

@@ -1,6 +1,6 @@
 import { BattleState } from '../battle/battleState.js';
 import { getFloor, resolveFloorSpawns } from '../core/balance/floorGen.js';
-import { towerAttack, clearBonus } from '../core/economy/economy.js';
+import { towerAttack, clearBonus, comboGoldBonus } from '../core/economy/economy.js';
 import { playerState } from './playerState.js';
 import { ItemController } from './itemController.js';
 import { applySkillLevels, offerBossPack } from '../core/shop/shop.js';
@@ -42,7 +42,8 @@ export class BattleController {
     if (shopConfig) playerState.initShop(shopConfig);
 
     this._seenDeaths = new WeakSet();
-    this.lastClearReward = null; // { killGold, bonusGold, total } - 클리어 팝업용.
+    this.lastClearReward = null; // { killGold, bonusGold, comboGold, maxCombo, total } - 클리어 팝업용.
+    this.gameState = null; // 지금 층의 퍼즐 보드(main.js resetPuzzleBoard가 꽂는다) - 최대 콤보만 읽는다.
     this._resetBattleState(playerState.floor);
   }
 
@@ -137,8 +138,12 @@ export class BattleController {
 
   _applyClearReward() {
     const isFirstClear = playerState.isFirstClearOf(this.floor);
-    const bonusGold = clearBonus(this.balance, this._killGoldBase, isFirstClear) * this.goldMul;
-    playerState.addGold(bonusGold);
+    const baseBonus = clearBonus(this.balance, this._killGoldBase, isFirstClear);
+    const bonusGold = baseBonus * this.goldMul;
+    // 콤보 골드 보너스 - 골드 배율 전 클리어 골드 기준(시뮬 A줄과 같게). 이어하기 전후 모두 같은 보드라 maxComboStreak가 큰 값.
+    const maxCombo = this.gameState?.maxComboStreak ?? 0;
+    const comboGold = comboGoldBonus(this.balance, this._killGoldBase + baseBonus, maxCombo);
+    playerState.addGold(bonusGold + comboGold);
     const items = isFirstClear ? this._grantFirstClearItems() : [];
     playerState.save();
     // 랭킹 일반 모드 = 클리어한 층(main.js가 RankingService.submit('normal')에 연결, 더 높을 때만 갱신).
@@ -146,7 +151,7 @@ export class BattleController {
     // 경쟁 모드(아직 없음): 판을 시작할 때 seasonId = rankingService.currentSeason().id를 판 상태에 저장해 두고,
     // 판이 끝날 때 rankingService.submit('comp', { value: 판 점수, floor, at, seasonId })로 그 시즌에 넣는다(docs/ranking.md 5-1).
     // grant = 보스 첫 처치 보상 delta(획득 팝업용, 없으면 null).
-    this.lastClearReward = { killGold: this.killGoldThisFloor, bonusGold, total: this.killGoldThisFloor + bonusGold, items, grant: isFirstClear ? this._lastBossGrant : null };
+    this.lastClearReward = { floor: this.floor, firstClearMul: isFirstClear ? 1 + this.balance.economy.clearBonusMul : null, killGold: this.killGoldThisFloor, bonusGold, comboGold, maxCombo, comboFull: maxCombo >= (this.balance.economy.comboGold?.comboCap ?? Infinity), total: this.killGoldThisFloor + bonusGold + comboGold, items, grant: isFirstClear ? this._lastBossGrant : null };
   }
 
   // 보스층 첫 클리어 = 서로 다른 무작위 아이템(층 번호 seed - 같은 층이면 같은 보상). 20층(설정값) 첫 클리어 = 4번째 슬롯.

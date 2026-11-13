@@ -14,6 +14,7 @@ import { newAgg, addResult, aggRow, aggTable } from '../agg.js';
 import { buyItems, SLOT4_ITEM } from '../itemBot.js';
 import { openUnlocks, skillLevelCards, skillMaxLevel } from '../skills.js';
 import { defaultShopSave } from '../../../src/core/shop/shop.js';
+import { combo, comboGold } from '../combo.js';
 
 const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
 
@@ -72,8 +73,9 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   let goldSpentSkills = 0;
   // S4 골드 흐름 + S6 허공 사격·칸 잠금 계측, 10층 구간별(구간 = 그 시도의 층).
   const flow = [];
+  const comboByTag = { normal: 0, elite: 0, boss: 0 }; // --combogold 보너스(측정 전용) 층 종류별 합
   const bucketOf = (f) => (flow[Math.floor((f - 1) / 10)] ??= {
-    first: 0, replay: 0, fail: 0, exchange: 0, tower: 0, skill: 0, unlock: 0, item: 0,
+    first: 0, replay: 0, fail: 0, exchange: 0, combo: 0, tower: 0, skill: 0, unlock: 0, item: 0,
     hit: 0, wasteBasic: 0, wasteSkill: 0, wasteFlight: 0, wasteFlightDoomed: 0, wasteSummon: 0, ovBasic: 0, ovSkill: 0, ovOther: 0, firstEnemySec: 0, attempts: 0, swapsBeforeEnemy: 0, emptySec: 0, timeSec: 0, swaps: 0, noMove: 0, swapsAnim: 0, clears: 0, wallLeft: 0, emptySpawns: 0, aliveSec: 0,
   });
   const attemptLog = []; // 시도마다 { floor, cleared, wall, aliveMax, timeSec, farm } - 하위 10% 성벽·동시 적 최대·층 시간용
@@ -253,9 +255,12 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
 
     if (result.status === 'cleared') {
       const reward = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
-      gold += reward;
-      goldEarned += reward;
+      const cg = comboGold(balance, reward, result.maxCombo); // 콤보 골드(기본 config, --combogold=off면 0)
+      gold += reward + cg;
+      goldEarned += reward + cg;
       bucketOf(floor).first += reward;
+      bucketOf(floor).combo += cg;
+      comboByTag[result.tag] += cg;
       if (useItems && tag === 'boss') {
         // 보스 첫 클리어 = 서로 다른 무작위 아이템 2개(층 번호 seed), 20층 = 4번째 슬롯(모래시계 장착).
         const ids = Object.keys(itemsCfg.items);
@@ -293,9 +298,12 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         floorTimeSec += farm.timeSec;
         track(floor, farm, true);
         const farmReward = farm.killGoldTotal + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
-        gold += farmReward;
-        goldEarned += farmReward;
+        const cg = farm.status === 'cleared' ? comboGold(balance, farmReward, farm.maxCombo) : 0;
+        gold += farmReward + cg;
+        goldEarned += farmReward + cg;
         bucketOf(floor).replay += farmReward;
+        bucketOf(floor).combo += cg;
+        comboByTag[farm.tag] += cg;
         levelUp();
       }
     }
@@ -311,6 +319,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     stoppedFloor: stoppedEarly ? floor : null,
     agg,
     goldEarned,
+    comboByTag,
     goldSpentItems,
     goldSpentLevels,
     goldSpentUnlock,
@@ -358,6 +367,7 @@ export async function run(env) {
   const wasteSections = [];
   const causeRows = [];
   const extraRows = [];
+  const comboRows = []; // --combogold일 때만 t4combo csv
   const csvRows = [];
   const summaryRows = [];
   const bossAgg = new Map(); // `${player}|${strategy}|${floor}` -> { retries[], wallLeft[] }
@@ -383,6 +393,7 @@ ${wasteTable(runs, sim.players[player].secondsPerMove)}
 
 ${wasteCauseTable(runs)}`);
         extraRows.push(extraRow(label, runs, unlockIds));
+        if (combo.goldPct !== 'off') comboRows.push(comboRow(player, strategy, runs, unlockIds));
         causeRows.push(...causeCsvRows(player, strategy, runs));
         const clears = runs.flatMap((r) => r.retriesByFloor.filter((x) => x.clearSec != null));
         const buckets = [...new Set(clears.map((x) => Math.floor((x.floor - 1) / 10)))].sort((a, b) => a - b);
@@ -532,7 +543,7 @@ ${wasteCauseTable(runs)}`);
       bossRows.map((r) => [`${r.player}:${r.strategy}`, r.floor, r.retries.toFixed(2), `${(r.wallLeft * 100).toFixed(0)}%`, r.minutes?.toFixed(1) ?? '-', `${median(r.lv).toFixed(1)} (${Math.min(...r.lv).toFixed(1)}~${Math.max(...r.lv).toFixed(1)})`])
     )}` +
     `\n\n### T4 층 시간 (클리어한 판의 시간(초), 재도전 실패 판·반복 사냥 제외)\n${mdTable(['플레이어:전략', '구간', '평균', '중앙값', '판 수'], timeRows)}`;
-  return { csvRows, summaryMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv } };
+  return { csvRows, summaryMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}) } };
 }
 
 const pctOf = (v, t) => (t > 0 ? `${((v / t) * 100).toFixed(1)}%` : '-');
@@ -549,17 +560,18 @@ const sumBuckets = (runs) => {
 // S4: 10층 구간별 수입·지출(시드 평균)과 누적 수입 대비 누적 지출 %.
 function flowTable(runs) {
   const n = runs.length;
+  const cgOn = combo.goldPct !== 'off'; // 콤보 보너스 열은 --combogold=off가 아닐 때만(off면 v12-8 표 모양 그대로)
   const cum = { inc: 0, tower: 0, skill: 0, unlock: 0, item: 0 };
   const rows = sumBuckets(runs).map((b, i) => {
     if (!b) return null;
-    const inc = b.first + b.replay + b.fail + b.exchange;
+    const inc = b.first + b.replay + b.fail + b.exchange + b.combo;
     cum.inc += inc;
     for (const k of ['tower', 'skill', 'unlock', 'item']) cum[k] += b[k];
     const r0 = (v) => Math.round(v / n).toLocaleString('en-US');
-    return [`${i * 10 + 1}-${i * 10 + 10}`, r0(b.first), r0(b.replay), r0(b.fail), r0(b.exchange), r0(b.tower), r0(b.skill), r0(b.unlock), r0(b.item), r0(cum.inc),
+    return [`${i * 10 + 1}-${i * 10 + 10}`, r0(b.first), r0(b.replay), r0(b.fail), r0(b.exchange), ...(cgOn ? [r0(b.combo)] : []), r0(b.tower), r0(b.skill), r0(b.unlock), r0(b.item), r0(cum.inc),
       pctOf(cum.tower, cum.inc), pctOf(cum.skill, cum.inc), pctOf(cum.unlock, cum.inc), pctOf(cum.item, cum.inc), pctOf(b.skill, inc)];
   }).filter(Boolean);
-  return mdTable(['구간', '첫 클리어', '재클리어', '실패 처치', '교환', '탑', '스킬 Lv', '해금', '아이템', '누적 수입', '누적 탑%', '누적 스킬%', '누적 해금%', '누적 아이템%', '구간 스킬%'], rows);
+  return mdTable(['구간', '첫 클리어', '재클리어', '실패 처치', '교환', ...(cgOn ? ['콤보 보너스'] : []), '탑', '스킬 Lv', '해금', '아이템', '누적 수입', '누적 탑%', '누적 스킬%', '누적 해금%', '누적 아이템%', '구간 스킬%'], rows);
 }
 
 // S6: 허공 사격 비율, 첫 적까지 스왑, 빈 전장 시간 + 칸 단위 잠금 지표(분당 스왑, 수 없음 대기, 연출 중 스왑).
@@ -574,6 +586,21 @@ function wasteTable(runs, secondsPerMove) {
   const t = sumBuckets(runs).filter(Boolean).reduce((s, b) => ({ w: s.w + b.wasteBasic + b.wasteSkill, h: s.h + b.hit }), { w: 0, h: 0 });
   rows.push(['전체', pctOf(t.w, t.h + t.w), '', '', '', '', '', '', '']);
   return mdTable(['구간', '버려진 피해', '기본 사격', '기술', '첫 적까지 스왑', '빈 전장(초/시도)', '분당 스왑', '수 없음 대기(초/시도)', '연출 중 스왑'], rows);
+}
+
+// --combogold(측정 전용, 10-combogold): 보너스 몫(전체·층 종류별, 총수입 대비)과 경제 몫, 보스층 진입 Lv 평균.
+function comboRow(player, strategy, runs, unlockIds) {
+  const tot = (k) => runs.reduce((s, r) => s + r[k], 0);
+  const earned = Math.max(1, tot('goldEarned'));
+  const byTag = (t) => runs.reduce((s, r) => s + r.comboByTag[t], 0);
+  const f = (v) => (v / earned).toFixed(6);
+  const boss = runs.flatMap((r) => r.retriesByFloor.filter((x) => x.tag === 'boss' && x.clearSec != null).map((x) => x.avgLevelAtEntry));
+  const row = { player, strategy, goldPct: combo.goldPct ?? combo.configPct, goldEarned: Math.round(earned / runs.length), comboShare: f(byTag('normal') + byTag('elite') + byTag('boss')),
+    comboNormal: f(byTag('normal')), comboElite: f(byTag('elite')), comboBoss: f(byTag('boss')),
+    skillShare: f(tot('goldSpentSkills')), unlockShare: f(tot('goldSpentUnlock')), itemShare: f(tot('goldSpentItems')),
+    bossEntryLvMean: (boss.reduce((s, v) => s + v, 0) / Math.max(1, boss.length)).toFixed(3) };
+  for (const id of unlockIds) row[`unlockAt_${id}`] = Math.max(0, ...runs.map((r) => r.unlockShareAt[id] ?? 0)).toFixed(6);
+  return row;
 }
 
 function extraRow(label, runs, unlockIds) {

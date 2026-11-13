@@ -2748,15 +2748,17 @@ export class CanvasRenderer {
       loseButtons.push(['restart', t('popup.button.restart')]);
     }
     const stackH = Math.max(0, loseButtons.length - 1) * (btnHeight + btnGap);
-    const cardHeight = headH + audioBlockH + replayBlockH + stackH;
+    // 클리어 골드 내역(처치 / 클리어 보너스 / 콤보 보너스) 3줄 - 설명과 버튼 사이에 끼운다.
+    const goldBlockH = kind === 'win' && clearReward ? headH * 0.3 : 0; // 클리어 골드 / 콤보 보너스 2줄
+    const cardHeight = headH + audioBlockH + replayBlockH + stackH + goldBlockH;
     const cardX = (width - cardWidth) / 2;
     const cardY = (height - cardHeight) / 2;
 
     // 클리어 팝업은 얻은 골드를 본문에 더해 보여준다(docs/balance.md §8).
-    const winDesc = clearReward ? t('popup.win.descGold', { total: clearReward.total }) : t('popup.win.desc');
+    const winDesc = clearReward ? t('popup.win.descGold', { total: fmt(clearReward.total) }) : t('popup.win.desc');
     const TITLES = {
       pause: { text: t('popup.pause.title'), color: cfg.pauseColor, desc: t('popup.pause.desc') },
-      win: { text: t('popup.win.title'), color: cfg.winColor, desc: winDesc },
+      win: { text: clearReward ? t('popup.prep.title.floorClear', { n: clearReward.floor }) : t('popup.win.title'), color: cfg.winColor, desc: winDesc },
       lose: { text: t('popup.lose.title'), color: cfg.loseColor, desc: performance.now() < (itemUi?.adFailUntil ?? 0) ? t('popup.lose.adFail') : t('popup.lose.desc') },
     };
     // 액션 순서의 첫 항목이 강조(primary) 버튼. 클리어는 "다음 층"을 눌러 진행한다(실패는
@@ -2794,12 +2796,14 @@ export class CanvasRenderer {
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillStyle = title.color;
-    ctx.font = getFontString(Math.max(16, headH * 0.16), true);
+    ctx.font = getFontString(Math.max(16, headH * (kind === 'win' ? 0.12 : 0.16)), true); // 클리어 제목은 작게(골드 내역이 주인공)
     drawText(ctx, title.text, cardX + cardWidth / 2, cardY + headH * 0.28);
 
     ctx.fillStyle = HUD_CONFIG.text.dim;
     ctx.font = getFontString(Math.max(11, headH * 0.08));
     drawText(ctx, title.desc, cardX + cardWidth / 2, cardY + headH * 0.48);
+
+    if (goldBlockH > 0) this._drawClearGold(clearReward, cardX + 20, cardY + headH * 0.62, cardWidth - 40, goldBlockH, headH);
 
     const audioRects = audioBlockH > 0 ? this._drawAudioSettings(cardX + 14, cardY + headH * 0.6, cardWidth - 28, audioBlockH) : null;
     if (replayBlockH > 0) this._drawDisabledReplay(cardX + 14, cardY + headH * 0.6 + audioBlockH + 6, cardWidth - 28, replayBlockH - 6);
@@ -2991,6 +2995,72 @@ export class CanvasRenderer {
   drawRewardPopup(rewardPopup) {
     if (!rewardPopup.active || this.cssWidth === 0) return;
     rewardPopup.draw(this.ctx, this.cssWidth, this.cssHeight, this.assets, this._slotDrawers());
+  }
+
+  // 클리어 팝업 골드 내역(렌더 로컬 시각, gameState에 없음). 클리어 골드가 처치 골드까지 올라간 뒤,
+  // 첫 클리어면 "첫 클리어 ×2!" 도장이 찍히고 클리어 보너스만큼 더 올라간다. 그다음 콤보 보너스가 올라간다.
+  _drawClearGold(reward, x, y, w, h, headH) {
+    const { ctx } = this;
+    if (this._clearGoldAnim?.reward !== reward) this._clearGoldAnim = { reward, t0: performance.now() };
+    const ms = performance.now() - this._clearGoldAnim.t0;
+    const ease = (from, dur) => { const p = Math.max(0, Math.min(1, (ms - from) / dur)); return 1 - (1 - p) * (1 - p); };
+    const first = reward.firstClearMul != null;
+    const STAMP_AT = 700;
+    const comboAt = first ? 1350 : 700;
+    const clearTotal = reward.killGold + reward.bonusGold;
+    const clearShown = first
+      ? Math.round(reward.killGold * ease(200, 500) + reward.bonusGold * ease(STAMP_AT + 150, 500))
+      : Math.round(clearTotal * ease(200, 500));
+    const comboShown = Math.round(reward.comboGold * ease(comboAt, 650));
+    const max = reward.comboFull ? ' MAX' : '';
+    const rows = [
+      // 폭은 최종 금액으로 잰다(올라가는 동안 라벨 크기가 흔들리지 않게).
+      [t('popup.win.clearGold'), fmt(clearShown), HUD_CONFIG.text.primary, fmt(clearTotal)],
+      [t('popup.win.comboGold', { max: reward.maxCombo }), `+${fmt(comboShown)}${max}`, HUD_CONFIG.text.title, `+${fmt(reward.comboGold)}${max}`],
+    ];
+    const lineH = h / rows.length;
+    const size = Math.max(11, headH * 0.075);
+    rows.forEach(([label, value, color, widest], i) => {
+      const ly = y + lineH * (i + 0.5);
+      ctx.fillStyle = color;
+      ctx.textAlign = 'left';
+      ctx.font = getFontString(size);
+      const room = w - ctx.measureText(widest).width - 8;
+      const lw = ctx.measureText(label).width;
+      if (lw > room) ctx.font = getFontString(Math.max(8, Math.floor((size * room) / lw))); // 금액이 길면 라벨만 줄인다
+      drawText(ctx, label, x, ly);
+      ctx.font = getFontString(size);
+      ctx.textAlign = 'right';
+      drawText(ctx, value, x + w, ly);
+    });
+    if (first && ms >= STAMP_AT) this._drawFirstClearStamp(reward.firstClearMul, x + w * 0.52, y + lineH * 0.5, size, Math.min(1, (ms - STAMP_AT) / 150));
+    ctx.textAlign = 'center';
+  }
+
+  // "첫 클리어 ×2!" 도장 - 이미지 없이 기울어진 빨간 테두리 + 글자. p(0~1) = 찍히는 진행(크게 → 제자리).
+  _drawFirstClearStamp(mul, cx, cy, size, p) {
+    const { ctx } = this;
+    const text = t('popup.win.firstClear', { mul });
+    ctx.save();
+    ctx.font = getFontString(Math.round(size * 0.9), true);
+    const tw = ctx.measureText(text).width;
+    const bw = tw + 10;
+    const bh = size * 1.5;
+    ctx.translate(Math.round(cx), Math.round(cy));
+    ctx.rotate(-0.14);
+    const scale = 1 + (1 - p) * 0.8;
+    ctx.scale(scale, scale);
+    ctx.globalAlpha = Math.min(1, p * 1.5);
+    ctx.fillStyle = 'rgba(27, 31, 42, 0.85)';
+    ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.strokeStyle = HUD_CONFIG.popup.loseColor;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
+    ctx.fillStyle = HUD_CONFIG.popup.loseColor;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    drawText(ctx, text, 0, 0);
+    ctx.restore();
   }
 
   // 콤보 마일스톤("Great!" 등)/브레이크 peak 문구 - render()가 매 프레임 _advanceComboBanners로

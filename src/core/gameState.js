@@ -161,6 +161,7 @@ export class GameState {
     // 콤보(연속 스트릭) - 특수 잼끼리의 "조합"(COMBO_KIND)과는 다른 개념이다.
     this.comboStreak = 0;
     this.comboStreakTimerMs = 0;
+    this.maxComboStreak = 0; // 이번 층(판)의 최고 스트릭 - 콤보 골드 보너스용. 새 보드·continueToFloor에서 0.
     // false면 스트릭을 쌓지 않는다(튜토리얼, docs/tutorial.md 3장). 켜고 끌 때는 resetCombo()로 0부터.
     this.comboEnabled = true;
 
@@ -367,6 +368,7 @@ export class GameState {
     if (this.comboEnabled) {
       this.comboStreak += 1;
       this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
+      if (this.comboStreak > this.maxComboStreak) this.maxComboStreak = this.comboStreak;
       this._pushEffect({
         type: 'comboChange',
         comboStreak: this.comboStreak,
@@ -517,6 +519,7 @@ export class GameState {
     if (this.comboEnabled) {
       this.comboStreak += 1;
       this.comboStreakTimerMs = COMBO_CONFIG.timerMs;
+      if (this.comboStreak > this.maxComboStreak) this.maxComboStreak = this.comboStreak;
       this._pendingSwapEffects.push({ type: 'comboChange', comboStreak: this.comboStreak, remainingMs: this.comboStreakTimerMs, durationMs: 1 });
     }
     return true;
@@ -1643,6 +1646,8 @@ export class GameState {
   // 방해요소 배치는 잼 색을 바꾸지 않아 새 매치를 만들 수 없으므로 수 없음만 확인한다
   // (진행 중인 Resolution이 있으면 그게 끝날 때 _maybeReshuffle이 알아서 돈다).
   continueToFloor(floorObstacles) {
+    this.resetCombo(); // 콤보는 층마다 0부터(보드는 이어 가도 콤보·최대 콤보는 넘기지 않는다).
+    this.maxComboStreak = 0;
     this.floorObstacles = floorObstacles ?? null;
     this._obstacleSpawnCounters = {};
     if (!this.obstaclesRegistry) return;

@@ -5,6 +5,7 @@
 import { runFloorAttempt } from '../floorSim.js';
 import { clearBonus } from '../../../src/core/economy/economy.js';
 import { runOneProgression, spendGold } from './t4.js';
+import { comboGold } from '../combo.js';
 import { mdTable } from '../report.js';
 
 const BUCKET_SIZE = 10;
@@ -60,7 +61,8 @@ export async function run(env) {
       const nextLevels = levelsByFloor.get(floor + 1);
       for (let s = 0; nextLevels && floor < env.floorsRange.to && s < env.seeds; s++) {
         const r = attemptAt(nextLevels, skillLvByFloor.get(floor + 1), s + 1);
-        pf.replayNextGold += r.killGoldTotal + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
+        const rr = r.killGoldTotal + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
+        pf.replayNextGold += rr + (r.status === 'cleared' ? comboGold(balance, rr, r.maxCombo) : 0); // 콤보 골드(기본 config, --combogold=off면 0)
         pf.replayNextSec += r.timeSec;
       }
       for (let s = 0; s < env.seeds; s++) {
@@ -85,8 +87,10 @@ export async function run(env) {
         });
 
         if (result.status === 'cleared') {
-          const firstGold = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
-          const replayGold = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, false);
+          const fg = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
+          const rg0 = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, false);
+          const firstGold = fg + comboGold(balance, fg, result.maxCombo);
+          const replayGold = rg0 + comboGold(balance, rg0, result.maxCombo);
           agg.firstClearGold.push(firstGold);
           agg.replayGold.push(replayGold);
           agg.floorSeconds.push(result.timeSec);

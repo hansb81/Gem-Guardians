@@ -233,7 +233,7 @@ export const ko = {
   },
   popup: {
     pause: { title: '일시정지', desc: '전투와 퍼즐이 멈춘 상태입니다.' },
-    win: { title: 'FLOOR CLEAR', desc: '층의 적을 모두 처치했습니다.', descGold: '골드 {total} 획득!' },
+    win: { title: '층 클리어', desc: '층의 적을 모두 처치했습니다.', descGold: '골드 {total} 획득!', clearGold: '클리어 골드', firstClear: '첫 클리어 ×{mul}!', comboGold: '콤보 보너스 (최대 콤보 {max})' },
     lose: { title: 'DEFEATED', desc: '성벽이 무너졌습니다.', adFail: '광고를 불러오지 못했어요' },
     prep: {
       title: { floorClear: '{n}층 클리어', defeat: '{n}층 실패', village: '정비' },

@@ -207,9 +207,9 @@
 - 매치 없는(무효) 스왑은 기본 설정(`COMBO_CONFIG.breakOnNonMatchSwap = false`)에서 스트릭을
   끊지 않는다. `true`로 바꾸면 무효 스왑도 즉시 끊도록 분기는 만들어져 있다.
 - 연쇄(cascade) 수(`cascadeCount`)는 완전히 별도로 센다 - 이 스트릭과 섞이지 않는다.
-- `COMBO_CONFIG.tiers`(5/10/20/30콤보 구간별 데미지 배율·이펙트 강도)는 `src/config/combo.js`에
-  데이터만 준비해 둔다. **전투(배틀) 쪽에는 아직 연결하지 않는다** - 참고용 순수 헬퍼
-  `getComboTier(comboStreak)`만 있고, 어디서도 호출해 데미지에 반영하지 않는다.
+- `COMBO_CONFIG.tiers`(5/10/20/30콤보)는 표시·연출 구간용이다. 데미지 배율은 **쓰지 않는다**
+  (2026-11-12 결정, reports/sim/v12/9-combo). 콤보 보상은 층 클리어 골드 보너스다(docs/balance.md §8,
+  `GameState.maxComboStreak` = 그 보드의 최고 스트릭).
 - 이벤트: `comboChange(comboStreak, remainingMs)`, `comboBreak(최고 comboStreak)`.
 
 ## 19. 구현 범위 메모

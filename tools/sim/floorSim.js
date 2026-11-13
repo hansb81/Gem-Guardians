@@ -12,6 +12,7 @@ import { SimBridge } from './simBridge.js';
 import { chooseMove, DANGER_PROGRESS } from './bot.js';
 import { pickItemUse } from './itemBot.js';
 import { deriveSeed } from './util.js';
+import { attachCombo } from './combo.js';
 
 export function runFloorAttempt({
   balance,
@@ -156,6 +157,8 @@ export function runFloorAttempt({
       return out;
     };
   }
+  const comboHook = attachCombo(gameState, battleState, floor); // --combo/--combostats(측정 전용), 꺼져 있으면 null
+  let maxCombo = 0;
   let swapsBeforeFirstEnemy = null; // 층 시작 후 첫 적이 나타날 때까지 한 스왑 수
   let firstEnemySec = null; // 층 시작 후 첫 적이 나타난 시각(초, 소환 연출 포함)
   let emptyFieldSec = 0; // 전투 중 살아 있는 적이 하나도 없던 시간
@@ -233,6 +236,8 @@ export function runFloorAttempt({
     }
 
     gameState.update(dt);
+    comboHook?.tick(dt);
+    if (gameState.comboStreak > maxCombo) maxCombo = gameState.comboStreak; // 그 판 최대 콤보(--combogold용, 결과에 필드만 추가)
     if (itemCtl) {
       const done = itemCtl.update(dt);
       if (done?.ok) itemsUsed[done.id] = (itemsUsed[done.id] ?? 0) + 1;
@@ -325,6 +330,7 @@ export function runFloorAttempt({
   }
 
   const timedOut = battleState.status === 'active';
+  comboHook?.finish({ status: timedOut ? 'timeout' : battleState.status, timeSec });
   return {
     floor: floor.floor,
     tag: floor.tag,
@@ -357,6 +363,7 @@ export function runFloorAttempt({
     noMoveTicks,
     swapsDuringAnim,
     continueUsed,
+    maxCombo,
     stats: bridge.stats,
   };
 }

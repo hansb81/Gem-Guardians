@@ -10,6 +10,24 @@ import { mdTable } from '../report.js';
 import { expectedTowerLevels, PROBE_FLOOR_NUMBERS } from './t2.js';
 import { runOneProgression, median } from './t4.js';
 import { SLOT4_ITEM } from '../itemBot.js';
+import { readFileSync } from 'node:fs';
+import { defaultShopSave } from '../../../src/core/shop/shop.js';
+
+// --t7base=<이전 T7 csv>: 기준 Lv·스킬 Lv를 그 파일의 기준 열(column 0) 값으로 고정한다(측정 전용 - 콤보·--set 비교에서 기준을 다시 잡지 않으려고).
+// csv skillLv는 Object.values(skillLv).join('/')라 키 순서는 defaultShopSave 그대로다(t4 진행의 skillLv와 같은 출처).
+function fixedEntryLevels(env, player, path) {
+  const [head, ...lines] = readFileSync(path, 'utf8').trim().split(/\r?\n/);
+  const keys = head.split(',');
+  const ids = Object.keys(defaultShopSave(env.configs.shop).skillLv);
+  const out = new Map();
+  for (const l of lines) {
+    const r = Object.fromEntries(l.split(',').slice(0, keys.length).map((v, i) => [keys[i], v]));
+    if (r.player !== player || r.column !== '0') continue;
+    const sv = r.skillLv ? r.skillLv.split('/').map(Number) : null;
+    out.set(Number(r.floor), { lv: Number(r.level), skillLv: sv ? Object.fromEntries(ids.map((id, i) => [id, sv[i]])) : undefined, reached: 1 });
+  }
+  return out;
+}
 
 // 시드(seedFrom부터 seeds개)·기준 레벨용 T4 시드 수(baseSeeds, --seeds와 무관하게 고정)·경계 폭(borderline)은 sim.json targets.luck에서 읽는다.
 // 범위 밖으로 벗어난 정도로 판정한다(1e-9 = 승률이 n/60이라 생기는 부동소수 오차).
@@ -78,7 +96,7 @@ export async function run(env) {
   const detailRows = [];
 
   for (const player of players) {
-    const entry = entryLevels(env, player, probes.map((p) => p.floor), BASE_SEEDS);
+    const entry = env.t7base ? fixedEntryLevels(env, player, env.t7base) : entryLevels(env, player, probes.map((p) => p.floor), BASE_SEEDS);
     for (const { floor, expTowerLevel } of probes) {
       const ent = entry.get(floor);
       const base = ent.reached ? ent.lv : expTowerLevel; // 진행이 그 층에 못 가면 기대 레벨로 대신(표에 표시)

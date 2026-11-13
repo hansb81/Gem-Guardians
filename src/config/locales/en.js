@@ -231,7 +231,7 @@ export const en = {
   },
   popup: {
     pause: { title: 'Paused', desc: 'Battle and puzzle are paused.' },
-    win: { title: 'FLOOR CLEAR', desc: 'All enemies on this floor defeated.', descGold: '+{total} Gold!' },
+    win: { title: 'FLOOR CLEAR', desc: 'All enemies on this floor defeated.', descGold: '+{total} Gold!', clearGold: 'Clear Gold', firstClear: 'First Clear ×{mul}!', comboGold: 'Combo Bonus (max combo {max})' },
     lose: { title: 'DEFEATED', desc: 'The wall has fallen.', adFail: "Couldn't load the ad" },
     prep: {
       title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Prepare' },

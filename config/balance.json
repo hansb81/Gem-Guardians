@@ -100,7 +100,12 @@
   "economy": {
     "_doc": "처음 클리어 = 처치 골드 + 클리어 보상. 재도전 실패 시에도 처치 골드는 받는다(막힌 층에서 레벨업 가능).",
     "clearBonusMul": 1.0,
-    "replayClearMul": 0.3
+    "replayClearMul": 0.3,
+    "comboGold": {
+      "maxPct": 0.05,
+      "comboCap": 20,
+      "_doc": "v12-10: 층 클리어 골드 × min(판 최대 콤보, comboCap)/comboCap × maxPct. 데미지 배율 아님. 시뮬 10-combogold 5% 기준, HP 재보정 없음"
+    }
   },
   "playerModel": {
     "_doc": "시뮬레이션(tools/sim_floors.py) 전용 가정. 게임 코드에서는 쓰지 않는다.",

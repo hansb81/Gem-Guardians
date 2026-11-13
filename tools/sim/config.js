@@ -99,7 +99,7 @@ export function parseArgs(argv, sim) {
   // --towerbuy=always(기본, 층이 끝날 때마다 탑 레벨업) | onfail(실패했을 때만 - v12-6까지의 방식, 참고용). T4와 T4 진행을 쓰는 T3·T5·T6·T7.
   const towerBuy = args.towerbuy ?? 'always';
   if (!['always', 'onfail'].includes(towerBuy)) throw new Error(`--towerbuy는 always|onfail: ${towerBuy}`);
-  return { towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn) };
+  return { towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).

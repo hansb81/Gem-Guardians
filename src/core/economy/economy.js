@@ -48,6 +48,14 @@ export function evenTowerLevelUps(balance, levels, gold) {
 }
 
 // 처치 골드 = 기본 골드(unitStats().gold에 이미 적 종류/엘리트/보스 배율까지 반영됨).
+// 콤보 골드 보너스(balance.economy.comboGold) = 클리어 골드(처치 + 클리어 보상, 골드 배율 전) × min(판 최대 콤보, cap)/cap × maxPct.
+// 계산 순서는 시뮬(tools/sim/combo.js)과 바이트 단위로 같게 유지한다.
+export function comboGoldBonus(balance, clearGold, maxCombo) {
+  const cfg = balance.economy.comboGold;
+  if (!cfg) return 0;
+  return Math.round((clearGold * Math.min(maxCombo, cfg.comboCap)) / cfg.comboCap * cfg.maxPct);
+}
+
 // 클리어 보상 = 처치 골드 총합 x (처음 클리어면 clearBonusMul, 다시 깬 층이면 replayClearMul).
 export function clearBonus(balance, killGoldTotal, isFirstClear) {
   const { clearBonusMul, replayClearMul } = balance.economy;
