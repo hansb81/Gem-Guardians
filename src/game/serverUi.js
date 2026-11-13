@@ -88,7 +88,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false }) 
     else if (action === 'playerCodeDown') {
       clearTimeout(ui._holdTimer);
       ui._holdTimer = setTimeout(() => {
-        const c = code();
+        const c = net.playerId; // 화면엔 앞 8자리, 복사는 전체 uid - 문의 때 운영(우편·제재·삭제)에서 한 사람을 정확히 집도록.
         if (!c) return;
         navigator.clipboard?.writeText(c).then(() => notice('net.about.copied'), () => {});
         audio.play('ui_click');
