@@ -400,4 +400,4 @@ ogg+mp3 둘 다 있으니 iOS(웹뷰)는 mp3, 나머지는 ogg 우선으로 자�
 ### 17-4. 서버 CORS
 - 허용 목록은 `server/supabase/functions/_shared/cors.ts` 한 곳. Pages 본·미리보기, localhost:5173/4173, serve.py(localhost·127.0.0.1:8000), Capacitor(`https://localhost`, `capacitor://localhost`), 토스(`*.apps|private-apps|web|private-web.tossmini.com`).
 - 목록 밖 origin(예: LAN IP, trycloudflare 터널)에서는 브라우저가 서버 호출을 막는다 - 서버 기능만 꺼지고 게임은 돈다.
-- 배포: `npx supabase functions deploy --project-ref jzpjqfbpqzghprqbqexp` (GemGuardians, 서울).
+- 배포: `server/` 폴더에서 `npx supabase functions deploy --project-ref jzpjqfbpqzghprqbqexp` (GemGuardians, 서울. supabase/가 server/ 아래라 루트에서 돌리면 함수를 못 찾는다).
