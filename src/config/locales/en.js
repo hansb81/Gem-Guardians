@@ -282,7 +282,7 @@ export const en = {
     lock: { floor: 'Reach floor {floor}', boss: 'Beat F{floor} boss', soon: 'Coming soon', skillLv: 'Lv {lv} at floor {floor}' },
     lockMsg: { item: '{name} opens at floor {floor}', boss: 'Beat the floor {floor} boss to unlock', totem: 'Totems are coming soon', skillLv: '{name} Lv {lv} unlocks at floor {floor}' },
     tag: { free: 'FREE', once: 'One time', value: 'Value ×{n}', perBoss: 'Once per boss', h24: '24h', until20: 'Until F20', repeat: 'Repeatable', perChapter: 'Once per chapter', one: 'Once', claim: 'Claim', first2: 'First buy ×2', soon: 'Soon' },
-    free: { name: 'Daily Free Item', sub: 'Resets at midnight', desc: 'Watch an ad: {item} ×{n}', descAdFree: 'Ad-free: claim now', btn: 'Watch ad', btnAdFree: 'Claim', long: 'Get a free item once a day. With Remove Ads, no ad is needed.', adNote: 'Ad video placeholder (15-30s)' },
+    free: { name: 'Daily Free Item', sub: 'Resets at midnight', desc: 'Watch an ad: {item} ×{n}', descAdFree: 'Ad-free: claim now', btn: 'Watch ad', btnAdFree: 'Claim', btnNoAds: 'Claim free', long: 'Get a free item once a day. With Remove Ads, no ad is needed.', adNote: 'Ad video placeholder (15-30s)' },
     long: {
       hammer: 'Removes 1 gem or obstacle. Rocks take 1 damage, crates break. Hitting a time bomb defuses it.',
       dye: 'Recolors 1 gem. Special gems keep their shape (pick a skill color).',

@@ -284,7 +284,7 @@ export const ko = {
     lock: { floor: '{floor}층 도달 시', boss: '{floor}층 보스 처치 시', soon: '준비 중', skillLv: '{floor}층 도달 시 Lv {lv} 해금' },
     lockMsg: { item: '{name}은(는) {floor}층에 도달하면 열려요', boss: '{floor}층 보스를 처음 잡으면 해금할 수 있어요', totem: '토템은 준비 중이에요', skillLv: '{name} Lv {lv}는 {floor}층에 도달하면 열려요' },
     tag: { free: '무료', once: '1회 한정', value: '가치 ×{n}', perBoss: '보스당 1회', h24: '24시간', until20: '20층까지', repeat: '반복 구매', perChapter: '챕터당 1회', one: '1회', claim: '받기', first2: '첫 구매 2배', soon: '준비 중' },
-    free: { name: '오늘의 무료 1개', sub: '매일 0시 갱신', desc: '광고를 보면 {item} {n}개', descAdFree: '광고 제거: 바로 받기', btn: '광고 보고 받기', btnAdFree: '바로 받기', long: '하루에 한 번 무료로 아이템을 받는다. 광고 제거를 사면 광고 없이 받는다.', adNote: '광고 영상 자리 (15~30초)' },
+    free: { name: '오늘의 무료 1개', sub: '매일 0시 갱신', desc: '광고를 보면 {item} {n}개', descAdFree: '광고 제거: 바로 받기', btn: '광고 보고 받기', btnAdFree: '바로 받기', btnNoAds: '무료로 받기', long: '하루에 한 번 무료로 아이템을 받는다. 광고 제거를 사면 광고 없이 받는다.', adNote: '광고 영상 자리 (15~30초)' },
     long: {
       hammer: '잼 1개 또는 방해요소 1개를 없앤다. 돌덩이는 1 피해, 나무상자는 파괴. 시한폭탄 잼을 치면 해제.',
       dye: '고른 잼 1개를 원하는 색으로 바꾼다. 특수 잼은 모양 그대로 색만 바뀐다(기술 색 고르기).',

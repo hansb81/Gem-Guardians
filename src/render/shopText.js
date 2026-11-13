@@ -1,6 +1,7 @@
 // 상점 상품(src/core/shop/shop.js의 데이터) -> 화면 글자. 카드: name/sub/desc(줄 배열)/tag,
 // 가격 버튼: lockText/soldText/label, 팝업: long/info([[라벨, 값]]). 글자는 모두 locales의 shop.* 키.
 import { t } from '../config/i18n.js';
+import { platform } from '../platform/index.js';
 
 export const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const itemName = (id) => t(`item.name.${id}`);
@@ -42,7 +43,7 @@ export function productText(p, env) {
       return {
         name: t('shop.free.name'), sub: t('shop.free.sub'), tag: ['shop.tag.free', 'gold'],
         desc: [p.adFree ? t('shop.free.descAdFree') : t('shop.free.desc', { item: itemName(p.item), n: p.count })],
-        label: t(p.adFree ? 'shop.free.btnAdFree' : 'shop.free.btn'), soldText: t('shop.sold.tomorrow'),
+        label: t(p.adFree ? 'shop.free.btnAdFree' : platform.caps.ads ? 'shop.free.btn' : 'shop.free.btnNoAds'), // 광고 없는 빌드(웹 등)는 광고 없이 바로 지급. soldText: t('shop.sold.tomorrow'),
         long: t('shop.free.long'), info: [[t('shop.info.today'), t('shop.grant.item', { name: itemName(p.item), n: p.count })]],
         note: p.adFree ? null : [t('shop.free.adNote')],
       };
