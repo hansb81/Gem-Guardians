@@ -56,6 +56,45 @@ export function drawImageSnapped(ctx, img, a, b, c, d, e, f, g, h) {
   ctx.drawImage(img, a, b, c, d, x, y, snapPx(e + g) - x, snapPx(f + h) - y);
 }
 
+// 정적인 그림(9-slice 패널, 보드 바닥)을 기기 px 캔버스에 한 번 그려 두고 drawImage 1번으로 붙인다.
+// paint(c)는 원래 그리던 코드를 같은 논리 좌표로 c에 그대로 그린다 - 오프스크린도 원점이 정수 기기 px라 스냅 결과가 같다.
+// key가 같은 요청이 두 번째 올 때부터 만든다(크기가 매 프레임 바뀌는 등장 애니메이션이 캔버스를 쏟아내지 않게).
+// 화면 ctx가 unit 배율이 아니면(팝업 ctx.scale 등) 캐시 없이 그냥 그린다.
+const layerCache = new Map(); // key -> canvas
+const seenOnce = new Set(); // 한 번만 본 key - 애니메이션 크기는 여기서만 돌고 layerCache를 밀어내지 않는다.
+export function drawCached(ctx, key, x, y, w, h, paint) {
+  const u = screen.unit;
+  const m = typeof document !== 'undefined' && ctx.getTransform ? ctx.getTransform() : null;
+  if (!m || m.a !== u || m.d !== u || m.b !== 0 || m.c !== 0 || m.e % 1 !== 0 || m.f % 1 !== 0) return paint(ctx);
+  const k = `${key}|${u}|${x}|${y}|${w}|${h}|${ctx.imageSmoothingEnabled}`;
+  let c = layerCache.get(k);
+  if (!c) {
+    if (!seenOnce.has(k)) {
+      if (seenOnce.size > 128) seenOnce.clear();
+      seenOnce.add(k);
+      return paint(ctx);
+    }
+    seenOnce.delete(k);
+    if (layerCache.size >= 64) layerCache.clear(); // shortcut: 통째로 비움, 한 화면 정적 패널이 64개를 넘으면 LRU로
+    const X0 = Math.floor(x * u);
+    const Y0 = Math.floor(y * u);
+    c = document.createElement('canvas');
+    c.width = Math.max(1, Math.ceil((x + w) * u) - X0 + 1);
+    c.height = Math.max(1, Math.ceil((y + h) * u) - Y0 + 1);
+    const g = c.getContext('2d');
+    g.imageSmoothingEnabled = ctx.imageSmoothingEnabled;
+    g.setTransform(u, 0, 0, u, -X0, -Y0);
+    paint(g);
+    c.ox = X0 / u;
+    c.oy = Y0 / u;
+    layerCache.set(k, c);
+  }
+  const s = ctx.imageSmoothingEnabled;
+  ctx.imageSmoothingEnabled = false; // 1:1 기기 px 복사
+  ctx.drawImage(c, c.ox, c.oy, c.width / u, c.height / u);
+  ctx.imageSmoothingEnabled = s;
+}
+
 // 잼 그림 배율: 몸통(bodyPx) 1px = m 기기 px, m = round(칸 기기 px / bodyPx), 최소 1.
 // 프레임이 분수 배율(데스크톱·폴드)이면 이미 정수 픽셀을 포기한 기기라 잼도 칸에 딱 맞게 분수로 그린다.
 export function gemPixelScale(cellDevicePx, bodyPx = 32, intFrame = Number.isInteger(screen.unit * LOGICAL_PER_NATIVE)) {

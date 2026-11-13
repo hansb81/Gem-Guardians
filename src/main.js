@@ -458,7 +458,8 @@ function maybeNudge() {
 
 // 게임 서버(docs/server.md S1) - config/server.json enabled:false면 아무 요청 없음.
 let serverUi = { enabled: false, handleMenuAction: () => false, pointerUp: () => {} };
-Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
+// gameDataReady = 전투·밸런스 데이터 + 서버 설정(계정 줄·서버 연결이 여기서 생긴다) - 타이틀 터치도 이걸 기다린다.
+const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
   if (!battleData || !balanceData) return;
   serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE, beforeStart: accountRedirect }) };
   controller = new BattleController({
@@ -1650,6 +1651,8 @@ function loadFonts() {
 Promise.all([
   loadAssets((loadedCount, totalCount) => titleScreen.setLoadProgress(loadedCount, totalCount)), // 타이틀 로딩 게이지
   loadFonts(),
+  // 게임 데이터도 기다린다 - 안 그러면 데이터가 늦은 날 메뉴에 먼저 들어가 설정의 계정 줄·서버 기능이 잠깐 없다. 실패해도 터치는 연다.
+  gameDataReady.catch((e) => console.warn('[main] 게임 데이터', e)),
 ])
   .then(([assets]) => {
     renderer.setAssets(assets);

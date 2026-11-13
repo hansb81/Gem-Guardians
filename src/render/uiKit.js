@@ -2,7 +2,7 @@
 // CanvasRenderer/BattleRenderer가 공유한다 - 이미지 로드 실패 시 호출부가 폴백 도형을
 // 그리도록, 여기서는 이미지가 준비됐는지(uiReady)만 판단하고 그리기 자체는 실패하지 않는다.
 import { audio } from '../audio/AudioManager.js';
-import { drawImageSnapped } from './screenFit.js';
+import { drawCached, drawImageSnapped } from './screenFit.js';
 
 const BUTTON_SOUND = { click: 'ui_click', cancel: 'ui_cancel', none: null };
 
@@ -51,6 +51,11 @@ export function drawFixedImage(ctx, assets, path, cx, cy, k = 2) {
 
 // s = manifest slice [l, t, r, b], (x, y, w, h) = 화면 좌표, k = 배율(기본 2).
 export function drawNine(ctx, img, s, x, y, w, h, k = 2) {
+  if (img.src) drawCached(ctx, `9|${img.src}|${s}|${k}`, x, y, w, h, (g) => paintNine(g, img, s, x, y, w, h, k));
+  else paintNine(ctx, img, s, x, y, w, h, k);
+}
+
+function paintNine(ctx, img, s, x, y, w, h, k) {
   const [l, t, r, b] = s;
   const sw = img.width;
   const sh = img.height;

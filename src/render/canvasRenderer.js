@@ -6,7 +6,7 @@ import { HINT_CONFIG } from '../config/hint.js';
 import { COMBO_CONFIG } from '../config/combo.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { computeLayout } from './layout.js';
-import { FRAME_LOGICAL_W, FRAME_LOGICAL_H, screen, snapPx, drawImageSnapped, gemPixelScale } from './screenFit.js';
+import { FRAME_LOGICAL_W, FRAME_LOGICAL_H, screen, snapPx, drawImageSnapped, drawCached, gemPixelScale } from './screenFit.js';
 import { ParticlePool } from './effects/particlePool.js';
 import { BattleRenderer } from './battleRenderer.js';
 import { haptics } from '../platform/haptics.js';
@@ -472,19 +472,24 @@ export class CanvasRenderer {
     const tilesReady = uiReady(tileA) && uiReady(tileB);
     if (tilesReady) ctx.save();
     if (tilesReady) ctx.imageSmoothingEnabled = false;
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const x = rect.x + c * cellSize;
-        const y = rect.y + r * cellSize;
-        if (tilesReady) {
-          const tile = (r + c) % 2 === 0 ? tileA : tileB;
-          drawImageSnapped(ctx, tile.img, 0, 0, tile.img.width, tile.img.height, x, y, cellSize, cellSize);
-        } else {
-          ctx.fillStyle = (r + c) % 2 === 0 ? '#181c25' : '#141720';
-          ctx.fillRect(x, y, cellSize, cellSize);
+    const paintTiles = (g) => {
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          const x = rect.x + c * cellSize;
+          const y = rect.y + r * cellSize;
+          if (tilesReady) {
+            const tile = (r + c) % 2 === 0 ? tileA : tileB;
+            drawImageSnapped(g, tile.img, 0, 0, tile.img.width, tile.img.height, x, y, cellSize, cellSize);
+          } else {
+            g.fillStyle = (r + c) % 2 === 0 ? '#181c25' : '#141720';
+            g.fillRect(x, y, cellSize, cellSize);
+          }
         }
       }
-    }
+    };
+    // 바닥 체크무늬는 정적 - 타일이 준비된 뒤에만 캐시(폴백 색은 로드되면 바뀐다).
+    if (tilesReady) drawCached(ctx, `tiles|${tileA.img.src}|${tileB.img.src}|${rows}x${cols}|${cellSize}`, rect.x, rect.y, rect.width, rect.height, paintTiles);
+    else paintTiles(ctx);
     if (tilesReady) ctx.restore();
 
     this._drawEffects(rect, effects);
