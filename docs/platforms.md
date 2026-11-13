@@ -371,3 +371,33 @@ ogg+mp3 둘 다 있으니 iOS(웹뷰)는 mp3, 나머지는 ogg 우선으로 자�
 | 8 | storeLinks 값만, 링크 UI 없음 | **수용.** |
 | 9 | JDK 21 경로 필요 | 저장소에 개인 경로를 넣지 말고 **사용자 홈의 `~/.gradle/gradle.properties`에 `org.gradle.java.home=...`** 지정. docs에 한 줄 안내. |
 | - | play/onestore가 같은 public 폴더 공유 | **안전장치 추가:** vite 빌드가 `public/platform.txt`(예: `onestore`)를 쓰고, 각 flavor의 preBuild task가 값이 자기 flavor와 다르면 빌드 실패. Android Studio에서 바로 빌드해도 잘못된 JS가 들어가지 않음. |
+
+## 17. 웹 배포 (Cloudflare Pages, 2026-11-13)
+
+### 17-1. Pages 설정값 (대시보드)
+| 항목 | 값 |
+|---|---|
+| 프레임워크 프리셋 | None |
+| 빌드 명령 | `npm run build:web` (vite build + `tools/check-bundle-secrets.mjs` - 비밀 키가 섞이면 실패) |
+| 출력 디렉터리 | `dist` |
+| 루트 디렉터리 | (비움 = 저장소 루트) |
+| 환경 변수 | `NODE_VERSION=22` 하나. Supabase URL·anon 키는 `config/server.json`(공개값)에서 읽으므로 환경 변수 아님. |
+
+- 본 주소: `https://gem-guardians.pages.dev`
+- 미리보기: PR·브랜치마다 `https://<커밋해시 또는 브랜치>.gem-guardians.pages.dev` (서버 CORS 허용 목록에 이미 포함)
+- 롤백: 대시보드 → Workers & Pages → gem-guardians → Deployments → 이전 배포의 `...` → **Rollback to this deployment**. 재빌드 없이 바로 바뀐다.
+
+### 17-2. 웹 빌드에만 들어가는 것
+- `public/` 전체(`_headers`, `manifest.webmanifest`, `sw.js`, `icons/`)를 `vite.config.js`가 **웹 빌드에서만** dist로 복사한다. 토스·Capacitor 빌드에는 없다.
+- `_headers`: `/_app/*`(해시 붙은 JS/CSS) = 1년 immutable, `/`·`index.html`·`sw.js`·`manifest.webmanifest` = no-cache. `assets/`·`config/`는 Pages 기본값(매번 재검증).
+- 서비스 워커(`public/sw.js`, 등록은 `src/boot.js`): 웹 프로덕션 빌드에서만 등록. 빌드마다 내용 해시로 캐시 이름이 바뀐다. 앱 뼈대(index·`_app`·config)는 설치 때 받고, `assets/`는 처음 쓸 때 캐시. `skipWaiting` 없음 = 새 버전은 열린 탭을 모두 닫은 **다음 실행**에 적용(게임 중 새로고침 없음).
+- 설정 화면 맨 아래 "브라우저 데이터를 지우면 진행 상황이 사라져요"(§3-1).
+
+### 17-3. 공개 빌드 안전장치
+- `?dev=1`(가짜 결제·광고, 개발 패널, `window.__gg`, 서버 덮어쓰기)과 `?sfxtest`는 `DEV_ALLOWED`(`src/platform/index.js`) = `!import.meta.env.PROD`일 때만. **vite build 결과물(웹·토스·Capacitor 모두)에서는 URL로 켤 수 없고 코드 자체가 빠진다.** vite dev·`serve.py`에서는 그대로 동작.
+- 웹 어댑터 caps: iap·ads·rewarded·banner 모두 false → 현금 상품 안 보임.
+
+### 17-4. 서버 CORS
+- 허용 목록은 `server/supabase/functions/_shared/cors.ts` 한 곳. Pages 본·미리보기, localhost:5173/4173, Capacitor(`https://localhost`, `capacitor://localhost`), 토스(`*.apps|private-apps|web|private-web.tossmini.com`).
+- 목록 밖 origin(예: `serve.py`의 `http://localhost:8000`, LAN IP, trycloudflare 터널)에서는 브라우저가 서버 호출을 막는다 - 서버 기능만 꺼지고 게임은 돈다.
+- 배포: `npx supabase functions deploy --project-ref jzpjqfbpqzghprqbqexp` (GemGuardians, 서울).
