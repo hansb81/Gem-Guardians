@@ -228,6 +228,29 @@ export class CanvasRenderer {
     ctx.restore();
   }
 
+  // 전투 화면 frame 밖 띠 - 보드 바닥 타일(tile_a)을 어둡게 반복한다. 원본 1px = 논리 2px, frame 원점에 맞춘다.
+  _drawBleedWall() {
+    const tile = getUi(this.assets, 'board/tile_a.png');
+    if (!uiReady(tile)) return;
+    const { ctx } = this;
+    if (this._bleedWallImg !== tile.img) {
+      this._bleedWallImg = tile.img;
+      this._bleedWallPattern = ctx.createPattern(tile.img, 'repeat');
+      this._bleedWallPattern.setTransform(new DOMMatrix().scale(2));
+    }
+    const F = screen.full;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(F.x, F.y, F.width, F.height);
+    ctx.rect(0, 0, FRAME_LOGICAL_W, FRAME_LOGICAL_H);
+    ctx.clip('evenodd'); // frame 안은 그대로 둔다
+    ctx.fillStyle = this._bleedWallPattern;
+    ctx.fillRect(F.x, F.y, F.width, F.height);
+    ctx.fillStyle = 'rgba(13, 10, 16, 0.55)'; // 벽은 배경 - frame보다 한 톤 어둡게
+    ctx.fillRect(F.x, F.y, F.width, F.height);
+    ctx.restore();
+  }
+
   // 타이틀 화면(titleScreen.js) - ctx/css 크기만 공유하고 그리기는 TitleScreen이 직접 한다.
   drawTitle(titleScreen, now, dtMs) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
@@ -293,6 +316,7 @@ export class CanvasRenderer {
     this._lastFrameTime = now;
 
     this.drawBleed(); // 히트스톱 중엔 위에서 return - 이전 프레임이 그대로 남는다.
+    this._drawBleedWall();
 
     const { board } = gameState;
     const layout = computeLayout(width, height, board.rows, board.cols);
@@ -551,6 +575,13 @@ export class CanvasRenderer {
         snap(rect.width + margin * 2),
         snap(rect.height + margin * 2)
       );
+      // 틀 양옆 빈 칸에 룬 기둥(틀에 붙여, 바깥쪽은 frame 밖으로 조금 넘쳐도 됨)
+      const pw = 11 * 2;
+      const ph = snap(rect.height + margin * 2);
+      for (const [side, px] of [['left', rect.x - margin - pw], ['right', rect.x + rect.width + margin]]) {
+        const p = getUi(this.assets, `panels/pillar_${side}.png`);
+        if (uiReady(p)) drawNine(ctx, p.img, [0, 6, 0, 6], px, rect.y - margin, pw, ph);
+      }
       ctx.restore();
       return;
     }

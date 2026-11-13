@@ -185,6 +185,18 @@
       ],
       "use": "퍼즐 보드 테두리(가운데 투명), 보드 바깥으로 5px"
     },
+    "panels/pillar_left.png": {
+      "w": 11,
+      "h": 159,
+      "slice": [0, 6, 0, 6],
+      "use": "보드 왼쪽 빈 칸 룬 기둥(보드 틀 높이). tools/make_pillars.py로 생성"
+    },
+    "panels/pillar_right.png": {
+      "w": 11,
+      "h": 159,
+      "slice": [0, 6, 0, 6],
+      "use": "보드 오른쪽 빈 칸 룬 기둥(왼쪽 좌우 반전 음영). tools/make_pillars.py로 생성"
+    },
     "gauges/hp_frame.png": {
       "w": 24,
       "h": 12,

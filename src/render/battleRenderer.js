@@ -56,9 +56,9 @@ const DEFAULT_BG_FRAME_H = 80;
 const DEFAULT_BG_FRAMES = 8;
 const DEFAULT_BG_FRAME_MS = 200;
 const BG_FALLBACK_FILL = '#0d0a10';
-// 몬스터가 나오는 오른쪽 끝 어둠(체커 디더, 반투명 없음) - 안쪽부터 25/50/75/100%, 단계마다 원본 4px(논리 8px).
+// 몬스터가 나오는 오른쪽 끝 살짝 어둠(체커 디더, 반투명 없음) - 25% 한 단계, 원본 4px(논리 8px).
 const EDGE_FOG_STEP = 8;
-const EDGE_FOG_TILES = [[0], [0, 3], [0, 1, 3], [0, 1, 2, 3]]; // 4x4 타일의 2x2 칸 번호(0 왼위, 1 오위, 2 왼아래, 3 오아래)
+const EDGE_FOG_TILES = [[0]]; // 4x4 타일의 2x2 칸 번호(0 왼위, 1 오위, 2 왼아래, 3 오아래)
 const _fogPatterns = [];
 function fogPattern(ctx, level) {
   if (_fogPatterns[level]) return _fogPatterns[level];
