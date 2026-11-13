@@ -1,0 +1,15 @@
+# Cloudflare Pages 응답 헤더(웹 빌드에서만 dist/로 복사 - vite.config.js).
+# _app/ = Vite가 파일 이름에 해시를 붙인 JS/CSS: 내용이 바뀌면 이름도 바뀐다.
+/_app/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# 진입점·서비스 워커·매니페스트는 항상 서버에 새 버전이 있는지 물어본다.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
+/sw.js
+  Cache-Control: no-cache
+/manifest.webmanifest
+  Cache-Control: no-cache
+  Content-Type: application/manifest+json
