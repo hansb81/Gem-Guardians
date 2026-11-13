@@ -4,6 +4,8 @@ const ORIGINS = new Set([
   "https://gem-guardians.pages.dev", // Cloudflare Pages 본 배포
   "http://localhost:5173", // vite dev
   "http://localhost:4173", // vite preview
+  "http://localhost:8000", // serve.py
+  "http://127.0.0.1:8000", // serve.py
   "https://localhost", // Capacitor Android
   "capacitor://localhost", // Capacitor iOS
 ]);

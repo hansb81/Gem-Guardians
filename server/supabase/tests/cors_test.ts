@@ -8,6 +8,8 @@ Deno.test("허용 origin", () => {
     "https://abc123.gem-guardians.pages.dev",
     "http://localhost:5173",
     "http://localhost:4173",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
     "https://localhost",
     "capacitor://localhost",
     "https://gem-guardians.apps.tossmini.com",
@@ -24,7 +26,7 @@ Deno.test("막는 origin", () => {
     "https://gem-guardians.pages.dev.evil.com",
     "https://evilgem-guardians.pages.dev",
     "http://gem-guardians.pages.dev",
-    "http://localhost:8000",
+    "http://localhost:8001",
     "https://x.apps.tossmini.com.evil.com",
   ]) assertEquals(isAllowedOrigin(o), false, String(o));
 });
