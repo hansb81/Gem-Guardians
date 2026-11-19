@@ -275,7 +275,7 @@ test('북: 스왑 3번 동안 피해 x1.5, 3번째 스왑의 연쇄까지 적용
   const { mul, moves, cooldownMoves } = ITEMS.items.drum;
 
   assert.deepEqual(ctrl.use('drum'), { ok: true, reason: null });
-  assert.equal(bs.applyGemClear('red', 1, 1).damage, 10 * mul);
+  assert.equal(bs.applyGemClear('red', 1, 1)[0].damage, 10 * mul);
   assert.equal(ctrl.buffSwapsLeft, moves);
   assert.equal(ctrl.canUse('drum').reason, 'cooldown', '버프 중엔 다시 못 쓴다');
 
@@ -286,14 +286,14 @@ test('북: 스왑 3번 동안 피해 x1.5, 3번째 스왑의 연쇄까지 적용
   gs.resolutions = [{ id: 1 }]; // 3번째 스왑의 연쇄 진행 중
   ctrl.update(0.02);
   assert.equal(ctrl.buffSwapsLeft, 0);
-  assert.equal(bs.applyGemClear('red', 1, 1).damage, 10 * mul, '연쇄가 끝날 때까지 적용');
+  assert.equal(bs.applyGemClear('red', 1, 1)[0].damage, 10 * mul, '연쇄가 끝날 때까지 적용');
 
   gs.resolutions = [];
   ctrl.update(0.02);
   assert.equal(ctrl.buffSwapsLeft, null);
   assert.equal(bs.atkMul, 1);
   assert.ok(bs.events.some((e) => e.type === 'atkBuffOff'));
-  assert.equal(bs.applyGemClear('red', 1, 1).damage, 10);
+  assert.equal(bs.applyGemClear('red', 1, 1)[0].damage, 10);
   assert.equal(ctrl.cooldownLeft('drum'), cooldownMoves, '쿨다운은 버프가 끝난 스왑 수부터');
   gs.validSwapCount = 3 + cooldownMoves;
   assert.equal(ctrl.canUse('drum').ok, true);

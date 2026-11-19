@@ -21,6 +21,7 @@ export class SimBridge {
     this._caster = new PuzzleBattleBridge(battleState);
     this._prevClearingKeys = new Set();
     this._specialTagged = new Set();
+    this._rainbowTagged = new Set(); // 무지개 효과가 지울 칸 - 게임 브리지와 같이 잼 1개 = 1발.
     this.stats = {
       colorCounts: Object.fromEntries(GEM_TYPES.map((g) => [g.id, 0])),
       specialsCreated: 0,
@@ -52,6 +53,9 @@ export class SimBridge {
         this.stats.specialsCreated++;
       } else if (effect.type === 'specialActivate' || effect.type === 'comboActivate') {
         for (const cell of effect.affected) this._specialTagged.add(keyOf(cell.row, cell.col));
+        if (effect.type === 'specialActivate' && effect.kind === 'color') {
+          for (const cell of effect.affected) this._rainbowTagged.add(cell.row * cols + cell.col);
+        }
         if (effect.type === 'specialActivate') this._caster._castSpecialActivate(effect);
         else this._caster._castCombo(effect);
       } else if (effect.type === 'obstacleDestroyed' && effect.id === 'timeBomb' && effect.cause === 'gemCleared') {
@@ -73,6 +77,7 @@ export class SimBridge {
       const key = keyOf(row, col);
       const isSpecial = this._specialTagged.has(key);
       this._specialTagged.delete(key);
+      const rainbow = this._rainbowTagged.delete(i);
 
       const value = cs.value;
       if (value < 0) continue; // EMPTY/COLORLESS - 색이 없다.
@@ -90,16 +95,18 @@ export class SimBridge {
         group = { cascadeIndex: resolution.cascadeIndex, colors: new Map() };
         groups.set(resolution.id, group);
       }
-      let entry = group.colors.get(value);
+      const colorKey = rainbow ? -1 - value : value; // 음수 = 무지개 몫(같은 색 일반 몫과 따로 쏜다)
+      let entry = group.colors.get(colorKey);
       if (!entry) {
         entry = { count: 0, special: false };
-        group.colors.set(value, entry);
+        group.colors.set(colorKey, entry);
       }
       entry.count += 1;
       entry.special = entry.special || isSpecial;
     }
 
     this._prevClearingKeys = currentKeys;
+    for (const i of this._rainbowTagged) if (!cellStates[i]) this._rainbowTagged.delete(i); // 지워지지 않은 표시는 버린다.
 
     // gameState.update()는 done인 Resolution을 그 틱이 끝나기 전에 이미 resolutions 배열에서
     // 빼버린다 - 그래서 "done 플래그"가 아니라 "이번 틱엔 더 이상 보이지 않는 id"로 완료를
@@ -114,14 +121,14 @@ export class SimBridge {
 
     for (const { cascadeIndex, colors } of groups.values()) {
       this.stats.maxCascadeIndex = Math.max(this.stats.maxCascadeIndex, cascadeIndex);
-      for (const [colorIndex, { count, special }] of colors) {
-        const colorId = GEM_TYPES[colorIndex]?.id;
+      for (const [colorKey, { count, special }] of colors) {
+        const rainbow = colorKey < 0;
+        const colorId = GEM_TYPES[rainbow ? -1 - colorKey : colorKey]?.id;
         if (!colorId) continue;
         this.stats.totalCellsCleared += count;
         this.stats.colorCounts[colorId] = (this.stats.colorCounts[colorId] ?? 0) + count;
         this.stats.swapGroupCount++;
-        const event = this.battleState.applyGemClear(colorId, count, cascadeIndex, special);
-        if (event) {
+        for (const event of this.battleState.applyGemClear(colorId, count, cascadeIndex, special, null, null, rainbow)) {
           if (this.onShot) this.onShot(event);
           else this.battleState.resolveTowerAttack(event);
         }

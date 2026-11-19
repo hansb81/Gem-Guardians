@@ -632,28 +632,33 @@ export class BattleState {
   // specialType('line_h'|'line_v'|'bomb'|'box'|'color'|'color_color')이 있으면 특수 잼 기술을
   // 추가로 발동한다(skillCast). chosenColor = 무지개가 고른 색. count 0이면 기본 사격 없이 기술만 -
   // PuzzleBattleBridge는 특수 잼 발동 이펙트마다 이렇게 부르고, 지워진 칸의 사격은 따로 그대로 쏜다.
-  applyGemClear(color, count, cascadeIndex, isSpecial = false, specialType = null, chosenColor = null) {
-    if (this.status !== 'active') return undefined;
+  // split = 무지개가 지운 잼(2026-11-19 결정): 합산 1발 대신 잼 1개 = 1발. 발마다 _pickTarget이 앞선 발의
+  // 예약 피해를 보고 대상을 다시 고르므로 앞 적을 죽이고 남는 몫이 다음 적에게 간다.
+  // 반환 = 이번에 쏜 towerAttack 이벤트 배열(못 쐈으면 빈 배열).
+  applyGemClear(color, count, cascadeIndex, isSpecial = false, specialType = null, chosenColor = null, split = false) {
+    const shots = [];
+    if (this.status !== 'active') return shots;
     if (specialType) this._castSkill(specialType, color, chosenColor, cascadeIndex);
-    if (count <= 0 || this.status !== 'active') return undefined;
+    if (count <= 0 || this.status !== 'active') return shots;
 
     const tower = this.towersData.find((t) => t.color === color);
-    if (!tower) return undefined;
-
-    this._pullSpawn();
-    const target = this._pickTarget();
-    if (!target) return undefined;
+    if (!tower) return shots;
 
     const { cascadeBonusPerStep, minDamage } = this.battleConfig;
-    let rawDamage = tower.stats.attack * this.atkMul * count * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
-    // 가상 효과(modifier) 훅 - 기본은 battleConfig.hooks가 없어 아무 영향도 없다(docs/simulation.md
-    // T2). 나중에 실제 잼 특수 효과/아이템이 생기면 이 자리에 onShot을 붙인다(피해 배율/연타).
-    if (this.hooks?.onShot) {
-      rawDamage = this.hooks.onShot({ color, count, cascadeIndex, isSpecial, tower, target, rawDamage });
+    const gems = split ? 1 : count; // 1발에 담는 잼 수
+    for (let i = 0; i < count; i += gems) {
+      this._pullSpawn();
+      const target = this._pickTarget();
+      if (!target) break;
+      let rawDamage = tower.stats.attack * this.atkMul * gems * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
+      // 가상 효과(modifier) 훅 - 기본은 battleConfig.hooks가 없어 아무 영향도 없다(docs/simulation.md T2).
+      if (this.hooks?.onShot) {
+        rawDamage = this.hooks.onShot({ color, count: gems, cascadeIndex, isSpecial, tower, target, rawDamage });
+      }
+      const damage = Math.max(minDamage, Math.round((rawDamage - target.def) * this._damageMul(target, color)));
+      shots.push(this._fireShot(tower, target, damage, cascadeIndex, color, isSpecial));
     }
-    const damage = Math.max(minDamage, Math.round((rawDamage - target.def) * this._damageMul(target, color)));
-
-    return this._fireShot(tower, target, damage, cascadeIndex, color, isSpecial);
+    return shots;
   }
 
   _advanceEvents(dtMs) {

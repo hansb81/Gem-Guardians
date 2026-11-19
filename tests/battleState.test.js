@@ -110,16 +110,23 @@ test('퍼즐 사격 피해: cascadeIndex가 커질수록 피해가 커진다', (
   assert.equal(dmg3, 18);
 });
 
-test('퍼즐 사격 피해: count(지운 잼 개수, 특수 잼으로 지운 잼 포함)가 커질수록 피해가 커진다', () => {
+test('퍼즐 사격 피해: count(지운 잼 개수, 특수 잼으로 지운 잼 포함)개를 합산한 1발', () => {
   const state = makeState();
   state.update(0);
-  state.applyGemClear('red', 1, 1);
-  const dmg1 = lastEventOf(state, 'towerAttack').damage; // raw=10*1-2=8
-  state.applyGemClear('red', 5, 1);
-  const dmg5 = lastEventOf(state, 'towerAttack').damage; // raw=10*5-2=48
-  assert.ok(dmg5 > dmg1, `count가 커지면 피해가 커져야 한다 (${dmg1} -> ${dmg5})`);
-  assert.equal(dmg1, 8);
-  assert.equal(dmg5, 48);
+  const shots = state.applyGemClear('red', 5, 1);
+  assert.equal(shots.length, 1);
+  assert.equal(shots[0].damage, 48); // raw=10*5-2=48
+});
+
+test('무지개 사격(split): 잼 1개 = 1발, 앞 적이 앞선 발의 예약 피해로 죽을 예정이면 남은 발은 다음 적에게', () => {
+  const state = makeState({ floor: makeFloor({ interval: 0, spawns: [makeStat({ hp: 20 }), makeStat({ hp: 20 })] }) });
+  state.update(0);
+  const [front, back] = state.enemies;
+  const shots = state.applyGemClear('red', 5, 1, false, null, null, true); // 8씩: 3발이면 앞 적(20) 처치 예정.
+  assert.deepEqual(shots.map((s) => s.targetEnemyId), [front.id, front.id, front.id, back.id, back.id]);
+  for (const s of shots) state.resolveTowerAttack(s);
+  assert.equal(front.state === 'alive', false);
+  assert.equal(back.currentHealth, 20 - 16);
 });
 
 test('퍼즐 사격 피해: 탑 레벨업으로 towersData.stats.attack을 직접 올리면 즉시 반영된다', () => {

@@ -133,15 +133,15 @@ export function runFloorAttempt({
     const origClear = battleState.applyGemClear.bind(battleState);
     battleState.applyGemClear = (color, count, cascadeIndex, ...rest) => {
       const summoning = battleState.summon.active;
-      const event = origClear(color, count, cascadeIndex, ...rest);
-      if (!event && battleState.status === 'active' && count > 0 && !hasAlive()) {
+      const shots = origClear(color, count, cascadeIndex, ...rest);
+      if (shots.length === 0 && battleState.status === 'active' && count > 0 && !hasAlive()) {
         const t = towersData.find((x) => x.color === color);
         const w = t ? t.stats.attack * battleState.atkMul * count * (1 + battleConfig.cascadeBonusPerStep * (cascadeIndex - 1)) : 0;
         waste.basic += w;
         // 게임은 소환 연출 중 스왑을 막는다(main.js isBlocked) - 시뮬 봇은 막히지 않아 생기는 몫(보고용 분리).
         if (summoning) waste.summon += w;
       }
-      return event;
+      return shots;
     };
     const origCast = battleState._castSkill.bind(battleState);
     battleState._castSkill = (specialType, color, chosenColor, cascadeIndex) => {

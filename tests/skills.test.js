@@ -44,9 +44,9 @@ function makeState({ enemies = [enemy()], progress, skills = SKILLS, attack = 10
 
 // 기본 사격 1발을 쏘고 바로 명중시킨다.
 function hit(state, color, count = 1) {
-  const ev = state.applyGemClear(color, count, 1);
-  state.resolveTowerAttack(ev);
-  return ev;
+  const shots = state.applyGemClear(color, count, 1);
+  for (const ev of shots) state.resolveTowerAttack(ev);
+  return shots[0];
 }
 
 const hp = (state, i = 0) => state.enemies[i].currentHealth;
@@ -153,7 +153,7 @@ test('그린 표식: 첫 중첩 즉시, 다음은 2초 쿨 뒤, 최대 2, 맞을
   step(s, 2);
   hit(s, 'green');
   assert.equal(mark.stacks, 2, '최대 2');
-  assert.equal(s.applyGemClear('red', 1, 1).damage, 120);
+  assert.equal(s.applyGemClear('red', 1, 1)[0].damage, 120);
   step(s, 3.9);
   assert.equal(mark.stacks, 2, '마지막 명중으로 4초 갱신');
   step(s, 0.2);
@@ -187,15 +187,15 @@ test('약점 ×1.3이 표식보다 먼저, 둘 다 방어를 뺀 뒤에 곱한�
   const s = makeState({ enemies: [boss({ def: 10, weak: ['red'] })] });
   s.enemies[0].effects.mark.stacks = 1;
   // (100 − 10) × 1.3 × 1.1 = 128.7 -> 129 (방어 전에 곱하면 130).
-  assert.equal(s.applyGemClear('red', 1, 1).damage, 129);
-  assert.equal(s.applyGemClear('blue', 1, 1).damage, 99); // 약점 아닌 색: 90 × 1.1.
+  assert.equal(s.applyGemClear('red', 1, 1)[0].damage, 129);
+  assert.equal(s.applyGemClear('blue', 1, 1)[0].damage, 99); // 약점 아닌 색: 90 × 1.1.
 });
 
 test('skills 설정이 없거나 unlocked=false면 효과 없음(기존 사격 그대로)', () => {
   const none = makeState({ skills: null });
   hit(none, 'blue');
   assert.equal(none.enemies[0].effects.slow.time, 0);
-  assert.equal(none.applyGemClear('red', 0, 1, true, 'bomb'), undefined);
+  assert.deepEqual(none.applyGemClear('red', 0, 1, true, 'bomb'), []);
   assert.ok(!none.events.some((e) => e.type === 'skillCast'));
 
   const off = makeState({ skills: skillsWith((s) => { s.colorEffects.appliesTo = 'all'; s.unlocked.colorEffects.blue = false; s.unlocked.specialSkills.line = false; }) });
@@ -404,7 +404,7 @@ test('다리: 특수 잼 발동/조합을 종류·색과 함께 기술로 넘긴
   assert.deepEqual(bridgeWith([{ type: 'specialActivate', kind: 'line', direction: 'vertical', gemColor: 2, color: null }]), [
     [id(2), 0, 'line_v', null],
   ]);
-  assert.deepEqual(bridgeWith([{ type: 'specialActivate', kind: 'color', color: 1, gemColor: -2 }]), [[id(1), 0, 'color', id(1)]]);
+  assert.deepEqual(bridgeWith([{ type: 'specialActivate', kind: 'color', color: 1, gemColor: -2, affected: [] }]), [[id(1), 0, 'color', id(1)]]);
   // 박스+컬러가 대신 터뜨리는 칸(gemColor 없음), 조합 변환으로 생긴 잼 - 기술 없음.
   assert.deepEqual(bridgeWith([{ type: 'specialActivate', kind: 'box', color: 3 }]), []);
   assert.deepEqual(bridgeWith([{ type: 'specialActivate', kind: 'line', direction: 'vertical', gemColor: 2, fromTransform: true }]), []);

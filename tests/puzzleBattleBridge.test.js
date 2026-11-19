@@ -25,9 +25,14 @@ function makeFakeBattleState() {
     status: 'active',
     calls: [],
     skills: [], // 특수 잼 기술 발동(count 0 + specialType) - 기본 사격 calls와 따로 기록.
-    applyGemClear(color, count, cascadeIndex, isSpecial, specialType, chosenColor) {
+    splits: [], // 기본 사격마다 split(무지개 = 잼 1개 = 1발) 여부.
+    applyGemClear(color, count, cascadeIndex, isSpecial, specialType, chosenColor, split) {
       if (specialType) this.skills.push({ color, count, specialType, chosenColor: chosenColor ?? null });
-      else this.calls.push({ color, count, cascadeIndex });
+      else {
+        this.calls.push({ color, count, cascadeIndex });
+        this.splits.push(!!split);
+      }
+      return [];
     },
   };
 }
@@ -65,6 +70,7 @@ test('평범한 3매치가 제거되면 그 색/개수/cascadeIndex=1로 applyGe
 
   assert.equal(fake.calls.length, 1, '같은 매치가 여러 틱에 걸쳐 지워지는 동안 중복 호출되면 안 된다');
   assert.deepEqual(fake.calls[0], { color: GEM_TYPES[0].id, count: 3, cascadeIndex: 1 });
+  assert.deepEqual(fake.splits, [false], '일반 매치는 합산 1발');
 });
 
 test('연쇄(cascade)가 2단계 이상 이어지면 두 번째 단계의 cascadeIndex가 2 이상이다', () => {
@@ -120,6 +126,7 @@ test('컬러 잼(COLORLESS) 자신은 집계되지 않지만, 같이 지워지�
 
   assert.equal(fake.calls.length, 1, '중복 호출 없이 한 번만 집계돼야 한다');
   assert.deepEqual(fake.calls[0], { color: GEM_TYPES[3].id, count: 4, cascadeIndex: 1 });
+  assert.deepEqual(fake.splits, [true], '무지개가 지운 잼은 잼 1개 = 1발');
   // 무지개 발동 = 궁극기 1번, 고른 색 = 스왑한 잼의 색.
   assert.deepEqual(fake.skills, [{ color: GEM_TYPES[3].id, count: 0, specialType: 'color', chosenColor: GEM_TYPES[3].id }]);
   assert.ok(!board.grid.includes(EMPTY));

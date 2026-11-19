@@ -30,6 +30,9 @@ export class PuzzleBattleBridge {
     this.battleState = battleState;
     this.onGemClear = onGemClear;
     this._prevClearingKeys = new Set();
+    // 무지개 효과(specialActivate kind 'color')가 지울 칸 인덱스 - 그 칸이 clearing이 되면 잼 1개 = 1발로
+    // 쏜다(2026-11-19). 조합(무지개+무지개, 무지개+특수 잼)과 범위 안 특수 잼의 연쇄는 기존대로 합산 1발.
+    this._rainbowKeys = new Set();
   }
 
   // 층이 바뀌면(클리어/재시도/dev 층 이동) BattleController가 새 BattleState를 만든다 - 이
@@ -45,6 +48,7 @@ export class PuzzleBattleBridge {
   // 독립적인 관심사 - main.js가 필요하면 둘 다 부른다).
   reset() {
     this._prevClearingKeys = new Set();
+    this._rainbowKeys = new Set();
   }
 
   // 특수 잼 발동 = 전투 기술(docs/skills.md 2장). count 0으로 불러 기술만 발동한다 - 그 잼이
@@ -96,6 +100,7 @@ export class PuzzleBattleBridge {
       if (effect.type === 'obstacleExpire') {
         this.battleState.applyObstacleWallDamage(effect.wallDamagePct);
       } else if (effect.type === 'specialActivate') {
+        if (effect.kind === 'color') for (const c of effect.affected) this._rainbowKeys.add(c.row * cols + c.col);
         this._castSpecialActivate(effect);
       } else if (effect.type === 'comboActivate') {
         this._castCombo(effect);
@@ -103,7 +108,7 @@ export class PuzzleBattleBridge {
     }
 
     const currentKeys = new Set();
-    // resolution.id -> { cascadeIndex, colors: Map<colorIndex, {count, rowSum, colSum}> }
+    // resolution.id -> { cascadeIndex, colors/rainbow: Map<colorIndex, {count, rowSum, colSum}> } - rainbow = 무지개가 지운 칸.
     const groups = new Map();
 
     for (let i = 0; i < cellStates.length; i++) {
@@ -111,6 +116,7 @@ export class PuzzleBattleBridge {
       if (!cs || cs.phase !== 'clearing') continue;
       currentKeys.add(i);
       if (this._prevClearingKeys.has(i)) continue; // 이미 지난 틱에 처리한 칸.
+      const rainbow = this._rainbowKeys.delete(i);
 
       const value = cs.value;
       if (value < 0) continue; // EMPTY(-1)/COLORLESS(-2) - 색이 없다.
@@ -124,13 +130,14 @@ export class PuzzleBattleBridge {
 
       let group = groups.get(resolution.id);
       if (!group) {
-        group = { cascadeIndex: resolution.cascadeIndex, colors: new Map() };
+        group = { cascadeIndex: resolution.cascadeIndex, colors: new Map(), rainbow: new Map() };
         groups.set(resolution.id, group);
       }
-      let entry = group.colors.get(value);
+      const byColor = rainbow ? group.rainbow : group.colors;
+      let entry = byColor.get(value);
       if (!entry) {
         entry = { count: 0, rowSum: 0, colSum: 0 };
-        group.colors.set(value, entry);
+        byColor.set(value, entry);
       }
       entry.count += 1;
       entry.rowSum += row;
@@ -138,20 +145,27 @@ export class PuzzleBattleBridge {
     }
 
     this._prevClearingKeys = currentKeys;
+    // 표시만 남고 지워지지 않은 칸(이미 다른 효과로 지워지던 칸 등)은 버린다 - 다음 잼이 무지개 몫으로 세지지 않게.
+    for (const i of this._rainbowKeys) if (!cellStates[i]) this._rainbowKeys.delete(i);
 
-    for (const { cascadeIndex, colors } of groups.values()) {
-      for (const [colorIndex, { count, rowSum, colSum }] of colors) {
-        const colorId = GEM_TYPES[colorIndex]?.id;
-        if (!colorId) continue;
-        this.battleState.applyGemClear(colorId, count, cascadeIndex);
-        this.onGemClear?.({
-          color: colorId,
-          count,
-          cascadeIndex,
-          row: rowSum / count,
-          col: colSum / count,
-        });
-      }
+    for (const group of groups.values()) {
+      this._fire(group.colors, group.cascadeIndex, false);
+      this._fire(group.rainbow, group.cascadeIndex, true);
+    }
+  }
+
+  _fire(colors, cascadeIndex, split) {
+    for (const [colorIndex, { count, rowSum, colSum }] of colors) {
+      const colorId = GEM_TYPES[colorIndex]?.id;
+      if (!colorId) continue;
+      this.battleState.applyGemClear(colorId, count, cascadeIndex, false, null, null, split);
+      this.onGemClear?.({
+        color: colorId,
+        count,
+        cascadeIndex,
+        row: rowSum / count,
+        col: colSum / count,
+      });
     }
   }
 }
