@@ -78,7 +78,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
       else ui.att.refresh();
     }
     if (ui.mail) {
-      if (h?.mail?.ok) ui.mail.list = h.mail.mail;
+      if (h?.mail?.ok) ui.mail.setList(h.mail.mail);
       else ui.mail.refresh();
     }
     return pre;
@@ -98,6 +98,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
     else if (action === 'open:mail') ui.mail?.refresh();
     else if (action === 'attClaim') ui.att?.claim().then(showGrant);
     else if (typeof action === 'string' && action.startsWith('mailClaim:')) ui.mail?.claim(Number(action.slice(10))).then(showGrant);
+    else if (typeof action === 'string' && action.startsWith('mailDelete:')) ui.mail?.remove(Number(action.slice(11)));
     else if (typeof action === 'string' && action.startsWith('couponRedeem:')) {
       // 결과는 메뉴 한 곳(couponResult)으로 - 성공이면 메뉴가 설정으로 돌아가고 여기서 획득 팝업.
       ui.coupon?.redeem(action.slice(13)).then((res) => {

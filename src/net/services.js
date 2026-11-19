@@ -1,6 +1,9 @@
 // 출석·우편 서비스(docs/server.md §6, §8). 판정은 서버, 지급은 인벤토리 grant(txId로 중복 방지).
 // 돌려주는 모양: { ok, reason?, delta? } - reason 'offline' | 'already' | 'notFound' | ...
 import { call, net, syncClaims } from './api.js';
+import { storage } from '../platform/storage.js';
+
+const MAIL_DELETED_KEY = 'mailDeleted'; // 받은 뒤 지운 우편 id - 서버엔 그대로 있어 기기에서 가린다
 
 // 서버 응답 {txId, bundle} -> 기기 지급 -> claims-granted(실패해도 다음 실행 때 claims-pending으로 다시 옴).
 function grantClaim(inventory, res, src, callFn = call) {
@@ -60,8 +63,24 @@ export class MailService {
   async refresh() {
     const res = net.on ? await call('mail-list') : { ok: false, reason: 'offline' };
     this.reason = res.ok ? null : res.reason;
-    if (res.ok) this.list = res.mail;
+    if (res.ok) this.setList(res.mail);
     return res;
+  }
+
+  // 지운 우편을 빼고 넣는다. 목록에서 사라진(만료·회수) id는 기록에서도 지운다.
+  setList(mail) {
+    const ids = new Set(mail.map((m) => m.id));
+    const deleted = (storage.load(MAIL_DELETED_KEY) ?? []).filter((id) => ids.has(id));
+    storage.save(MAIL_DELETED_KEY, deleted);
+    this.list = mail.filter((m) => !deleted.includes(m.id));
+  }
+
+  // 받은 우편만 지운다(이 기기 목록에서).
+  remove(id) {
+    const m = this.list?.find((x) => x.id === id);
+    if (!m?.claimed) return;
+    this.list = this.list.filter((x) => x !== m);
+    storage.save(MAIL_DELETED_KEY, [...(storage.load(MAIL_DELETED_KEY) ?? []), id]);
   }
 
   async claim(id) {

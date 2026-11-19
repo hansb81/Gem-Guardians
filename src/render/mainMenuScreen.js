@@ -634,9 +634,9 @@ export class MainMenuScreen {
       this._text(ctx, m.title?.[loc] || m.title?.ko || '', row[0] + 12, row[1] + 20, { size: 13 });
       this._text(ctx, this._bundleLines(m.bundle).join(', '), row[0] + 12, row[1] + 44, { size: 11, color: COLORS.dim });
       const down = this._pressed === `mail:${m.id}`;
-      const img = m.claimed || ms.busy ? 'buttons/btn_secondary.png' : `buttons/btn_primary${down ? '_pressed' : ''}.png`;
+      const img = ms.busy ? 'buttons/btn_secondary.png' : `buttons/btn_${m.claimed ? 'secondary' : 'primary'}${down ? '_pressed' : ''}.png`;
       if (!this._nine(ctx, img, btn)) this._panel(ctx, btn, COLORS.bg2, COLORS.bg3);
-      this._text(ctx, t(m.claimed ? 'net.mail.claimed' : 'net.mail.claim'), btn[0] + btn[2] / 2, btn[1] + btn[3] / 2 + (down ? 2 : 0), { size: 13, align: 'center' });
+      this._text(ctx, t(m.claimed ? 'net.mail.delete' : 'net.mail.claim'), btn[0] + btn[2] / 2, btn[1] + btn[3] / 2 + (down ? 2 : 0), { size: 13, align: 'center' });
     }
   }
 
@@ -1592,9 +1592,9 @@ export class MainMenuScreen {
     if (this.popup === 'mail' && this.server?.mail) {
       if (this.server.mail.busy) return null;
       for (const { m, btn } of this._mailRows(card)) {
-        if (m.claimed || !pressButton(x, y, this._toScreen(btn), 'none')) continue;
+        if (!pressButton(x, y, this._toScreen(btn), 'none')) continue;
         this._pressed = `mail:${m.id}`;
-        return `mailClaim:${m.id}`;
+        return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
       }
       return null;
     }

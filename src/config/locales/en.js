@@ -405,7 +405,7 @@ export const en = {
     already: 'Already claimed',
     recovered: 'Received rewards you missed',
     att: { day: 'Day {n}', claim: 'Claim', claimed: 'Claimed', tomorrow: 'Come back tomorrow' },
-    mail: { empty: 'No mail', claim: 'Claim', claimed: 'Claimed' },
+    mail: { empty: 'No mail', claim: 'Claim', claimed: 'Claimed', delete: 'Delete' },
     about: { code: 'Player code {code}', noCode: 'Player code (offline)', copied: 'Copied' },
   },
   ranking: {

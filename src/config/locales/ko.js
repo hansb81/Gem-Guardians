@@ -409,7 +409,7 @@ export const ko = {
     already: '이미 받았어요',
     recovered: '받지 못한 보상을 받았어요',
     att: { day: '{n}일', claim: '받기', claimed: '받음', tomorrow: '내일 또 와요' },
-    mail: { empty: '우편이 없어요', claim: '받기', claimed: '받음' },
+    mail: { empty: '우편이 없어요', claim: '받기', claimed: '받음', delete: '삭제' },
     about: { code: '플레이어 코드 {code}', noCode: '플레이어 코드 (연결 안 됨)', copied: '복사했어요' },
   },
   ranking: {
