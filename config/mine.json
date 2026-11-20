@@ -1,0 +1,22 @@
+{
+  "_doc": "저주받은 수정 광산(docs/mine.md 10장). 아이템 키는 config/items.json과 같다.",
+  "unlockFloor": 10,
+  "veins": [
+    { "id": "emerald",  "unlockBossFloor": 10 },
+    { "id": "sapphire", "unlockBossFloor": 20 },
+    { "id": "topaz",    "unlockBossFloor": 30 },
+    { "id": "ruby",     "unlockBossFloor": 40 },
+    { "id": "amethyst", "unlockBossFloor": 50 }
+  ],
+  "prod":  { "base": 10, "growth": 1.12 },
+  "cost":  { "base": 40, "growth": 1.20 },
+  "maxLv": { "base": 5, "perFloors": 5 },
+  "storage": { "hours": [8, 9, 10, 11, 12], "cost": [0, 150, 400, 900, 2000], "bigBonusHours": 4, "bigDia": 150 },
+  "gold":  { "perDay": 4, "costs": [50, 100, 200, 400], "rMul": 2 },
+  "items": { "perDay": 3, "costs": { "shuffle": 60, "hammer": 80, "scythe_h": 100, "scythe_v": 100, "dye": 120 } },
+  "ads":   { "perDay": 2, "hours": 2 },
+  "diaBoost": { "hours": 2, "costs": [20, 40, 80] },
+  "passBonus": { "monthly": 0.25 },
+  "unlockGift": 50,
+  "badgeFill": 0.8
+}

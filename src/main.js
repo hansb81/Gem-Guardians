@@ -500,6 +500,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
   // 층의 floor.obstacles로 퍼즐 보드를 새로 만든다(docs/balance.md 7장) - gameState를
   // 재대입하므로 battleBridge/animator의 "이전 보드 기준" 기억도 같이 비워야 한다.
   function resetPuzzleBoard(floorObstacles) {
+    mineConfig: balanceData.mine,
     gameState = new GameState({
       seed: Date.now(),
       obstaclesConfig: balanceData.obstacles,

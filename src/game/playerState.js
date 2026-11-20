@@ -9,6 +9,7 @@ import { Inventory } from './inventory.js';
 import { normalizeRanking } from '../ranking/rankingSave.js';
 import { createRng } from '../core/rng.js';
 import { migrateTutorialSave } from '../tutorial/tutorial.js';
+import { normalizeMine, syncUnlocks } from '../core/mine/mine.js';
 
 // 키 v2: 상점(shop) 추가 때 올린 저장 키. 예전 키(v1)만 있으면 그걸 읽어 v2 키로 저장한다.
 // 저장 형식 버전(saveVersion)은 키와 별개 - 2 = 아이템·장착·예약·젬 스킬이 inv 묶음(docs/inventory.md 2장).
@@ -57,6 +58,9 @@ class PlayerState {
     this.adContinue ??= null;
     // 본 적 있는 권유 팝업 id(계정 연결 권유 'floor15'·'firstPurchase' - docs/auth.md §8). save 안이라 클라우드로 같이 간다.
     if (!Array.isArray(this.nudges)) this.nudges = [];
+    // 광산(docs/mine.md 9장) - 블록이 없던 저장은 기본값. 해금 판정은 config를 읽은 뒤 initMine이 한다.
+    this.mine = normalizeMine(this.mine);
+    this.mineConfig = null; // config/mine.json - 없으면 광산 기능 없음
     this.onSaved = null; // 클라우드 저장(src/net/cloudSave.js)이 dirty 표시용으로 끼운다 - playerState는 net을 모른다.
     this.saveBlocked = false; // 서버 save를 받아 다시 불러오기 직전 - 그 사이 저장이 받은 save를 덮지 않게.
   }
@@ -82,6 +86,7 @@ class PlayerState {
       tutorial: this.tutorial,
       adContinue: this.adContinue,
       nudges: this.nudges,
+      mine: this.mine,
     };
   }
 
@@ -117,6 +122,27 @@ class PlayerState {
         inv.grant({ items: { [id]: countOf(id) } }, { src: 'floorUnlock', txId: `unlock:${id}` });
       }
     }
+  }
+
+  // 광산 저장을 config에 맞추고, 이미 넘긴 보스층의 광맥을 전부 연다(기존 저장 - docs/mine.md 4-2). now = ms.
+  initMine(mineConfig, now) {
+    this.mineConfig = mineConfig;
+    this.mine = normalizeMine(this.mine, mineConfig);
+    this.unlockMineVeins(this.bestFloor - 1, now); // bestFloor = 다음에 깰 층
+  }
+
+  // clearedFloor까지 깬 것으로 광산·광맥 해금. 새로 열린 광맥 id 배열(없으면 빈 배열). 열렸으면 저장.
+  unlockMineVeins(clearedFloor, now) {
+    if (!this.mineConfig) return [];
+    const wasUnlocked = this.mine.unlocked;
+    const opened = syncUnlocks(this.mineConfig, this.mine, clearedFloor, now, this.hasMonthlyPass());
+    if (opened.length > 0 || this.mine.unlocked !== wasUnlocked) this.save();
+    return opened;
+  }
+
+  // 월간 패스 기간 중(광산 생산 +25% - docs/mine.md 8장).
+  hasMonthlyPass() {
+    return (this.shop?.passes?.monthly?.daysLeft ?? 0) > 0;
   }
 
   isItemUnlocked(id) {

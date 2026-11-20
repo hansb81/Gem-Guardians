@@ -127,11 +127,11 @@ export function defaultSkillLevels(shopSkills) {
 }
 
 // grantedTx 90일 정리(docs/auth.md §1-E): 날짜가 든 하루짜리 txId 중 keepDays보다 오래된 것만 뺀 새 배열.
-// att:{날짜} free:{날짜} pass:{팩}:{날짜} ad:{배치}:{날짜}:{n} rank:{YYYY-Www}(그 주 월요일). 형식이 안 맞거나 날짜를 못 읽으면 남긴다 -
+// att:{날짜} free:{날짜} pass:{팩}:{날짜} ad:{배치}:{날짜}:{n} mine:gold|item:{날짜}:{n} rank:{YYYY-Www}(그 주 월요일). 형식이 안 맞거나 날짜를 못 읽으면 남긴다 -
 // 평생 한 번짜리(start: unlock: boss: iap: refund: coupon: mail: tutorial_complete)는 아래 형식에 안 걸려서 절대 안 지운다.
 // todayKst = 'YYYY-MM-DD'(core는 시계를 모른다 - 호출부가 넘긴다).
 const DAY_MS = 86400e3;
-const TX_DATED = [/^(?:att|free):(\d{4}-\d{2}-\d{2})$/, /^pass:[^:]+:(\d{4}-\d{2}-\d{2})$/, /^ad:[^:]+:(\d{4}-\d{2}-\d{2}):\d+$/];
+const TX_DATED = [/^(?:att|free):(\d{4}-\d{2}-\d{2})$/, /^pass:[^:]+:(\d{4}-\d{2}-\d{2})$/, /^ad:[^:]+:(\d{4}-\d{2}-\d{2}):\d+$/, /^mine:(?:gold|item):(\d{4}-\d{2}-\d{2}):\d+$/];
 const TX_WEEK = /^rank:(\d{4})-W(\d{2})$/;
 
 function dayMs(ymd) {

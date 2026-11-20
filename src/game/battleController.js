@@ -13,7 +13,7 @@ import { createRng } from '../core/rng.js';
 // 그 자리를 바로 고친다 - BattleState.applyGemClear는 towersData를 그대로 읽으므로 전투
 // 중에도 즉시 반영된다(src/battle/battleState.js 쪽 설명 참고).
 export class BattleController {
-  constructor({ balance, enemies, obstacles, floorsData, towersBaseData, battleConfig, itemsConfig, shopConfig = null, onBattleStateChanged }) {
+  constructor({ balance, enemies, obstacles, floorsData, towersBaseData, battleConfig, itemsConfig, shopConfig = null, mineConfig = null, onBattleStateChanged }) {
     this.balance = balance;
     this.enemies = enemies;
     this.obstacles = obstacles;
@@ -40,6 +40,8 @@ export class BattleController {
       this.items = new ItemController({ config: itemsConfig, player: playerState });
     }
     if (shopConfig) playerState.initShop(shopConfig);
+    // 광산(config/mine.json) - 패스 여부를 읽으므로 initShop 뒤. 없으면(테스트·시뮬레이터) 광산 없음.
+    if (mineConfig) playerState.initMine(mineConfig, Date.now());
 
     this._seenDeaths = new WeakSet();
     this.lastClearReward = null; // { killGold, bonusGold, comboGold, maxCombo, total } - 클리어 팝업용.
@@ -145,13 +147,15 @@ export class BattleController {
     const comboGold = comboGoldBonus(this.balance, this._killGoldBase + baseBonus, maxCombo);
     playerState.addGold(bonusGold + comboGold);
     const items = isFirstClear ? this._grantFirstClearItems() : [];
+    // 보스 첫 클리어로 열린 광산 광맥 id(없으면 빈 배열) - 연습 모드는 여기까지 오지 않는다.
+    const mineOpened = isFirstClear ? playerState.unlockMineVeins(this.floor, Date.now()) : [];
     playerState.save();
     // 랭킹 일반 모드 = 클리어한 층(main.js가 RankingService.submit('normal')에 연결, 더 높을 때만 갱신).
     this.onFloorClear?.(this.floor);
     // 경쟁 모드(아직 없음): 판을 시작할 때 seasonId = rankingService.currentSeason().id를 판 상태에 저장해 두고,
     // 판이 끝날 때 rankingService.submit('comp', { value: 판 점수, floor, at, seasonId })로 그 시즌에 넣는다(docs/ranking.md 5-1).
     // grant = 보스 첫 처치 보상 delta(획득 팝업용, 없으면 null).
-    this.lastClearReward = { floor: this.floor, firstClearMul: isFirstClear ? 1 + this.balance.economy.clearBonusMul : null, killGold: this.killGoldThisFloor, bonusGold, comboGold, maxCombo, comboFull: maxCombo >= (this.balance.economy.comboGold?.comboCap ?? Infinity), total: this.killGoldThisFloor + bonusGold + comboGold, items, grant: isFirstClear ? this._lastBossGrant : null };
+    this.lastClearReward = { floor: this.floor, firstClearMul: isFirstClear ? 1 + this.balance.economy.clearBonusMul : null, killGold: this.killGoldThisFloor, bonusGold, comboGold, maxCombo, comboFull: maxCombo >= (this.balance.economy.comboGold?.comboCap ?? Infinity), total: this.killGoldThisFloor + bonusGold + comboGold, items, mineOpened, grant: isFirstClear ? this._lastBossGrant : null };
   }
 
   // 보스층 첫 클리어 = 서로 다른 무작위 아이템(층 번호 seed - 같은 층이면 같은 보상). 20층(설정값) 첫 클리어 = 4번째 슬롯.
