@@ -76,7 +76,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   const comboByTag = { normal: 0, elite: 0, boss: 0 }; // --combogold 보너스(측정 전용) 층 종류별 합
   const bucketOf = (f) => (flow[Math.floor((f - 1) / 10)] ??= {
     first: 0, replay: 0, fail: 0, exchange: 0, combo: 0, tower: 0, skill: 0, unlock: 0, item: 0,
-    hit: 0, wasteBasic: 0, wasteSkill: 0, wasteFlight: 0, wasteFlightDoomed: 0, wasteSummon: 0, ovBasic: 0, ovSkill: 0, ovOther: 0, firstEnemySec: 0, attempts: 0, swapsBeforeEnemy: 0, emptySec: 0, timeSec: 0, swaps: 0, noMove: 0, swapsAnim: 0, clears: 0, wallLeft: 0, emptySpawns: 0, aliveSec: 0,
+    hit: 0, wasteBasic: 0, wasteSkill: 0, wasteFlight: 0, wasteFlightDoomed: 0, wasteSummon: 0, ovBasic: 0, ovSkill: 0, ovOther: 0, firstEnemySec: 0, attempts: 0, swapsBeforeEnemy: 0, emptySec: 0, timeSec: 0, swaps: 0, noMove: 0, swapsAnim: 0, clears: 0, wallLeft: 0, emptySpawns: 0, aliveSec: 0, rbShots: 0, rbDmg: 0, rbShotDmg: 0, rbGems: 0,
   });
   const attemptLog = []; // 시도마다 { floor, cleared, wall, aliveMax, timeSec, farm } - 하위 10% 성벽·동시 적 최대·층 시간용
   const track = (f, r, farm = false) => {
@@ -101,6 +101,10 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     b.noMove += r.noMoveTicks;
     b.swapsAnim += r.swapsDuringAnim;
     b.emptySpawns += r.emptySpawns;
+    b.rbShots += r.stats.rainbowShots; // v13-1 무지개 방어 계측(simBridge)
+    b.rbDmg += r.stats.rainbowDamage;
+    b.rbShotDmg += r.stats.rainbowShotDamage;
+    b.rbGems += r.stats.rainbowGems;
     if (r.status === 'cleared') {
       b.clears++;
       b.wallLeft += r.wallHealthPct;
@@ -639,6 +643,8 @@ function causeStats(runs) {
       wallMean: b.clears ? b.wallLeft / b.clears : null, wallLow10: avgOf(low), wallP10: walls.length ? walls[Math.round(0.1 * (walls.length - 1))] : null,
       aliveAvg: b.timeSec > 0 ? b.aliveSec / b.timeSec : 0, aliveMaxMean: avgOf(lg.map((x) => x.aliveMax)), aliveMax: Math.max(0, ...lg.map((x) => x.aliveMax)),
       emptySpawnsPerAttempt: b.emptySpawns / a,
+      // v13-1: 무지개 발당 평균 피해, 전체 피해(오버킬 포함) 중 무지개 몫, 시드당 무지개 피해 합(모드 간 비교용)
+      rbShotAvg: b.rbShots ? b.rbShotDmg / b.rbShots : 0, rbShare: b.hit > 0 ? b.rbDmg / b.hit : 0, rbDmgPerSeed: b.rbDmg / runs.length, rbShotsPerSeed: b.rbShots / runs.length, rbDmgPerGem: b.rbGems ? b.rbDmg / b.rbGems : 0,
     };
   };
   const out = bs.map((b, i) => (b?.attempts ? one(`${i * 10 + 1}-${i * 10 + 10}`, b, (f) => Math.floor((f - 1) / 10) === i) : null)).filter(Boolean);

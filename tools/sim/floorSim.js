@@ -14,6 +14,9 @@ import { pickItemUse } from './itemBot.js';
 import { deriveSeed } from './util.js';
 import { attachCombo } from './combo.js';
 
+// --rainbowdef=sum|pershot|split(run.js가 채운다, v13-1): 무지개 1발의 방어력 처리(battleState applyGemClear). null = 게임 기본값.
+export const simRules = { rainbowDef: null };
+
 export function runFloorAttempt({
   balance,
   enemies,
@@ -68,6 +71,7 @@ export function runFloorAttempt({
     summon,
     hooks: modifierHooks ?? undefined,
     skills: skills ?? undefined,
+    rainbowDef: simRules.rainbowDef ?? undefined,
   };
 
   const battleState = new BattleState({ towersData, resolvedFloor, battleConfig });

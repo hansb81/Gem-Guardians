@@ -7,6 +7,8 @@ import { loadConfigs, parseArgs, applySets } from './config.js';
 import { skillsFor, skillArgsAtFor } from './skills.js';
 import { writeCsv, todayTag } from './report.js';
 import { setupCombo, combo } from './combo.js';
+import { simRules } from './floorSim.js';
+import { RAINBOW_DEF_DEFAULT } from '../../src/battle/battleState.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DEFAULT_REPORT_DIR = join(__dirname, '..', '..', 'reports', 'sim');
@@ -26,6 +28,9 @@ async function main() {
   const configs = loadConfigs();
   const args = parseArgs(process.argv.slice(2), configs.sim);
   const sets = applySets(configs, args.set);
+  // --rainbowdef=sum|pershot|split: 무지개 1발의 방어력 처리(없으면 게임 기본값 battleState RAINBOW_DEF_DEFAULT).
+  if (args.rainbowdef != null && !['sum', 'pershot', 'split'].includes(args.rainbowdef)) throw new Error(`--rainbowdef는 sum|pershot|split: ${args.rainbowdef}`);
+  simRules.rainbowDef = args.rainbowdef ?? null;
   const comboTag = setupCombo(args, configs.balance); // tools/sim/combo.js. 콤보 골드 기본 = config(게임 그대로), 데미지 배율 기본 off
   // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
   const env = {
@@ -56,7 +61,7 @@ async function main() {
   // --out=<dir>: 단계별 비교 실행 결과를 reports/sim/summary.md와 섞지 않으려고 따로 저장.
   const REPORT_DIR = args.out ?? DEFAULT_REPORT_DIR;
 
-  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode} skillbuy=${env.skillBuy} towerbuy=${env.towerBuy} gate=${env.skillGate} dia=${env.dia} ads=${env.ads} flight=${env.flight ? 'on' : 'off'} emptySpawn=${env.emptySpawn}`);
+  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode} skillbuy=${env.skillBuy} towerbuy=${env.towerBuy} gate=${env.skillGate} dia=${env.dia} ads=${env.ads} flight=${env.flight ? 'on' : 'off'} emptySpawn=${env.emptySpawn} rainbowdef=${simRules.rainbowDef ?? `${RAINBOW_DEF_DEFAULT}(기본)`}`);
 
   const { execSync } = await import('node:child_process');
   let commit = 'unknown';
@@ -81,7 +86,7 @@ async function main() {
 ` +
       `- 기술: ${env.skillsMode} (T2s는 모드별 비교) / enemyHpMul ${configs.balance.scaling.enemyHpMul ?? 1}` +
       `
-- 스킬 구매: ${env.skillBuy} (잠금 ${env.skillGate === 'off' ? 'off' : `${env.skillGate}층마다 +1`}, balanced 상한 ${env.skillShare}) / 탑 구매 ${env.towerBuy === 'always' ? 'always(층이 끝날 때마다)' : 'onfail(실패했을 때만)'} / 다이아 ${env.dia} / 광고 ${env.ads} (하루 ${env.minutesPerDay}분) / 탄 비행 ${env.flight ? 'on(측정 전용 근사)' : 'off(즉시 명중)'} / 빈 전장 즉시 등장 ${env.emptySpawn}${args.emptySpawn ? '(--emptySpawn 덮어쓰기)' : '(balance.json)'}` +
+- 스킬 구매: ${env.skillBuy} (잠금 ${env.skillGate === 'off' ? 'off' : `${env.skillGate}층마다 +1`}, balanced 상한 ${env.skillShare}) / 탑 구매 ${env.towerBuy === 'always' ? 'always(층이 끝날 때마다)' : 'onfail(실패했을 때만)'} / 다이아 ${env.dia} / 광고 ${env.ads} (하루 ${env.minutesPerDay}분) / 탄 비행 ${env.flight ? 'on(측정 전용 근사)' : 'off(즉시 명중)'} / 빈 전장 즉시 등장 ${env.emptySpawn}${args.emptySpawn ? '(--emptySpawn 덮어쓰기)' : '(balance.json)'} / 무지개 방어 ${simRules.rainbowDef ?? `${RAINBOW_DEF_DEFAULT}(기본)`}` +
       (sets.length ? `
 - 메모리 덮어쓰기(--set, 파일은 그대로): ${sets.join(', ')}` : ''),
   ];

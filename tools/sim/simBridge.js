@@ -31,6 +31,12 @@ export class SimBridge {
       bombsExpired: 0,
       totalCellsCleared: 0,
       swapGroupCount: 0, // 색상 그룹 수(스왑당 평균 발사 수 추정용).
+      // 무지개 몫 사격(v13-1 rainbowdef 계측): shots = 무지개 잼이 든 발 수, damage = 그 발 피해 중 무지개 몫
+      // (sum 모드는 같은 색 일반 잼과 합쳐 1발이라 잼 수 비율로 나눈다), shotDamage = 그 발들의 피해 합(방어 후, 오버킬 포함).
+      rainbowShots: 0,
+      rainbowGems: 0, // 무지개가 지운 잼 수(모드 간 잼 1개당 피해 비교용)
+      rainbowDamage: 0,
+      rainbowShotDamage: 0,
     };
     this._resolutionPeakCascade = new Map();
   }
@@ -95,13 +101,15 @@ export class SimBridge {
         group = { cascadeIndex: resolution.cascadeIndex, colors: new Map() };
         groups.set(resolution.id, group);
       }
-      const colorKey = rainbow ? -1 - value : value; // 음수 = 무지개 몫(같은 색 일반 몫과 따로 쏜다)
+      // 음수 = 무지개 몫(같은 색 일반 몫과 따로 쏜다). rainbowDef 'sum'(v12-10 재현)은 예전처럼 같은 색과 합친다.
+      const colorKey = rainbow && this.battleState.battleConfig.rainbowDef !== 'sum' ? -1 - value : value;
       let entry = group.colors.get(colorKey);
       if (!entry) {
-        entry = { count: 0, special: false };
+        entry = { count: 0, special: false, rainbow: 0 };
         group.colors.set(colorKey, entry);
       }
       entry.count += 1;
+      if (rainbow) entry.rainbow += 1;
       entry.special = entry.special || isSpecial;
     }
 
@@ -121,14 +129,20 @@ export class SimBridge {
 
     for (const { cascadeIndex, colors } of groups.values()) {
       this.stats.maxCascadeIndex = Math.max(this.stats.maxCascadeIndex, cascadeIndex);
-      for (const [colorKey, { count, special }] of colors) {
+      for (const [colorKey, { count, special, rainbow: rainbowGems }] of colors) {
         const rainbow = colorKey < 0;
         const colorId = GEM_TYPES[rainbow ? -1 - colorKey : colorKey]?.id;
         if (!colorId) continue;
         this.stats.totalCellsCleared += count;
         this.stats.colorCounts[colorId] = (this.stats.colorCounts[colorId] ?? 0) + count;
         this.stats.swapGroupCount++;
+        this.stats.rainbowGems += rainbowGems;
         for (const event of this.battleState.applyGemClear(colorId, count, cascadeIndex, special, null, null, rainbow)) {
+          if (rainbowGems > 0) {
+            this.stats.rainbowShots++;
+            this.stats.rainbowShotDamage += event.damage;
+            this.stats.rainbowDamage += (event.damage * rainbowGems) / count;
+          }
           if (this.onShot) this.onShot(event);
           else this.battleState.resolveTowerAttack(event);
         }

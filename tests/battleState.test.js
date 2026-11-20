@@ -118,8 +118,8 @@ test('퍼즐 사격 피해: count(지운 잼 개수, 특수 잼으로 지운 잼
   assert.equal(shots[0].damage, 48); // raw=10*5-2=48
 });
 
-test('무지개 사격(split): 잼 1개 = 1발, 앞 적이 앞선 발의 예약 피해로 죽을 예정이면 남은 발은 다음 적에게', () => {
-  const state = makeState({ floor: makeFloor({ interval: 0, spawns: [makeStat({ hp: 20 }), makeStat({ hp: 20 })] }) });
+test('무지개 사격(pershot): 잼 1개 = 1발, 앞 적이 앞선 발의 예약 피해로 죽을 예정이면 남은 발은 다음 적에게', () => {
+  const state = makeState({ floor: makeFloor({ interval: 0, spawns: [makeStat({ hp: 20 }), makeStat({ hp: 20 })] }), config: makeConfig({ rainbowDef: 'pershot' }) });
   state.update(0);
   const [front, back] = state.enemies;
   const shots = state.applyGemClear('red', 5, 1, false, null, null, true); // 8씩: 3발이면 앞 적(20) 처치 예정.
@@ -127,6 +127,19 @@ test('무지개 사격(split): 잼 1개 = 1발, 앞 적이 앞선 발의 예약 
   for (const s of shots) state.resolveTowerAttack(s);
   assert.equal(front.state === 'alive', false);
   assert.equal(back.currentHealth, 20 - 16);
+});
+
+test('무지개 사격 방어 처리: split은 발마다 방어/n만 빼고(총합 = 합산 1발), sum은 합산 1발', () => {
+  const split = makeState({ config: makeConfig({ rainbowDef: 'split', cascadeBonusPerStep: 0 }) });
+  split.update(0);
+  const shots = split.applyGemClear('red', 4, 1, false, null, null, true); // 방어 2, n=4 -> 발마다 10 - 0.5 = 9.5 -> 반올림 10
+  assert.deepEqual(shots.map((s) => s.damage), [10, 10, 10, 10]);
+  const weak = makeState({ towers: makeTowers({ red: { stats: { attack: 1 } } }), config: makeConfig({ rainbowDef: 'split' }) });
+  weak.update(0);
+  assert.deepEqual(weak.applyGemClear('red', 4, 1, false, null, null, true).map((s) => s.damage), [1, 1, 1, 1]); // 1 - 0.5 -> 최소 1
+  const sum = makeState({ config: makeConfig({ rainbowDef: 'sum' }) });
+  sum.update(0);
+  assert.deepEqual(sum.applyGemClear('red', 4, 1, false, null, null, true).map((s) => s.damage), [38]); // 10*4 - 2
 });
 
 test('퍼즐 사격 피해: 탑 레벨업으로 towersData.stats.attack을 직접 올리면 즉시 반영된다', () => {

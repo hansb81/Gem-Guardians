@@ -14,6 +14,9 @@ import { pickSummonFrame, isSummonDone } from './summon.js';
 // 예외: 빈 전장 즉시 등장 판정만 core의 순수 함수를 쓴다(시뮬과 같은 규칙을 한 곳에 두려고).
 import { emptySpawnCount } from '../core/balance/emptySpawn.js';
 
+// 무지개 1발의 방어력 처리 기본값(applyGemClear 주석). 게임은 battleConfig.rainbowDef를 안 줘서 이 값을 쓴다.
+export const RAINBOW_DEF_DEFAULT = 'split'; // v13-1: pershot은 잼당 피해가 합산 1발보다 3~5% 약했다(reports/sim/v13/1-rainbowdef.md).
+
 export class BattleState {
   constructor({ towersData, resolvedFloor, battleConfig }) {
     this.towersData = towersData;
@@ -634,6 +637,8 @@ export class BattleState {
   // PuzzleBattleBridge는 특수 잼 발동 이펙트마다 이렇게 부르고, 지워진 칸의 사격은 따로 그대로 쏜다.
   // split = 무지개가 지운 잼(2026-11-19 결정): 합산 1발 대신 잼 1개 = 1발. 발마다 _pickTarget이 앞선 발의
   // 예약 피해를 보고 대상을 다시 고르므로 앞 적을 죽이고 남는 몫이 다음 적에게 간다.
+  // 방어력(battleConfig.rainbowDef, v13-1): 'split'(기본) = n발 총합이 합산 1발과 같게 발마다 방어/n만 뺀다(최소 1),
+  // 'pershot' = 발마다 방어 전부, 'sum' = split을 무시하고 합산 1발(v12-10 동작, 시뮬 비교용).
   // 반환 = 이번에 쏜 towerAttack 이벤트 배열(못 쐈으면 빈 배열).
   applyGemClear(color, count, cascadeIndex, isSpecial = false, specialType = null, chosenColor = null, split = false) {
     const shots = [];
@@ -645,7 +650,10 @@ export class BattleState {
     if (!tower) return shots;
 
     const { cascadeBonusPerStep, minDamage } = this.battleConfig;
+    const rainbowDef = this.battleConfig.rainbowDef ?? RAINBOW_DEF_DEFAULT;
+    if (rainbowDef === 'sum') split = false;
     const gems = split ? 1 : count; // 1발에 담는 잼 수
+    const defDiv = split && rainbowDef === 'split' ? count : 1;
     for (let i = 0; i < count; i += gems) {
       this._pullSpawn();
       const target = this._pickTarget();
@@ -655,7 +663,7 @@ export class BattleState {
       if (this.hooks?.onShot) {
         rawDamage = this.hooks.onShot({ color, count: gems, cascadeIndex, isSpecial, tower, target, rawDamage });
       }
-      const damage = Math.max(minDamage, Math.round((rawDamage - target.def) * this._damageMul(target, color)));
+      const damage = Math.max(minDamage, Math.round((rawDamage - target.def / defDiv) * this._damageMul(target, color)));
       shots.push(this._fireShot(tower, target, damage, cascadeIndex, color, isSpecial));
     }
     return shots;
