@@ -88,6 +88,10 @@ const DEFAULT_ATTACK_FIRE_FRAME = 3;
 const DEFAULT_IDLE_FRAMES = 4;
 const DEFAULT_IDLE_FRAME_MS = 150;
 const DEFAULT_PROJECTILE_SPEED = 480;
+// 한 탑이 한 번에 여러 발(잼 1개 = 1발)을 쏠 때 발 사이 간격. 20발이어도 1초라 shotTimeoutMs(3초) 안.
+const VOLLEY_GAP_MS = 50;
+// 연사의 둘째 발부터 위아래로 번갈아 휘어 날아간다(여러 갈래). 값 = 거리 대비 휨, 꼭대기 벗어남은 그 절반.
+const VOLLEY_BENDS = [0, 0.2, -0.2, 0.4, -0.4];
 
 // 탑 5개 배치 순서(config/balance.json tower.towers 순서 = red,blue,yellow,green,purple)의 열.
 // 왼쪽 열 = 1·3·5번째(3개), 오른쪽 열 = 2·4번째(2개) - 지그재그(assets/towers/README.md).
@@ -117,7 +121,7 @@ function hashOffset(id) {
 export class BattleRenderer {
   constructor() {
     // 탑 id -> { mode: 'idle'|'attack', attackStartMs, firedProjectile, idleOffsetMs,
-    // targetEnemyId, fallbackTargetPos }. draw()가 매 프레임 갱신한다(렌더 전용 상태,
+    // volley: [{ event, fallbackPos }] }(이번 공격 동작에 쏠 발들). draw()가 매 프레임 갱신한다(렌더 전용 상태,
     // battleState는 발사 "시점"만 이벤트로 알려줄 뿐 애니메이션 진행은 모른다).
     this._towerAnimStates = new Map();
     // towerAttack 이벤트(객체 참조) 단위 처리 여부 - CanvasRenderer._seenEffects와 같은
@@ -940,9 +944,7 @@ export class BattleRenderer {
         attackStartMs: 0,
         firedProjectile: false,
         idleOffsetMs: hashOffset(towerId),
-        targetEnemyId: null,
-        hitEvent: null,
-        fallbackTargetPos: null,
+        volley: [],
       };
       this._towerAnimStates.set(towerId, anim);
     }
@@ -964,21 +966,17 @@ export class BattleRenderer {
       if (towerIndex < 0) continue;
       const tower = towers[towerIndex];
       const anim = this._ensureTowerAnim(tower.id);
-      // 연쇄로 같은 탑이 연달아 쏘면 이전 공격이 아직 fireFrame에 닿기 전일 수 있다.
-      // 애니메이션을 처음부터 다시 돌리기 전에 그 한 발을 지금 바로 발사해 잃지 않게 한다.
-      if (anim.mode === 'attack' && !anim.firedProjectile && anim.hitEvent) {
-        const prevEnemy = enemies.find((e) => e.id === anim.targetEnemyId);
-        const prevPos = prevEnemy ? this._enemyPixelPos(track, prevEnemy) : anim.fallbackTargetPos;
-        const prevMuzzle = this._towerMuzzlePosition(towerArea, towerIndex, assets, tower.color);
-        if (prevPos && prevMuzzle) this._spawnTowerProjectile(tower, prevMuzzle, prevPos, now, anim.hitEvent, towerIndex);
+      const enemy = enemies.find((e) => e.id === event.targetEnemyId);
+      const shot = { event, fallbackPos: enemy ? this._enemyPixelPos(track, enemy) : null };
+      // 아직 fireFrame 전인 공격 동작이 있으면(같은 순간의 여러 발, 연쇄로 이어진 발) 그 동작에 합쳐 연사한다.
+      if (anim.mode === 'attack' && !anim.firedProjectile) {
+        anim.volley.push(shot);
+        continue;
       }
       anim.mode = 'attack';
       anim.attackStartMs = now;
       anim.firedProjectile = false;
-      anim.targetEnemyId = event.targetEnemyId;
-      anim.hitEvent = event;
-      const enemy = enemies.find((e) => e.id === event.targetEnemyId);
-      anim.fallbackTargetPos = enemy ? this._enemyPixelPos(track, enemy) : null;
+      anim.volley = [shot];
     }
 
     for (let i = 0; i < towers.length; i++) {
@@ -994,10 +992,15 @@ export class BattleRenderer {
 
       if (frame >= fireFrame && !anim.firedProjectile) {
         anim.firedProjectile = true;
-        const enemy = enemies.find((e) => e.id === anim.targetEnemyId);
-        const targetPos = enemy ? this._enemyPixelPos(track, enemy) : anim.fallbackTargetPos;
         const muzzle = this._towerMuzzlePosition(towerArea, i, assets, tower.color);
-        if (targetPos && muzzle) this._spawnTowerProjectile(tower, muzzle, targetPos, now, anim.hitEvent, i);
+        for (let k = 0; k < anim.volley.length; k++) {
+          const { event, fallbackPos } = anim.volley[k];
+          const enemy = enemies.find((e) => e.id === event.targetEnemyId);
+          const targetPos = enemy ? this._enemyPixelPos(track, enemy) : fallbackPos;
+          const bend = k === 0 ? 0 : VOLLEY_BENDS[1 + ((k - 1) % (VOLLEY_BENDS.length - 1))];
+          if (targetPos && muzzle) this._spawnTowerProjectile(tower, muzzle, targetPos, now, event, i, k * VOLLEY_GAP_MS, bend);
+        }
+        anim.volley = [];
       }
 
       if (frame >= frames) anim.mode = 'idle';
@@ -1023,9 +1026,13 @@ export class BattleRenderer {
     return true;
   }
 
-  _spawnTowerProjectile(tower, from, to, now, hitEvent, index) {
+  // delayMs: 연사의 뒤쪽 발 - 그 시간만큼 늦게 출발한다(그 전엔 안 그림).
+  // bend: 거리 대비 휨(0 = 직선). 2차 베지어 조절점을 출발-도착 중점에서 수직으로 dist*bend만큼 민다.
+  _spawnTowerProjectile(tower, from, to, now, hitEvent, index, delayMs = 0, bend = 0) {
     const speed = tower.stats?.projectileSpeed ?? DEFAULT_PROJECTILE_SPEED;
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const nx = dist > 0 ? -(to.y - from.y) / dist : 0;
+    const ny = dist > 0 ? (to.x - from.x) / dist : 0;
     const durationMs = Math.max(80, (dist / speed) * 1000);
     // 공격 연출 tier는 쏜 순간의 레벨로 고정(비행 중 강화해도 이 발은 그대로). 설정을 끄면 0.
     const hud = this._hud;
@@ -1033,7 +1040,7 @@ export class BattleRenderer {
     const assets = this._assets;
     const atkScale = assets?.towerAnims?.get(`tower_attack_${tower.color}`)?.drawScale ?? assets?.towerAnims?.get(`tower_idle_${tower.color}`)?.drawScale ?? 0;
     const atkFlip = to.x < from.x; // 시트는 오른쪽으로 쏘는 방향
-    if (atkScale && atkCfg(assets.guardianAtkManifest, 'cast', atkTier, tower.color)) this._atkFx.cast(atkTier, tower.color, from.x, from.y, atkScale, atkFlip, now);
+    if (delayMs === 0 && atkScale && atkCfg(assets.guardianAtkManifest, 'cast', atkTier, tower.color)) this._atkFx.cast(atkTier, tower.color, from.x, from.y, atkScale, atkFlip, now);
     this._towerProjectiles.push({
       color: tower.color,
       atkTier,
@@ -1045,7 +1052,10 @@ export class BattleRenderer {
       fromY: from.y,
       toX: to.x,
       toY: to.y,
-      startMs: now,
+      bend,
+      ctrlX: (from.x + to.x) / 2 + nx * dist * bend,
+      ctrlY: (from.y + to.y) / 2 + ny * dist * bend,
+      startMs: now + delayMs,
       durationMs,
       hitEvent,
     });
@@ -1061,6 +1071,10 @@ export class BattleRenderer {
     const next = [];
     for (const p of this._towerProjectiles) {
       const t = (now - p.startMs) / p.durationMs;
+      if (t < 0) {
+        next.push(p); // 연사 대기 중인 발.
+        continue;
+      }
       if (t >= 1) {
         if (p.hitEvent) {
           // 맞은 점 = 몬스터 앞쪽 가장자리·몸 가운데(지난 프레임 위치). 이미 죽은 목표면 아무것도 안 그린다.
@@ -1084,14 +1098,17 @@ export class BattleRenderer {
       }
       next.push(p);
 
-      const x = p.fromX + (p.toX - p.fromX) * t;
-      const y = p.fromY + (p.toY - p.fromY) * t;
+      // 2차 베지어(조절점이 중점이면 직선과 같다). 휜 발은 진행 방향으로 매 프레임 기울인다.
+      const u = 1 - t;
+      const x = u * u * p.fromX + 2 * u * t * p.ctrlX + t * t * p.toX;
+      const y = u * u * p.fromY + 2 * u * t * p.ctrlY + t * t * p.toY;
+      const rot = p.bend ? quantizeAngle(u * (p.ctrlX - p.fromX) + t * (p.toX - p.ctrlX), u * (p.ctrlY - p.fromY) + t * (p.toY - p.ctrlY)) : p.atkRot;
       const projData = assets?.towerProjectiles?.get(p.color);
 
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       const atk = p.atkScale ? atkCfg(assets?.guardianAtkManifest, 'proj', p.atkTier, p.color) : null;
-      if (atk && drawAtkSprite(ctx, assets, 'proj', p.atkTier, p.color, atkFrame(atk, now - p.startMs), x, y, p.atkScale, p.atkFlip, p.buffed ? this._brightSheetFn : null, p.atkRot)) {
+      if (atk && drawAtkSprite(ctx, assets, 'proj', p.atkTier, p.color, atkFrame(atk, now - p.startMs), x, y, p.atkScale, p.atkFlip, p.buffed ? this._brightSheetFn : null, rot)) {
         // 수호자 레벨 구간 투사체(그렸음). 새 에셋 로드 실패면 아래 예전 projectile_{색}.
       } else if (projData && projData.state.loaded && !projData.state.failed) {
         const w = projData.frameW * scale;
