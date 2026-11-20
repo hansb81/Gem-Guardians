@@ -67,7 +67,9 @@ export function refill(board, columns = null, { mode = 'random' } = {}) {
 
 // (r, c)에 t를 놓으면 가로/세로 3연속이나 2x2가 생기는지 - 네 방향 전부 본다(리필은 아래 칸이 이미 차 있다).
 export function wouldMatchAt(grid, rows, cols, r, c, t) {
-  const at = (rr, cc) => (rr >= 0 && rr < rows && cc >= 0 && cc < cols ? grid[rr * cols + cc] : EMPTY);
+  if (!(t >= 0)) return false; // EMPTY·COLORLESS·OBSTACLE 등 젬 색이 아닌 값은 매치를 만들지 않는다.
+  // 판 밖은 어떤 칸 값과도 다른 null - EMPTY로 두면 t가 EMPTY일 때 판 밖으로 끝없이 센다.
+  const at = (rr, cc) => (rr >= 0 && rr < rows && cc >= 0 && cc < cols ? grid[rr * cols + cc] : null);
   let run = 1;
   for (let cc = c - 1; at(r, cc) === t; cc--) run++;
   for (let cc = c + 1; at(r, cc) === t; cc++) run++;

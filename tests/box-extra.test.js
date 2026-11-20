@@ -79,7 +79,8 @@ test('2x2를 완성시키는 스왑도 findAnyValidMove/hasAnyValidMove가 찾�
   assert.equal(hasAnyValidMove(board), true);
 
   const move = findAnyValidMove(board);
-  assert.deepEqual(move, { from: { row: 0, col: 1 }, to: { row: 0, col: 2 } }, '첫 번째로 발견되는 유효한 수가 2x2를 완성시키는 스왑이어야 한다');
+  // from = 매치를 만드는 젬(힌트 칸) - (0,2)의 0이 (0,1)로 옮겨 가 2x2를 완성한다.
+  assert.deepEqual(move, { from: { row: 0, col: 2 }, to: { row: 0, col: 1 } }, '첫 번째로 발견되는 유효한 수가 2x2를 완성시키는 스왑이어야 한다');
 
   // 실제로 그 스왑이 2x2(square)를 만드는지 직접 확인한다.
   const swapped = board.grid.slice();
