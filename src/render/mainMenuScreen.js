@@ -184,7 +184,9 @@ function shortTime(ms) {
 }
 
 // 출석(7일판) - 카드 왼쪽 위 기준. 1줄 4칸 + 2줄 3칸, 아래 받기 버튼.
-const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], claim: [100, 318, 200, 50] };
+// streakRow = 연속 출석 줄(왼쪽 "연속 n일", 가운데 점, 오른쪽 보너스 아이콘 32px) + 그 아래 안내 문구. dot = 점 한 변, dotGap = 점 사이.
+const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], streakRow: [24, 308, 352, 48], dot: 8, dotGap: 6, claim: [100, 370, 200, 50] };
+const STREAK_DOT = { on: '#f2d264', off: '#3b3347' };
 // 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼.
 // shortcut: 스크롤 없이 최근 MAIL.rows통만 보임 - 전체 우편을 처음 보내기 전에 스크롤 추가(쑹 2026-11-09).
 const MAIL = { y: 92, rowH: 72, rows: 6, claim: [272, 10, 92, 44] };
@@ -613,12 +615,52 @@ export class MainMenuScreen {
         ctx.strokeRect(sr.x, sr.y, sr.width, sr.height);
       }
     });
+    if (s.streakGoal > 0) this._drawAttStreak(ctx, card, s);
     const can = !s.claimedToday && !this.server.att.busy;
     const r = [card[0] + ATT.claim[0], card[1] + ATT.claim[1], ATT.claim[2], ATT.claim[3]];
     const down = this._pressed === 'attClaim';
     const img = can ? `buttons/btn_primary${down ? '_pressed' : ''}.png` : 'buttons/btn_secondary.png';
     if (!this._nine(ctx, img, r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
     this._text(ctx, t(s.claimedToday ? 'net.att.tomorrow' : 'net.att.claim'), r[0] + r[2] / 2, r[1] + r[3] / 2 + (down ? 2 : 0), { size: 15, align: 'center' });
+  }
+
+  // 연속 출석 줄(옛 서버 = streakGoal 없음이면 안 그린다). 점 = 이번 7일 중 채운 날, 7의 배수 날 받은 당일은 전부 금색.
+  _drawAttStreak(ctx, card, s) {
+    const goal = s.streakGoal;
+    const n = s.streak ?? 0;
+    const x = card[0] + ATT.streakRow[0];
+    const cy = card[1] + ATT.streakRow[1] + 16;
+    const right = x + ATT.streakRow[2];
+    this._text(ctx, t('net.att.streak', { n }), x, cy, { size: 11, color: COLORS.title });
+    const filled = s.claimedToday && n > 0 && n % goal === 0 ? goal : n % goal;
+    const dx = card[0] + (card[2] - (goal * ATT.dot + (goal - 1) * ATT.dotGap)) / 2;
+    for (let i = 0; i < goal; i++) {
+      const o = this._toScreen([dx + i * (ATT.dot + ATT.dotGap) - 2, cy - ATT.dot / 2 - 2, ATT.dot + 4, ATT.dot + 4]);
+      ctx.fillStyle = COLORS.outline;
+      ctx.fillRect(o.x, o.y, o.width, o.height);
+      const d = this._toScreen([dx + i * (ATT.dot + ATT.dotGap), cy - ATT.dot / 2, ATT.dot, ATT.dot]);
+      ctx.fillStyle = i < filled ? STREAK_DOT.on : STREAK_DOT.off;
+      ctx.fillRect(d.x, d.y, d.width, d.height);
+    }
+    // 보너스 아이콘: _bundleIcon은 묶음당 하나라 재화·아이템을 하나짜리 묶음으로 나눠 둔다(보상표가 바뀔 때만 다시 만든다).
+    const b = s.streakBonus;
+    if (this._streakIconsOf !== b) {
+      this._streakIconsOf = b;
+      this._streakIcons = [
+        ...(b?.gold ? [{ gold: b.gold }] : []),
+        ...(b?.diamonds ? [{ diamonds: b.diamonds }] : []),
+        ...Object.keys(b?.items ?? {}).map((id) => ({ items: { [id]: b.items[id] } })),
+      ];
+    }
+    const icons = this._streakIcons;
+    for (let i = 0; i < icons.length; i++) this._bundleIcon(ctx, icons[i], right - (icons.length - i) * 36 + 4, cy - 16);
+    // 안내: 남은 날 수 = 오늘 받을 것까지 포함. 1일 남았고 아직 안 받았으면 "오늘 받으면".
+    const left = goal - (n % goal);
+    const ty = card[1] + ATT.streakRow[1] + 42;
+    const tx = card[0] + card[2] / 2;
+    if (!s.claimedToday && left === 1) this._text(ctx, t('net.att.streakToday'), tx, ty, { size: 11, align: 'center', color: COLORS.title });
+    else if (!s.claimedToday && s.streakBroken) this._text(ctx, t('net.att.streakBroken'), tx, ty, { size: 11, align: 'center', color: COLORS.dim });
+    else this._text(ctx, t('net.att.streakLeft', { n: left }), tx, ty, { size: 11, align: 'center' });
   }
 
   _mailRows(card) {
@@ -1579,7 +1621,11 @@ export class MainMenuScreen {
         this._pressed = 'attClaim';
         return 'attClaim';
       }
-      return null;
+      if (s?.ok && s.claimedToday && pressButton(x, y, this._toScreen(r))) {
+        this.popup = null; // "내일 또 와요" = 닫기
+        return null;
+      }
+      // 그 밖은 아래 공통 처리로 - 카드 바깥 탭 = 닫기.
     }
 
     if (this.popup === 'mail' && this.server?.mail) {
@@ -1589,7 +1635,7 @@ export class MainMenuScreen {
         this._pressed = `mail:${m.id}`;
         return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
       }
-      return null;
+      // 그 밖은 아래 공통 처리로 - 카드 바깥 탭 = 닫기.
     }
 
     if (this.popup === 'mode') {

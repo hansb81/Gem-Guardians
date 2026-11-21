@@ -1,12 +1,13 @@
 {
-  "_doc": "docs/server.md §8-1 출석 7일판 반복(빠져도 안 끊김, 7일째 큰 보상 후 1일로). 판정·지급은 서버 - 이 표는 server/supabase/functions/_shared/attendance.ts 와 같아야 한다(tests/attendance.test.js가 확인). 숫자는 임시 - 주당 다이아 95개는 상점 다이아 가격과 맞춰 밸런스 작업 때 확정(쑹 2026-11-09).",
+  "_doc": "docs/server.md §8-1 출석 7일판 반복(빠져도 안 끊김, 7일째 큰 보상 후 1일로) + 연속 출석 보너스(streak: 연속 일수가 goal의 배수인 날 bonus를 그날 보상에 더함, 하루 빠지면 1일부터). 판정·지급은 서버 - 이 표는 server/supabase/functions/_shared/attendance.ts 와 같아야 한다(tests/attendance.test.js가 확인). 숫자는 임시 - 주당 다이아 95개(하루도 안 빠지면 연속 보너스까지 125개)는 상점 다이아 가격과 맞춰 밸런스 작업 때 확정(쑹 2026-11-09, 연속 보너스 2026-11-21).",
   "days": [
     { "diamonds": 10 },
-    { "items": { "dye": 1 } },
+    { "items": { "repair": 1 } },
     { "diamonds": 15 },
-    { "items": { "hammer": 1 } },
+    { "items": { "hourglass": 1 } },
     { "diamonds": 20 },
-    { "items": { "shuffle": 1 } },
+    { "items": { "scythe_h": 2 } },
     { "diamonds": 50, "items": { "rainbow": 1 } }
-  ]
+  ],
+  "streak": { "goal": 7, "bonus": { "diamonds": 30, "items": { "revive": 1 } } }
 }

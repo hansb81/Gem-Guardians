@@ -300,6 +300,15 @@ AdMob 콘솔 → 앱 → 광고 단위(보상형) → 서버 측 확인 → URL 
 - 날짜 = **서버 시각 KST 기준**(매일 00:00 KST 갱신, 랭킹 시즌 기준과 같음). 기기 시계는 표시용으로만.
 - 규칙 기본안(바꿔도 됨): **7일판 반복**, 하루 1칸, 빠진 날은 그냥 다음 칸(연속 끊김 벌칙 없음 = 캐주얼 친화), 7일째 큰 보상 후 1일로. 보상표는 `config/attendance.json` → 서버에도 같은 표 복사(랭킹 보상표와 같은 방식).
 - 판정 SQL 한 번: `last_date < today_kst`일 때만 `days+1`, claims에 `att:{today}` 삽입(중복이면 거절) — 같은 트랜잭션.
+- **연속 출석 보너스**(2026-11-21, `migrations/20261121000000_att_streak.sql`, 보상표 `config/attendance.json`의 `streak` = 서버 `ATTENDANCE_STREAK`):
+  - 출석판 7칸(`days`)은 위 규칙 그대로 누적. 연속은 **따로** 센다: 서버 KST 날짜로 어제도 받았으면 `streak + 1`, 아니면(처음·하루라도 빠짐) 오늘이 1.
+  - 연속 일수가 `goal`(7)의 배수(7, 14, 21…)인 날 `bonus`(다이아 30 + 불사조 깃털 1)를 그날 출석 보상에 더한다. 출석판 몇째 칸이든 상관없음. 보호권·보충 없음.
+  - 컬럼(`attendance`): `streak`(지금 연속 일수, 저장값 — 끊겼는지는 읽을 때 `last_date`로 판단), `best_streak`(최고 기록), `streak_bonuses`(보너스 받은 횟수). 기존 플레이어는 마이그레이션이 `claims`의 `att:{날짜}`로 되채움(배포일 KST 기준 `last_date`가 오늘·어제가 아니면 `streak = 0`).
+  - `att_claim(p_player, p_today, p_bundles, p_streak)`: 같은 트랜잭션·같은 `for update` 안에서 연속 계산 → 보너스 날이면 `bundle_add(판 보상, bonus)`로 합침. **txId는 그대로 `att:{날짜}` 하나, claims에는 합친 bundle 하나** — 기기 지급·`claims-pending` 복구 경로는 안 바뀜.
+  - 응답: `att-claim` = 기존 + `streak`, `streakBonus`(받았으면 보너스 bundle, 아니면 null). `already`일 때도 `streak` 포함. `att-status`/`hello.att` = 기존 + `streak`(`last_date`가 오늘·어제면 저장값, 아니면 0), `streakBroken`(`last_date`가 그저께 이전이고 저장값 > 0), `streakGoal`, `streakBonus`(보상표).
+  - 계정 병합(`account_merge`): attendance는 남는 계정 쪽 행 유지, 게스트 쪽 연속은 합치지 않음(게스트 행은 삭제 — 기존 동작 그대로).
+  - 기기: 팝업 7칸 아래 연속 줄(점 7개 + 보너스 아이콘 + 안내 문구), 보너스 받은 날 획득 팝업 제목 "7일 연속 출석 보너스!", 하루 첫 메뉴 진입 때 출석 팝업 자동 1회(기기 저장 `attAutoDate` = 마지막으로 자동으로 연 서버 today).
+  - **배포 순서**: ① 프로젝트 ref가 `jzpjqfbpqzghprqbqexp`(GemGuardians)인지 먼저 확인 — **Routory 프로젝트에 절대 올리지 말 것** ② `npx supabase db push --linked` ③ `npx supabase functions deploy att-claim att-status hello`. 옛 3인자 함수 drop과 새 함수 배포 사이 몇 초는 출석이 실패할 수 있다 — 기기는 실패 시 그냥 다시 시도하면 됨.
 - 오프라인이면 버튼에 "연결이 필요해요". 서버 없는 단계(웹 베타)에서는 출석 버튼을 **잠그거나** 기기 시계로 돌리되 보상을 골드 소량으로만(§11 S0).
 
 ### 8-2. 보상형 광고 (배치 기획은 아직, 서버 쪽 자리만)

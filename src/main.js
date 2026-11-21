@@ -31,7 +31,7 @@ import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
 import { restore, flushPendingPurchases, startPendingPurchases } from './shop/iap.js';
 import { storage } from './platform/storage.js';
 import { guardianFxSetting, lookGrade } from './render/guardianFx.js';
-import { loadServerConfig, setupServer } from './game/serverUi.js';
+import { loadServerConfig, setupServer, autoOpenAttendance } from './game/serverUi.js';
 import { titleLoginMode, linkFromTitle } from './game/titleLogin.js';
 import { showRewarded } from './game/ads.js';
 import { continueOptions, recordUse } from './game/adContinue.js';
@@ -1676,6 +1676,8 @@ function loop(now) {
       mainMenuScreen.openSaveConflict(cloudConflict);
       cloudConflict = null;
     } else if ((nudgeCheck || pendingNudge) && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) maybeNudge();
+    // 하루 첫 메뉴 진입: 출석 팝업 자동 1회(저장 충돌·연결 권유가 먼저, 그게 닫힌 뒤에).
+    else if (!cloudConflict && !prep && !fade && !ranking.isOpen && !rewardPopup.active) autoOpenAttendance(serverUi.att, mainMenuScreen, !!playerState.tutorial?.done);
     renderer.drawRankingPopup(ranking, now);
     renderer.drawRewardPopup(rewardPopup); // 출석·우편 받기
     drawFade(rawDtMs);

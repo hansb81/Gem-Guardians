@@ -9,6 +9,7 @@ const dir = new URL("../migrations/", import.meta.url);
 const STUB = `
   create role anon; create role authenticated; create role service_role bypassrls;
   create schema auth; create table auth.users (id uuid primary key);
+  create schema storage; create table storage.buckets (id text primary key, name text, public boolean); -- 20261119 threads_media
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema public, auth to anon, authenticated, service_role;
@@ -116,7 +117,7 @@ Deno.test("rewind(force + reason rewind): 덮기 전 save_backups(rewind), serve
   assertEquals((await rows(pg, "select rev from public.save_backups where player_id = $1 and reason = 'rewind'", [A])).map((x) => Number(x.rev)), [2]);
   const [log] = await rows(pg, "select level, body from public.server_log where source = 'save-rewind'");
   assertEquals(log.level, "warn");
-  assertEquals((log.body as { serverRev: number; localRev: number }), { uid: A, serverRev: 2, localRev: 7 });
+  assertEquals((log.body as { uid: string; serverRev: number; localRev: number }), { uid: A, serverRev: 2, localRev: 7 });
   assertEquals((await put(pg, A, { baseRev: 3, reason: "other" })).reason, "badRequest");
 });
 

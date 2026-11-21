@@ -2,22 +2,30 @@
 // 각 함수와 hello가 같은 코드를 쓴다 - hello 한 번으로 시작 호출을 4~5번에서 1번으로.
 import { must } from "./result.ts";
 import { kstDate } from "./kst.ts";
-import { ATTENDANCE_DAYS } from "./attendance.ts";
+import { ATTENDANCE_DAYS, ATTENDANCE_STREAK } from "./attendance.ts";
 import { visibleMail } from "./mail.ts";
 import { saveMeta } from "./save.ts";
 
 // deno-lint-ignore no-explicit-any
 type Db = any;
 
-// 이번 판 진행·오늘 받았는지·보상표.
+// 이번 판 진행·오늘 받았는지·보상표 + 연속 출석(표시용: 어제·오늘 받은 게 아니면 끊긴 것 = 0).
 export async function attStatus(db: Db, uid: string) {
   const today = kstDate();
-  const a = must(await db.from("attendance").select("days, last_date").eq("player_id", uid).maybeSingle()) as
-    | { days: number; last_date: string }
+  const a = must(await db.from("attendance").select("days, last_date, streak").eq("player_id", uid).maybeSingle()) as
+    | { days: number; last_date: string | null; streak?: number }
     | null;
   const claimedToday = a?.last_date === today;
   const days = a && !(a.days >= 7 && !claimedToday) ? a.days : 0; // 7칸 다 받고 날이 바뀌면 새 판
-  return { ok: true, today, days, claimedToday, rewards: ATTENDANCE_DAYS };
+  const alive = claimedToday || a?.last_date === kstDate(Date.now() - 86400e3);
+  const saved = a?.streak ?? 0;
+  return {
+    ok: true, today, days, claimedToday, rewards: ATTENDANCE_DAYS,
+    streak: alive ? saved : 0,
+    streakBroken: !!a?.last_date && !alive && saved > 0, // 그저께 이전에 끊김 - 오늘 받으면 1일부터
+    streakGoal: ATTENDANCE_STREAK.goal,
+    streakBonus: ATTENDANCE_STREAK.bonus,
+  };
 }
 
 // 우편 목록(최근 50, 받은 것도 claimed로 표시).

@@ -392,7 +392,7 @@ export class MineScreen {
   _cost(ctx, icon, size, text, cx, cy, color = C.outline) {
     const w = size + 4 + this._measure(ctx, text, 11);
     this._img(ctx, icon, cx - w / 2, cy - size / 2, size, size);
-    this._text(ctx, text, cx - w / 2 + size + 4, cy, 11, color, 'left');
+    this._text(ctx, text, cx - w / 2 + size + 4, cy, 11, color, 'left', color !== C.outline);
   }
 
   _btn2(ctx, skin, rect, line1, drawLine2, id, color) {
@@ -400,8 +400,9 @@ export class MineScreen {
     this._nine(ctx, down ? `${skin}_pressed.png` : `${skin}.png`, ...rect);
     const cx = rect[0] + rect[2] / 2;
     const cy = rect[1] + rect[3] / 2 - 1 + (down ? 2 : 0);
-    if (!drawLine2) return void this._text(ctx, line1, cx, cy, 11, color, 'center');
-    this._text(ctx, line1, cx, cy - 9, 11, color, 'center');
+    const ol = color !== C.outline; // 어두운 글자가 아니면 외곽선으로 버튼 바탕과 분리한다
+    if (!drawLine2) return void this._text(ctx, line1, cx, cy, 11, color, 'center', ol);
+    this._text(ctx, line1, cx, cy - 9, 11, color, 'center', ol);
     drawLine2(cx, cy + 10);
   }
 
@@ -496,9 +497,9 @@ export class MineScreen {
     this._drawSparks(ctx, r.id, i, nowMs);
     this._text(ctx, r.name, ROW.textX, y + 24, 11, C.bone, 'left', true);
     const lw = this._measure(ctx, r.lv, 11);
-    this._nine(ctx, 'panels/box_floor.png', ROW.textX, y + 37, lw + 16, 22);
-    this._text(ctx, r.lv, ROW.textX + 8, y + 48, 11, C.goldL);
-    this._text(ctx, r.maxLv, ROW.textX + lw + 18, y + 48, 11, C.dim, 'left', true);
+    this._nine(ctx, 'panels/box_floor.png', ROW.textX, y + 35, lw + 20, 26);
+    this._text(ctx, r.lv, ROW.textX + 10, y + 48, 11, C.goldL);
+    this._text(ctx, r.maxLv, ROW.textX + lw + 22, y + 48, 11, C.dim, 'left', true);
     this._text(ctx, r.next ? `${r.rate} →` : r.rate, ROW.textX, y + 72, 11, C.bone, 'left', true);
     if (r.next) this._text(ctx, r.next, ROW.textX + this._measure(ctx, `${r.rate} → `, 11), y + 72, 11, C.grnL, 'left', true);
     const b = this._rowBtn(i);
@@ -509,7 +510,7 @@ export class MineScreen {
       return;
     }
     const label = this.armed === `up${i}` ? t('mine.again') : t('mine.up');
-    if (r.ok) this._btn2(ctx, 'buttons/btn_gold', b, label, (cx, cy) => this._cost(ctx, 'icons/ore_small.png', 16, r.cost, cx, cy), `up${i}`, C.outline);
+    if (r.ok) this._btn2(ctx, 'buttons/btn_gold', b, label, (cx, cy) => this._cost(ctx, 'icons/ore_small.png', 16, r.cost, cx, cy, C.bone), `up${i}`, C.outline);
     else this._btn2(ctx, 'upgrade/btn_disabled', b, label, (cx, cy) => this._cost(ctx, 'icons/ore_small.png', 16, r.cost, cx, cy, C.redL), `up${i}`, C.dim);
   }
 

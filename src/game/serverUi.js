@@ -10,6 +10,8 @@ import { audio } from '../audio/AudioManager.js';
 import { GAME_INFO } from '../config/gameInfo.js';
 import { t } from '../config/i18n.js';
 
+const ATT_AUTO_KEY = 'attAutoDate'; // 출석 팝업을 마지막으로 자동으로 연 KST 날짜(서버 today)
+let attAutoDate; // 위 값 캐시(매 프레임 storage를 읽지 않게)
 const HOLD_MS = 500; // 플레이어 코드 길게 누르기
 const NOTICE_MS = 2000;
 
@@ -20,6 +22,18 @@ export async function loadServerConfig() {
   } catch {
     return null;
   }
+}
+
+// 하루 첫 메뉴 진입 때 출석 팝업 자동 1회: 서버 상태를 받았고, 오늘 안 받았고, 튜토리얼이 끝났고, 다른 메뉴 팝업이 없을 때.
+// 그 밖의 겹침(정비·랭킹·획득 팝업·전환 중)은 부르는 쪽(main.js)이 거른다. 열었으면 true.
+export function autoOpenAttendance(att, menu, tutorialDone) {
+  const s = att?.status;
+  if (!s?.ok || s.claimedToday || !tutorialDone || menu.popup) return false;
+  attAutoDate ??= storage.load(ATT_AUTO_KEY);
+  if (attAutoDate === s.today) return false;
+  storage.save(ATT_AUTO_KEY, (attAutoDate = s.today));
+  menu.popup = 'attendance';
+  return true;
 }
 
 // dev = ?dev=1 (개발 패널의 서버 켜기/끄기가 storage 'devServer'에 남긴 값을 쓴다).
@@ -87,8 +101,10 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
   const notice = (key) => {
     menu.aboutNotice = { key, until: performance.now() + NOTICE_MS };
   };
-  const showGrant = (res) => {
-    if (res.ok) rewardPopup.show(rewardFromDelta(res.delta));
+  const showGrant = (res, title = null) => {
+    const reward = res.ok ? rewardFromDelta(res.delta) : null;
+    if (reward && title) reward.title = title;
+    if (res.ok) rewardPopup.show(reward);
     else audio.play('gem_swap_fail');
   };
 
@@ -96,7 +112,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
   ui.handleMenuAction = (action) => {
     if (action === 'open:attendance') ui.att?.refresh();
     else if (action === 'open:mail') ui.mail?.refresh();
-    else if (action === 'attClaim') ui.att?.claim().then(showGrant);
+    else if (action === 'attClaim') ui.att?.claim().then((res) => showGrant(res, res.streakBonus ? t('net.att.streakBonusTitle') : null));
     else if (typeof action === 'string' && action.startsWith('mailClaim:')) ui.mail?.claim(Number(action.slice(10))).then(showGrant);
     else if (typeof action === 'string' && action.startsWith('mailDelete:')) ui.mail?.remove(Number(action.slice(11)));
     else if (typeof action === 'string' && action.startsWith('couponRedeem:')) {

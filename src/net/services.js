@@ -13,9 +13,12 @@ function grantClaim(inventory, res, src, callFn = call) {
 }
 
 export class AttendanceService {
-  constructor(inventory) {
+  // api = { call, syncClaims } - 테스트가 가짜로 바꿔 끼운다.
+  constructor(inventory, api = { call, syncClaims }) {
     this.inventory = inventory;
-    this.status = null; // null = 아직 모름 | { ok:true, today, days, claimedToday, rewards } | { ok:false, reason }
+    this.api = api;
+    // null = 아직 모름 | { ok:true, today, days, claimedToday, rewards, streak, streakBroken, streakGoal, streakBonus(보상표) } | { ok:false, reason }
+    this.status = null;
     this.busy = false;
   }
 
@@ -33,15 +36,20 @@ export class AttendanceService {
     if (this.busy) return { ok: false, reason: 'busy' };
     this.busy = true;
     try {
-      const res = await call('att-claim');
+      const res = await this.api.call('att-claim');
       if (!res.ok) {
         // 이미 받음: 응답이 끊겨 못 받은 지급이 있을 수 있다 - pending으로 복구.
-        if (res.reason === 'already') await syncClaims(this.inventory);
+        if (res.reason === 'already') await this.api.syncClaims(this.inventory);
         if (res.reason !== 'offline') await this.refresh();
         return res;
       }
-      if (this.status?.ok) Object.assign(this.status, { days: res.day, claimedToday: true });
-      return grantClaim(this.inventory, res, 'attendance');
+      // streakBonus(응답) = 이번에 받은 연속 보너스 bundle | null. status.streakBonus는 보상표라 다른 이름(streakBonusGot)에 둔다.
+      const streakBonus = res.streakBonus ?? null;
+      if (this.status?.ok) {
+        Object.assign(this.status, { days: res.day, claimedToday: true, streakBonusGot: streakBonus });
+        if (res.streak != null) Object.assign(this.status, { streak: res.streak, streakBroken: false }); // 옛 서버는 streak 없음
+      }
+      return { ...grantClaim(this.inventory, res, 'attendance', this.api.call), streakBonus };
     } finally {
       this.busy = false;
     }

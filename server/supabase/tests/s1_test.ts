@@ -3,7 +3,7 @@
 // (Docker가 있으면 supabase start 후 실제 DB에도 같은 SQL이 올라간다 - 이 테스트는 SQL 규칙만 본다.)
 import { PGlite } from "npm:@electric-sql/pglite@0.3";
 import { assert, assertEquals, assertRejects } from "jsr:@std/assert@1";
-import { ATTENDANCE_DAYS } from "../functions/_shared/attendance.ts";
+import { ATTENDANCE_DAYS, ATTENDANCE_STREAK } from "../functions/_shared/attendance.ts";
 import { kstDate } from "../functions/_shared/kst.ts";
 import { hasBadword } from "../functions/_shared/badwords.ts";
 
@@ -11,6 +11,7 @@ const dir = new URL("../migrations/", import.meta.url);
 const STUB = `
   create role anon; create role authenticated; create role service_role bypassrls;
   create schema auth; create table auth.users (id uuid primary key);
+  create schema storage; create table storage.buckets (id text primary key, name text, public boolean); -- 20261119 threads_media
   create function auth.uid() returns uuid language sql stable as
     $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
   grant usage on schema public, auth to anon, authenticated, service_role;
@@ -32,8 +33,8 @@ async function setup() {
 }
 
 const claim = async (db: PGlite, who: string, day: string) =>
-  (await db.query<{ r: Record<string, unknown> }>("select public.att_claim($1, $2::date, $3::jsonb) r",
-    [who, day, JSON.stringify(ATTENDANCE_DAYS)])).rows[0].r;
+  (await db.query<{ r: Record<string, unknown> }>("select public.att_claim($1, $2::date, $3::jsonb, $4::jsonb) r",
+    [who, day, JSON.stringify(ATTENDANCE_DAYS), JSON.stringify(ATTENDANCE_STREAK)])).rows[0].r;
 
 Deno.test("출석: 같은 날 2번 -> already, 날짜 넘기면 다음 칸, 빠진 날은 그냥 다음 칸", async () => {
   const db = await setup();
@@ -77,7 +78,7 @@ Deno.test("RLS/GRANT: 본인 행만 select, 직접 쓰기·anon·함수 실행 �
   await assertRejects(() => db.query("update public.attendance set days = 0"));
   await assertRejects(() => db.query("select * from public.normal_best"));
   await assertRejects(() => db.query("select * from public.mail"));
-  await assertRejects(() => db.query("select public.att_claim($1, '2026-11-10', '[]')", [A]));
+  await assertRejects(() => db.query("select public.att_claim($1, '2026-11-10', '[]', '{}')", [A]));
   await db.exec("reset role; set role anon;");
   await assertRejects(() => db.query("select * from public.players"));
   await assertRejects(() => db.query("select * from public.claims"));
