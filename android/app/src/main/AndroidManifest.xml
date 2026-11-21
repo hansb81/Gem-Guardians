@@ -38,4 +38,6 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- screenOrientation="portrait"가 세로 화면을 필수 기능으로 암시한다 - 선택으로 낮춰 태블릿·PC·XR 설치를 막지 않는다(Play Console 경고). -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
 </manifest>

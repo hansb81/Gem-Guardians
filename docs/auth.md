@@ -519,3 +519,9 @@ update public.saves s set data = b.data, rev = s.rev + 1, updated_at = now()
 - 웹: `docs/delete-account.html`(ko/en), `docs/privacy.html` 갱신(§9-2). `vite.config.js` 웹 빌드가 두 파일을 dist 루트로 복사 -> `https://gem-guardians.pages.dev/delete-account.html`. 서비스 워커는 게임 페이지(`./`, `index.html`) 이동만 가로챈다(다른 페이지는 그대로).
 - 테스트: `tests/account.test.js`(삭제), `tests/netTimeout.test.js`.
 - pendingVerify 항목에 `granted`(이 기기에서 이미 지급) 저장. 재확인(syncServerIap) 때 `granted`(예전 항목은 bundle 있음)면 iap-verify·iap-granted로 서버 기록만 하고 다시 지급하지 않는다 - 계정 삭제·계정 전환 뒤 새 save(grantedTx 비어 있음)에 같은 결제가 또 들어가지 않게. 테스트 `tests/pendingVerifyRegrant.test.js`.
+
+## 15. 타이틀 로그인 입구 (2026-11-20)
+
+- 판정 `src/game/titleLogin.js` `titleLoginMode`: 서버 켜짐 + Google 로그인 수단(계정 팝업 `googleOn`과 같음)일 때만. 연결 계정 = `linked`(이메일 한 줄), 오프라인 시작 = 기본, 게스트 + 튜토리얼 안 끝남 + `isEmptyGuest(bestFloor, 기기 iap: 결제 수)` = `first`(서버 준비 전에도 바로), 그 밖 게스트 = `guest`(서버 준비 = `serverUi.started` 뒤에만).
+- 그리기·터치 `src/render/titleScreen.js` `LOGIN`(540x960): [게스트로 시작] 120,770,300x60(menu/btn_play) / [Google로 계속하기] 120,842,300x60(uiKit `drawGoogleButton`, 계정 팝업과 공용) / 안내 y 924·942 / 글자 버튼 y 928, 폭 300, 높이 max(44 basis, 44 css px). 첫 실행은 버튼 밖 터치·게이지가 마저 차는 사이 터치도 시작 아님. Enter/Space = 게스트로 시작.
+- 누르면 `linkFromTitle` = `serverUi.started`를 8초까지 기다린 뒤 `Account.link('google')`(main.js `runAccount` 그대로 - "연결 중…"·실패 문구·토스트). 타이틀에 입구가 있으면 토스트(연결·전환·`saveConflict.loaded`)는 타이틀에 그린다. 연결 중 충돌 고르기(`onPick`)는 타이틀 위에 바로 띄운다.

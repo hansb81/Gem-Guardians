@@ -449,7 +449,7 @@ export class ShopScreen {
     const left = ix + (tx.wide ? 88 : 56);
     this._drawIcon(ctx, p, tx, ix + 4, iy + 4);
     this._text(ctx, tx.name, left, iy + 15, 22, C.bone, 'left', true);
-    const lines = this._lines(ctx, row, ix + iw - 140 - left, 2);
+    const lines = this._lines(ctx, row, ix + iw - 140 - left, tx.sub ? 2 : 3); // 아랫줄(sub)이 없으면 세 줄까지(월간 패스: 광산 생산 줄)
     lines.forEach((line, i) => this._text(ctx, line.text, left, iy + 35 + i * 14, 11, line.em ? C.goldL : C.bone));
     if (tx.sub) this._text(ctx, tx.sub, left, iy + 69, 11, C.blueL);
     if (p.state === 'sold') this._dither(ctx, x, y, w, h);

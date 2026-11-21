@@ -23,6 +23,7 @@ export function loadConfigs() {
   const items = loadJson(join(CFG, 'items.json'));
   const shop = loadJson(join(CFG, 'shop.json'));
   const attendance = loadJson(join(CFG, 'attendance.json'));
+  const mine = loadJson(join(CFG, 'mine.json'));
   let summon = null;
   try {
     const manifest = loadJson(join(ROOT, 'assets', 'summon', 'manifest.json'));
@@ -32,7 +33,7 @@ export function loadConfigs() {
   } catch {
     summon = null;
   }
-  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance };
+  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance, mine };
 }
 
 function parseList(str) {
@@ -99,7 +100,13 @@ export function parseArgs(argv, sim) {
   // --towerbuy=always(기본, 층이 끝날 때마다 탑 레벨업) | onfail(실패했을 때만 - v12-6까지의 방식, 참고용). T4와 T4 진행을 쓰는 T3·T5·T6·T7.
   const towerBuy = args.towerbuy ?? 'always';
   if (!['always', 'onfail'].includes(towerBuy)) throw new Error(`--towerbuy는 always|onfail: ${towerBuy}`);
-  return { towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef };
+  // --idle=0|2|3: 방치 광산(tools/sim/idle.js) 하루 접속 횟수, 0 = 광산 없음(기본). --idleDayHours=1|2: 하루 플레이 시간.
+  // --idleRMul=2|1.5|1: 골드 주머니 배수(config/mine.json gold.rMul)를 메모리에서만 덮어쓴다(없으면 config 값).
+  const idle = Number(args.idle ?? 0);
+  const idleDayHours = Number(args.idleDayHours ?? 1);
+  const idleRMul = args.idleRMul == null ? null : Number(args.idleRMul);
+  if (!(Number.isInteger(idle) && idle >= 0) || !(idleDayHours > 0) || (idleRMul != null && !(idleRMul >= 0))) throw new Error('--idle=0|2|3, --idleDayHours=1|2, --idleRMul=숫자');
+  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).

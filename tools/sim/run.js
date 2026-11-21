@@ -31,6 +31,7 @@ async function main() {
   // --rainbowdef=sum|pershot|split: 무지개 1발의 방어력 처리(없으면 게임 기본값 battleState RAINBOW_DEF_DEFAULT).
   if (args.rainbowdef != null && !['sum', 'pershot', 'split'].includes(args.rainbowdef)) throw new Error(`--rainbowdef는 sum|pershot|split: ${args.rainbowdef}`);
   simRules.rainbowDef = args.rainbowdef ?? null;
+  if (args.idleRMul != null) configs.mine.gold.rMul = args.idleRMul; // 메모리에서만(파일은 그대로)
   const comboTag = setupCombo(args, configs.balance); // tools/sim/combo.js. 콤보 골드 기본 = config(게임 그대로), 데미지 배율 기본 off
   // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
   const env = {
@@ -55,6 +56,8 @@ async function main() {
     skillLvAll: args.skillLvAll,
     flight: args.flight, // --flight=on: 측정 전용 탄 비행 시간 근사(T4·T7·T2/T2s, floorSim shotFlight)
     t7base: args.t7base, // --t7base=<t7 csv>: T7 기준 Lv·스킬 Lv를 그 파일(기준 열) 값으로 고정(다시 잡지 않음)
+    idle: args.idle, // --idle: 방치 광산 하루 접속 횟수(0 = 없음). T4 진행과 그 진행을 쓰는 테스트(T7 기준 레벨 등)에 반영
+    idleDayHours: args.idleDayHours,
     emptySpawn: args.emptySpawn ?? configs.balance.floorShape.emptySpawn ?? 'off', // 빈 전장 즉시 등장: 기본 = balance.json floorShape.emptySpawn(게임 그대로), --emptySpawn=off|on|predict로 덮어쓰기
   };
   const dateTag = todayTag();
@@ -91,6 +94,11 @@ async function main() {
 - 메모리 덮어쓰기(--set, 파일은 그대로): ${sets.join(', ')}` : ''),
   ];
   const allOutOfRange = [];
+  if (env.idle > 0) {
+    const idleTag = `광산(측정 전용, tools/sim/idle.js): 하루 접속 ${env.idle}회 x 8시간 분량, 하루 = 플레이 ${env.idleDayHours}시간, rMul ${configs.mine.gold.rMul}${args.idleRMul != null ? '(--idleRMul 덮어쓰기)' : '(mine.json)'}`;
+    console.log(idleTag);
+    summaryParts.push(`- ${idleTag}`);
+  }
   if (comboTag !== 'combo=off window=3s') {
     console.log(comboTag);
     summaryParts.push(`- 콤보(측정 전용, tools/sim/combo.js): ${comboTag}${env.t7base ? ` / T7 기준 Lv 고정: ${env.t7base}` : ''}`);

@@ -178,10 +178,15 @@ export async function loadAssets(onProgress) {
   }
   for (const color of statueManifest.colors ?? []) {
     const anim = statueManifest.anims?.[`statue_idle_${color}`];
-    if (anim) jobs.push({ bucket: 'towerAnim', key: `tower_idle_${color}`, src: `assets/statues/${anim.sheet}`, anim });
+    if (anim) jobs.push({ bucket: 'towerAnim', key: `tower_idle_${color}`, color, src: `assets/statues/${anim.sheet}`, anim });
     // 공격 시트가 있는 그림(수호자)만 - 없으면 렌더러가 공격 중에도 idle을 그린다.
     const attack = statueManifest.anims?.[`statue_attack_${color}`];
-    if (attack) jobs.push({ bucket: 'towerAnim', key: `tower_attack_${color}`, src: `assets/statues/${attack.sheet}`, anim: attack });
+    if (attack) jobs.push({ bucket: 'towerAnim', key: `tower_attack_${color}`, color, src: `assets/statues/${attack.sheet}`, anim: attack });
+    // 레벨 등급 시트(manifest look) - 목록에 있는 것만 로드해 없는 등급의 404를 막는다. 키 "tower_{idle|attack}_{색}_g{등급}".
+    for (const g of statueManifest.look?.[color] ?? []) {
+      if (anim) jobs.push({ bucket: 'towerAnim', key: `tower_idle_${color}_g${g}`, color, src: `assets/statues/${anim.sheet.replace(/\.png$/, `_g${g}.png`)}`, anim });
+      if (attack) jobs.push({ bucket: 'towerAnim', key: `tower_attack_${color}_g${g}`, color, src: `assets/statues/${attack.sheet.replace(/\.png$/, `_g${g}.png`)}`, anim: attack });
+    }
   }
   // towerManifest가 fetch 실패로 {}이면 아래 Object.entries가 빈 객체를 돌려주므로
   // towerProjectiles가 빈 Map으로 남고, 렌더러는 기존 색 점으로 fallback한다(assets/towers/README.md).
@@ -339,11 +344,13 @@ export async function loadAssets(onProgress) {
         arr[job.order] = state;
       } else if (job.bucket === 'towerImage') towerImages.set(job.key, state);
       else if (job.bucket === 'towerAnim') {
+        // 프레임 수 = 시트 너비 / frameW(등급 idle은 12장, 기본은 4장 - 같은 manifest 항목을 쓴다).
+        const frames = state.loaded && !state.failed ? Math.floor(state.img.width / job.anim.frameW) : job.anim.frames;
         towerAnims.set(job.key, {
           state,
           frameW: job.anim.frameW,
           frameH: job.anim.frameH,
-          frames: job.anim.frames,
+          frames,
           frameMs: job.anim.frameMs,
           loop: job.anim.loop,
           fireFrame: job.anim.fireFrame,
@@ -351,9 +358,9 @@ export async function loadAssets(onProgress) {
           muzzle: job.anim.muzzle, // 공격 시트의 발사 위치(화면에서 보이는 방향 기준 원본 좌표)
           // 수호자(drawScale 있는 시트)만 - 레벨 이펙트 tier 3+ 윤곽 { bright, dim } 스트립, 로드 때 한 번.
           outline: (() => {
-            const colors = guardianFxManifest.outline?.colors?.[job.key.slice(job.key.lastIndexOf('_') + 1)];
+            const colors = guardianFxManifest.outline?.colors?.[job.color];
             if (!job.anim.drawScale || !colors || !state.loaded || state.failed) return null;
-            return buildOutlineSheets(state.img, job.anim.frameW, job.anim.frameH, job.anim.frames, colors);
+            return buildOutlineSheets(state.img, job.anim.frameW, job.anim.frameH, frames, colors); // 시트마다 따로
           })(),
         });
       } else if (job.bucket === 'towerProjectile') {

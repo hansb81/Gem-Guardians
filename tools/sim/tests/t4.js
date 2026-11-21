@@ -5,7 +5,8 @@
 // env.towerBuy(--towerbuy): always(기본) = 층이 끝날 때마다(성공·실패) 스킬 구매 뒤 남은 골드로 탑을 올린다.
 // onfail = 실패했을 때만 탑을 올린다(v12-6까지의 방식, 참고용 - 실패가 적으면 골드를 쌓아 둔 채 낮은 레벨로 올라간다).
 import { runFloorAttempt } from '../floorSim.js';
-import { clearBonus, towerLevelCost, maxTowerLevelUps } from '../../../src/core/economy/economy.js';
+import { clearBonus, towerLevelCost, maxTowerLevelUps, normalFloorReward } from '../../../src/core/economy/economy.js';
+import { mineDay, newIdleMine } from '../idle.js';
 import { GEM_TYPES } from '../../../src/config/gems.js';
 import { getFloor } from '../../../src/core/balance/floorGen.js';
 import { createRng } from '../../../src/core/rng.js';
@@ -210,8 +211,29 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   const retriesByFloor = []; // { floor, tag, retries }
   const wallFloors = [];
   let stoppedEarly = false;
+  // --idle(tools/sim/idle.js): 플레이 시간 idleDayHours마다 하루. 하루가 끝난 시점의 층으로 정산하고(해금 = 깬 층 floor - 1,
+  // 최대 레벨·R = 최고 층 floor), 받은 골드는 바로 쓴다(always). 끝나지 않은 마지막 날은 정산하지 않는다.
+  const idle = env.idle > 0 ? { mine: newIdleMine(env.configs.mine), days: 0, gold: 0, pouches: 0, byFloor: {} } : null;
+  const idleTick = () => {
+    if (!idle) return;
+    const d = Math.floor(cumulativeTimeSec / 3600 / env.idleDayHours);
+    let got = 0;
+    while (idle.days < d) {
+      idle.days++;
+      const r = mineDay(env.configs.mine, idle.mine, { day: idle.days, clearedFloor: floor - 1, bestFloor: floor, R: normalFloorReward(env.configs, floor), visits: env.idle });
+      got += r.gold;
+      idle.pouches += r.pouches;
+    }
+    if (got === 0) return;
+    gold += got;
+    goldEarned += got;
+    idle.gold += got;
+    idle.byFloor[floor] = (idle.byFloor[floor] ?? 0) + got;
+    if (always) levelUp();
+  };
 
   while (floor <= env.floorsRange.to) {
+    idleTick();
     const avgLevel = towerLevels.reduce((s, l) => s + l, 0) / towerLevels.length;
     const unlockPending = buyUnlocks();
     const goldAtEntry = gold; // 아이템 사기 전(selfcheck: always면 탑 레벨업 살 골드가 남아 있지 않아야 한다)
@@ -335,6 +357,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     unlockFloors,
     unlockShareAt,
     itemsUsed: agg.itemsUsed,
+    idle,
   };
 }
 
@@ -380,6 +403,7 @@ export async function run(env) {
   const unlockRows = []; // --skills=shop: 기술별 실제 해금 층, 해금 골드 비율
   const timeRows = []; // 층 시간(클리어한 판, 반복 사냥 제외): 구간별 평균·중앙값 + 전체
   const timeCsv = [];
+  const idleCsv = []; // --idle > 0일 때만 t4idle csv + 표
   const special = env.configs.shop.skills.special;
   const unlockIds = Object.keys(special).filter((id) => special[id].unlockBossFloor);
 
@@ -397,6 +421,7 @@ ${wasteTable(runs, sim.players[player].secondsPerMove)}
 
 ${wasteCauseTable(runs)}`);
         extraRows.push(extraRow(label, runs, unlockIds));
+        if (env.idle > 0) idleCsv.push(idleRow(player, strategy, runs));
         if (combo.goldPct !== 'off') comboRows.push(comboRow(player, strategy, runs, unlockIds));
         causeRows.push(...causeCsvRows(player, strategy, runs));
         const clears = runs.flatMap((r) => r.retriesByFloor.filter((x) => x.clearSec != null));
@@ -547,7 +572,28 @@ ${wasteCauseTable(runs)}`);
       bossRows.map((r) => [`${r.player}:${r.strategy}`, r.floor, r.retries.toFixed(2), `${(r.wallLeft * 100).toFixed(0)}%`, r.minutes?.toFixed(1) ?? '-', `${median(r.lv).toFixed(1)} (${Math.min(...r.lv).toFixed(1)}~${Math.max(...r.lv).toFixed(1)})`])
     )}` +
     `\n\n### T4 층 시간 (클리어한 판의 시간(초), 재도전 실패 판·반복 사냥 제외)\n${mdTable(['플레이어:전략', '구간', '평균', '중앙값', '판 수'], timeRows)}`;
-  return { csvRows, summaryMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}) } };
+  const idleMd = idleCsv.length
+    ? `\n\n### T4 광산 골드 (--idle=${env.idle}, 하루 ${env.idleDayHours}시간 플레이, rMul ${env.configs.mine.gold.rMul}, 시드 평균. 비율 = 광산 골드 / 그 구간 전체 획득 골드, 구간 = 받은 시점의 층)\n${mdTable(Object.keys(idleCsv[0]), idleCsv.map((r) => Object.values(r)))}`
+    : '';
+  return { csvRows, summaryMd: summaryMd + idleMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}) } };
+}
+
+// --idle: 광산 골드 몫(전체·층 구간별). 구간 분모 = 그 구간 층에서 번 골드(flow 수입 칸) + 그 구간에서 받은 광산 골드.
+const IDLE_SEGS = [[1, 30], [31, 60], [61, 100]];
+function idleRow(player, strategy, runs) {
+  const n = runs.length;
+  const mineIn = (a, b) => runs.reduce((t, r) => t + Object.entries(r.idle.byFloor).reduce((s, [f, g]) => s + (f >= a && f <= b ? g : 0), 0), 0);
+  const playIn = (a, b) => runs.reduce((t, r) => t + r.flow.reduce((s, x, i) => s + (x && i * 10 + 1 >= a && i * 10 + 10 <= b ? x.first + x.replay + x.fail + x.exchange + x.combo : 0), 0), 0);
+  const share = (m, p) => (m + p > 0 ? `${((m / (m + p)) * 100).toFixed(1)}%` : '-');
+  const mine = mineIn(1, Infinity);
+  const earned = runs.reduce((t, r) => t + r.goldEarned, 0);
+  return {
+    player, strategy, minutesTo100: (runs.reduce((t, r) => t + r.cumulativeTimeMin, 0) / n).toFixed(1), reachedFloor: (runs.reduce((t, r) => t + r.reachedFloor, 0) / n).toFixed(1),
+    days: (runs.reduce((t, r) => t + r.idle.days, 0) / n).toFixed(1), pouches: (runs.reduce((t, r) => t + r.idle.pouches, 0) / n).toFixed(1),
+    goldEarned: Math.round(earned / n), mineGold: Math.round(mine / n), mineShare: share(mine, earned - mine),
+    ...Object.fromEntries(IDLE_SEGS.map(([a, b]) => [`share${a}-${b}`, share(mineIn(a, b), playIn(a, b))])),
+    veinsSeed1: runs[0].idle.mine.veins.join('/'), oreLeftSeed1: runs[0].idle.mine.ore,
+  };
 }
 
 const pctOf = (v, t) => (t > 0 ? `${((v / t) * 100).toFixed(1)}%` : '-');

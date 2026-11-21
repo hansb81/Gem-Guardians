@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 import {
   defaultMine, normalizeMine, veinRate, veinCost, maxVeinLevel, capHours, ratePerHour, capacity, cartAt, settle, rolloverDay,
   syncUnlocks, harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, hasBadge, nextGoldCost, kstDate,
+  nextMaxLevelFloor, hoursToFull, cartState, upgradeBlocksGold, goldNeedsConfirm, dailyLeft, boostAmount, pouchGold,
 } from '../src/core/mine/mine.js';
 import { pruneGrantedTx } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -320,4 +321,38 @@ test('playerState: 저장 snapshot에 mine 블록이 들어간다(클라우드 �
   assert.equal(playerState.snapshot().mine, playerState.mine);
   assert.equal(playerState.hasMonthlyPass(), false);
   playerState.bestFloor = best;
+});
+
+test('화면용 보조: 다음 최대 Lv 층, 가득까지 시간, 수레 3상태, 남은 횟수, 가속량', () => {
+  assert.deepEqual([11, 14, 15, 100].map((f) => nextMaxLevelFloor(CFG, f)), [15, 15, 20, 105]);
+  const { mine, ctx } = make();
+  assert.equal(hoursToFull(CFG, mine, T0), 8);
+  assert.equal(hoursToFull(CFG, mine, T0 + 3.5 * HOUR), 4.5);
+  assert.equal(hoursToFull(CFG, mine, T0 + 99 * HOUR), 0);
+  assert.deepEqual([0, 0.7, 0.8, 6.3, 6.4, 99].map((h) => cartState(CFG, mine, T0 + h * HOUR)), [0, 0, 1, 1, 2, 2], '10% / 80% 경계');
+  assert.equal(cartState(CFG, { ...mine, veins: [0, 0, 0, 0, 0] }, T0), 0);
+  assert.deepEqual(dailyLeft(CFG, mine, ctx()), { gold: 4, items: 3, ads: 2, dia: 3 });
+  assert.deepEqual(dailyLeft(CFG, { ...mine, day: '2026-11-20', daily: { gold: 4, items: 1, ads: 2, diaBoost: 1 } }, ctx()), { gold: 0, items: 2, ads: 0, dia: 2 });
+  assert.equal(dailyLeft(CFG, { ...mine, day: '2026-11-19', daily: { gold: 4, items: 3, ads: 2, diaBoost: 3 } }, ctx()).gold, 4, '어제 기록');
+  assert.equal(boostAmount(CFG, mine, 'ad'), 20);
+  assert.equal(boostAmount(CFG, mine, 'dia', true), 25);
+  assert.equal(pouchGold(CFG, 250), 500);
+});
+
+test('실수 방지 조건: 강화가 오늘 살 수 있던 주머니를 막을 때만, 바로 정제는 3번째부터', () => {
+  const { mine, ctx } = make({ ore: 100 }); // 주머니 50, 강화 40
+  assert.equal(upgradeBlocksGold(CFG, mine, 0, ctx()), false, '100 - 40 = 60 >= 50');
+  mine.ore = 80;
+  assert.equal(upgradeBlocksGold(CFG, mine, 0, ctx()), true, '80 - 40 = 40 < 50');
+  mine.ore = 45;
+  assert.equal(upgradeBlocksGold(CFG, mine, 0, ctx()), false, '어차피 주머니를 못 산다');
+  mine.ore = 80;
+  mine.day = '2026-11-20';
+  mine.daily.gold = 4;
+  assert.equal(upgradeBlocksGold(CFG, mine, 0, ctx()), false, '오늘 주머니를 다 썼다');
+  for (const [used, want] of [[0, false], [1, false], [2, true], [3, true]]) {
+    mine.daily.gold = used;
+    assert.equal(goldNeedsConfirm(CFG, mine, ctx()), want, `${used + 1}번째`);
+  }
+  assert.equal(goldNeedsConfirm(CFG, mine, ctx(T0 + 24 * HOUR)), false, '다음 날은 1번째');
 });

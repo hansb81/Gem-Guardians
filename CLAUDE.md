@@ -19,6 +19,7 @@ Match-3 퍼즐 + 방치형 디펜스 게임. HTML/CSS/JS(ES Modules, 빌드 도�
   생성 도구가 넣는 메타 청크만 파일당 5.7KB라, 안 돌리면 작은 파일도 몇 KB씩 불어난다.
 - 화면: 상단 1/3 전투 영역, 하단 2/3 6x6 보드. 반응형, devicePixelRatio 대응.
 - 모바일 성능 우선: 매 프레임 객체 생성 최소화, 불필요한 전체 다시 그리기 지양.
+- 방치 콘텐츠 "저주받은 수정 광산"의 기획은 docs/mine.md(15·16장이 앞 장보다 우선). 로직 = src/core/mine/mine.js, 화면 = src/render/mineScreen.js, 수치 = config/mine.json.
 - 기획과 단계별 계획은 docs/plan.md docs/battle.md를 따른다. 기획에 없는 결정은 임의로 확정하지 말고 보고한다.
 
 ## Serena MCP 사용
@@ -31,3 +32,8 @@ Match-3 퍼즐 + 방치형 디펜스 게임. HTML/CSS/JS(ES Modules, 빌드 도�
 - 새 세션에서 프로젝트가 활성화되지 않았으면 activate_project로 이 저장소를 활성화한다.
 - Serena 메모리(write_memory / read_memory)에는 코드 구조 요약만 남기고, 기획과 규칙은 docs/plan.md와 이 파일을 기준으로 한다.
 - Serena가 응답하지 않으면 기본 도구(Read, Grep, Edit)로 진행한다.
+## Threads 포스팅
+- 사용자가 화면/GIF/영상을 스레드에 올리자고 하면: threads/STYLE.md를 읽고, 필요하면 최근 git log를 참고해 초안 2~3개를 채팅에 보여 준다. 사용자가 고르면 threads/posts/YYYY-MM-DD-slug.md 로 저장하고 npm run threads:post -- <파일> (--yes 없이)로 미리보기를 보여 준다.
+- 사용자가 이 대화에서 그 글에 대해 '올려/업로드/게시' 라고 명확히 말한 뒤에만 --yes 로 실행한다. 글이나 미디어가 바뀌면 다시 확인받는다.
+- 발행 후 permalink를 알려 주고 글 파일을 커밋한다.
+- .env.threads 내용을 읽어서 출력하거나 채팅에 쓰지 않는다.

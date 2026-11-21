@@ -8,16 +8,22 @@
     "test": "node --test tests/*.test.js",
     "build:web": "vite build && node tools/check-bundle-secrets.mjs dist",
     "preview": "vite preview",
+    "dev:admin": "vite --config vite.config.admin.js",
+    "build:admin": "vite build --config vite.config.admin.js && node tools/check-bundle-secrets.mjs dist-admin",
+    "deploy:admin": "npm run build:admin && npx wrangler deploy --assets=./dist-admin --name=gem-guardians-admin --compatibility-date=2026-11-01",
     "build:toss": "vite build --mode toss && ait build",
     "build:android": "vite build --mode android && cap sync android && node tools/gradlew.mjs assemblePlayRelease bundlePlayRelease",
     "build:onestore": "vite build --mode onestore && cap sync android && node tools/gradlew.mjs assembleOnestoreRelease",
     "build:ios": "vite build --mode ios",
     "cap:android": "vite build --mode android && cap sync android && cap open android",
-    "cap:ios": "npm run build:ios && cap sync ios && cap open ios"
+    "cap:ios": "npm run build:ios && cap sync ios && cap open ios",
+    "threads:post": "node tools/threads/post.mjs",
+    "threads:auth": "node tools/threads/auth.mjs"
   },
   "devDependencies": {
     "@capacitor/assets": "^4.0.0",
     "@capacitor/cli": "^8.6.0",
+    "gray-matter": "^4.0.3",
     "playwright": "^1.65.0",
     "vite": "^8.3.6"
   },

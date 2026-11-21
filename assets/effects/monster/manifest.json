@@ -50,6 +50,15 @@
     "soulAtMs": 200,
     "rule": "마지막 타격 순간: hit_{색} + flashMs 번쩍 -> 이어서 dissolve(README JS, 마지막 프레임의 픽셀로) dissolveMs. smokeAtMs에 발밑 death_smoke_s(32px 이하 몬스터) / _l(큰 몬스터), soulAtMs에 몸 가운데에서 death_soul. 다 끝나면 몬스터 제거."
   },
+  "wall": {
+    "hitAtMs": 60,
+    "jitterY": 3,
+    "bigRanks": [
+      "elite",
+      "boss"
+    ],
+    "rule": "적이 성벽을 칠 때(wallDamaged, sourceEnemyId 있음) hitAtMs 뒤에 맞은 점(x = track.x, y = 몸 가운데 ± jitterY 원본 px)에 wall_hit_s(일반) / wall_hit_l(엘리트·보스). 결계로 막힘(wallBlocked, source enemy)은 같은 자리에 wall_block. 방해요소 피해(source obstacle)는 스프라이트 없음."
+  },
   "anims": {
     "hit_red": {
       "sheet": "sheets/hit_red.png",
@@ -174,6 +183,54 @@
       "durationMs": 640,
       "loop": false,
       "anchor": "bottom-center"
+    },
+    "wall_hit_s": {
+      "sheet": "sheets/wall_hit_s.png",
+      "frameW": 24,
+      "frameH": 24,
+      "frames": 5,
+      "frameMs": [
+        50,
+        50,
+        60,
+        60,
+        60
+      ],
+      "durationMs": 280,
+      "loop": false,
+      "anchor": "center"
+    },
+    "wall_hit_l": {
+      "sheet": "sheets/wall_hit_l.png",
+      "frameW": 40,
+      "frameH": 40,
+      "frames": 6,
+      "frameMs": [
+        50,
+        50,
+        60,
+        60,
+        70,
+        70
+      ],
+      "durationMs": 360,
+      "loop": false,
+      "anchor": "center"
+    },
+    "wall_block": {
+      "sheet": "sheets/wall_block.png",
+      "frameW": 24,
+      "frameH": 32,
+      "frames": 4,
+      "frameMs": [
+        30,
+        40,
+        50,
+        60
+      ],
+      "durationMs": 180,
+      "loop": false,
+      "anchor": "center"
     }
   }
 }

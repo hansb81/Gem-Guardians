@@ -4,7 +4,11 @@
 // 설정은 storage(src/platform/storage.js - 마켓 어댑터 저장소)에 sfxVolume/bgmVolume/muted로 저장.
 // 에셋 로드/디코드가 실패해도 throw하지 않는다 - 소리만 없고 게임은 그대로 진행한다.
 import { storage } from '../platform/storage.js';
-import { platform } from '../platform/index.js';
+import { platform, PLATFORM_ID } from '../platform/index.js';
+
+// Android WebView: 한 번 지지직거리기 시작하면 재실행 전까지 안 낫는다(내부 테스트 AAB, 2026-11-19).
+// 그래서 버퍼를 키우고(latencyHint), 백그라운드·광고에서 돌아올 때 resume 대신 AudioContext를 새로 만든다.
+const ANDROID = PLATFORM_ID === 'android' || PLATFORM_ID === 'onestore';
 
 const DEFAULTS = { sfxVolume: 0.8, bgmVolume: 0.6 };
 const SFX_DIR = 'assets/sfx';
@@ -35,7 +39,8 @@ export function pickFile(files, step = 1) {
 
 export class AudioManager {
   // now: 테스트에서 minGapMs를 검증할 수 있게 주입 가능(기본은 performance.now).
-  constructor({ now } = {}) {
+  constructor({ now, rebuildOnResume = ANDROID } = {}) {
+    this._rebuildOnResume = rebuildOnResume;
     this.now = now ?? (() => (typeof performance === 'undefined' ? Date.now() : performance.now()));
     this.manifest = { sounds: {} };
     this.sfxVolume = clamp01(storage.load('sfxVolume') ?? DEFAULTS.sfxVolume);
@@ -292,7 +297,19 @@ export class AudioManager {
     if (!ctx || must === this._held) return; // 상태가 바뀔 때만(결제처럼 BGM만 끄는 사유는 건드리지 않는다).
     this._held = must;
     if (must) ctx.suspend();
+    else if (this._rebuildOnResume) this._rebuild();
     else ctx.resume().then(() => this._syncBgm());
+  }
+
+  // 망가진 오디오 출력을 버리고 새 AudioContext로. 디코드된 AudioBuffer는 컨텍스트와 무관해 그대로 쓴다.
+  _rebuild() {
+    const old = this._ctx;
+    this._ctx = null;
+    this._bgmCur = null; // 옛 소스는 close와 함께 멈춘다 - 새 컨텍스트에서 _bgmKey 곡을 다시 튼다.
+    this._playing.clear(); // close된 소스는 onended가 안 올 수 있다.
+    this._kicked = false;
+    old.close?.()?.catch?.(() => {});
+    this._context().resume?.()?.then(() => this._syncBgm());
   }
 
   // 모바일/브라우저 자동재생 정책: 첫 사용자 입력에서 resume, 앱이 백그라운드로 가면(platform.lifecycle) suspend.
@@ -337,7 +354,7 @@ export class AudioManager {
     if (this._ctx) return this._ctx;
     const Ctor = typeof AudioContext !== 'undefined' ? AudioContext : typeof webkitAudioContext !== 'undefined' ? webkitAudioContext : null;
     if (!Ctor) return null;
-    const ctx = new Ctor();
+    const ctx = new Ctor(ANDROID ? { latencyHint: 'playback' } : undefined);
     this.master = ctx.createGain();
     this.sfx = ctx.createGain();
     this.bgm = ctx.createGain();

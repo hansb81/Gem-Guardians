@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 저주받은 수정 광산 시안 A/B/C</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../assets/fonts/Galmuri11.woff2') format('woff2'); font-display: swap; }
+  :root {
+    /* characters.hex + UI 글자색 #a59cb2 만 */
+    --o: #0d0a10; --i1: #221c2b; --i2: #3b3347; --i3: #655a74; --bone: #e8dcc0; --dim: #a59cb2;
+    --gold: #c28a20; --gold-l: #f2d264; --gold-d: #7a5212; --gold-dd: #3a2808;
+    --red: #b82a3c; --red-l: #ec6a6a; --green-l: #9cd872; --blue-l: #8cc4ee; --pur: #7a3cae; --pur-l: #c48ce6; --pur-d: #48206e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; image-rendering: pixelated; }
+  html, body { background: #000; color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 11px; -webkit-font-smoothing: none; }
+  body { padding: 8px; display: flex; gap: 16px; justify-content: center; align-items: flex-start; }
+  b { font-weight: bold; }
+  /* 글자 외곽선(게임 캔버스의 외곽선 글자와 같음 - 그림자 효과 아님) */
+  .ol { text-shadow: 1px 0 var(--o), -1px 0 var(--o), 0 1px var(--o), 0 -1px var(--o); }
+  .ol2 { text-shadow: 2px 0 var(--o), -2px 0 var(--o), 0 2px var(--o), 0 -2px var(--o); }
+  .nw { white-space: nowrap; overflow: hidden; min-width: 0; }
+  .dim { color: var(--dim); } .red { color: var(--red-l); } .gl { color: var(--gold-l); } .gr { color: var(--green-l); }
+
+  /* ---------- 폰 540x960 ---------- */
+  .phone { width: 540px; height: 960px; flex: none; position: relative; overflow: hidden; background: var(--o); border: 2px solid var(--i2); box-sizing: content-box; user-select: none; }
+  #scr, #pop, #tut, #fx { position: absolute; inset: 0; }
+  #pop:empty, #tut:empty, #fx { pointer-events: none; }
+  .abs { position: absolute; }
+
+  /* 숫자 = ui/font/damage_*.png (8x9 칸, 2배) */
+  .num { display: inline-flex; vertical-align: middle; }
+  .num i { display: block; height: 18px; background-size: 256px 18px; margin-right: -2px; }
+
+  /* 버튼 = ui/buttons 9-slice [4,4,4,5] x2 */
+  .btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; cursor: pointer; font-weight: bold; color: var(--o); text-align: center; position: relative;
+    border: solid transparent; border-width: 8px 8px 10px; border-image: url('../assets/ui/buttons/btn_gold.png') 4 4 5 4 fill / 8px 8px 10px stretch; }
+  .btn:active { border-image-source: url('../assets/ui/buttons/btn_gold_pressed.png'); padding-top: 2px; }
+  .btn.sec { border-image-source: url('../assets/ui/buttons/btn_secondary.png'); color: var(--bone); }
+  .btn.sec:active { border-image-source: url('../assets/ui/buttons/btn_secondary_pressed.png'); }
+  .btn.pri { border-image-source: url('../assets/ui/buttons/btn_primary.png'); color: var(--bone); }
+  .btn.pri:active { border-image-source: url('../assets/ui/buttons/btn_primary_pressed.png'); }
+  .btn.off, .btn.off:active { border-image-source: url('../assets/ui/upgrade/btn_disabled.png'); color: var(--dim); cursor: default; padding-top: 0; }
+  .btn .big { font-size: 22px; font-weight: normal; }
+  .cost { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .badge { position: absolute; right: -12px; top: -14px; width: 16px; height: 16px; background: url('../assets/ui/menu/badge.png') 0 0 / 16px; }
+
+  /* 자리 표시(최종 픽셀 그림 전): 단색 + 라벨 */
+  .ph { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border: 2px solid var(--o); color: var(--bone); line-height: 1.3; flex: none; }
+  .ore { display: inline-block; width: 16px; height: 16px; background: url('../assets/ui/icons/ore_small.png') 0 0 / 16px; flex: none; vertical-align: middle; } /* ui/icons/ore_small 8x8, ore 10x10 (2배) */
+  .ore.lg { width: 20px; height: 20px; background: url('../assets/ui/icons/ore.png') 0 0 / 20px; }
+  /* 시안 C 조각 애니메이션: 정제소 불 4프레임, 가득 찬 수레 반짝임 2프레임 */
+  .fire { position: absolute; left: 75px; top: 90px; width: 57px; height: 45px; background: url('../assets/mine/refinery_fire.png') 0 0 / 228px 45px; animation: fire 640ms steps(4) infinite; }
+  @keyframes fire { to { background-position: -228px 0; } }
+  .spk { position: absolute; width: 21px; height: 21px; background: url('../assets/mine/cart_sparkle.png') 0 0 / 42px 21px; animation: spk 700ms steps(2) infinite; }
+  @keyframes spk { to { background-position: -42px 0; } }
+  .ic16 { width: 16px; height: 16px; flex: none; vertical-align: middle; }
+
+  /* 상단 바 = ui/menu/plate 9-slice 8 x2 */
+  .top { left: 8px; right: 8px; top: 20px; height: 100px; border: 16px solid transparent; border-image: url('../assets/ui/menu/plate.png') 8 fill / 16px stretch; }
+  .top .back { position: absolute; left: -8px; top: -8px; width: 48px; height: 48px; font-size: 22px; font-weight: normal; }
+  .top .ttl { position: absolute; left: 50px; right: 150px; top: 4px; font-size: 22px; line-height: 24px; color: var(--gold-l); }
+  .inset { border: 8px solid transparent; border-image: url('../assets/ui/menu/inset.png') 4 fill / 8px stretch; }
+  .top .orebox { position: absolute; right: -4px; top: -2px; height: 36px; min-width: 120px; display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+  .top .store { position: absolute; left: 0; right: 0; top: 46px; height: 20px; display: flex; align-items: center; gap: 8px; }
+  /* 게이지 = ui/menu/slider_track 3-slice + slider_fill */
+  .gauge { flex: 1; height: 16px; border: solid transparent; border-width: 0 8px; border-image: url('../assets/ui/menu/slider_track.png') 0 4 0 4 fill / 0 8px stretch; position: relative; min-width: 40px; }
+  .gauge i { position: absolute; left: -4px; top: 4px; height: 8px; background: url('../assets/ui/menu/slider_fill.png') 0 0 / 8px; }
+  .gauge.full i { background: var(--gold-l); }
+
+  /* 광맥 층(A, C) */
+  .strip { left: 0; right: 0; display: flex; align-items: center; justify-content: center; gap: 8px; color: var(--dim); background: var(--i1); border: 2px solid var(--o); border-width: 2px 0; }
+  .vein { left: 0; right: 0; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: var(--c1); border-bottom: 2px solid var(--o); border-left: 8px solid var(--c2); }
+  .vein .slot { width: 84px; height: 84px; display: grid; place-items: center; flex: none; }
+  .vein.cmp .slot { width: 72px; height: 72px; }
+  .crystal { background: var(--c3); border-color: var(--o); color: var(--o); font-weight: bold; }
+  .crystal.s1 { width: 44px; height: 44px; } .crystal.s2 { width: 60px; height: 60px; } .crystal.s3 { width: 76px; height: 76px; border-color: var(--c4); }
+  .vein.cmp .crystal.s3 { width: 68px; height: 68px; }
+  .vinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+  .vinfo .nm { font-size: 11px; font-weight: bold; }
+  .lv { color: var(--gold-l); font-weight: bold; padding: 0 2px; border: solid transparent; border-width: 4px 6px; border-image: url('../assets/ui/panels/box_floor.png') 5 fill / 4px 6px stretch; }
+  .up { width: 132px; height: 64px; flex: none; }
+  .maxbox { width: 132px; height: 64px; flex: none; display: grid; place-items: center; text-align: center; color: var(--dim); line-height: 1.5; border: 8px solid transparent; border-image: url('../assets/ui/menu/inset.png') 4 fill / 8px stretch; }
+  .vein.lock { background: var(--i1); border-left-color: var(--i2); color: var(--dim); }
+  .vein.lock .crystal { background: var(--i2); color: var(--dim); }
+  .lockimg { width: 24px; height: 24px; flex: none; }
+
+  /* 수레 */
+  .cart { background: var(--gold-dd); position: relative; justify-content: flex-end; overflow: hidden; }
+  .cart .fill { position: absolute; left: 0; right: 0; bottom: 0; background: var(--pur-d); border-top: 2px solid var(--pur-l); }
+  .cart .fill.e { display: none; }
+  .cart > * { position: relative; }
+  .cart.tap { cursor: pointer; }
+  .cart.tap:active { background-color: var(--gold-d); }
+
+  /* B: 단면 */
+  .shaft { left: 258px; width: 24px; background: var(--i1); border: 2px solid var(--o); border-width: 0 2px; }
+  .chamber { width: 240px; height: 92px; display: flex; align-items: center; gap: 8px; padding: 0 8px; background: var(--c1); border: 2px solid var(--o); cursor: pointer; }
+  .chamber.sel { border-color: var(--gold-l); }
+  .chamber.lock { background: var(--i1); color: var(--dim); }
+  .chamber.lock .crystal { background: var(--i2); color: var(--dim); }
+  .chamber .crystal.s3 { width: 68px; height: 68px; }
+  .chamber .slot { width: 68px; display: grid; place-items: center; flex: none; }
+  .sheet { left: 0; right: 0; bottom: 0; height: 300px; border: 16px solid transparent; border-image: url('../assets/ui/menu/plate.png') 8 fill / 16px stretch; display: flex; flex-direction: column; gap: 10px; }
+  .sheet.rise { animation: rise 120ms steps(4); } /* 열릴 때만 */
+  @keyframes rise { from { transform: translateY(300px); } }
+  .x { position: absolute; width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; }
+  .x img { width: 32px; }
+
+  /* 팝업 = ui/menu/popup_menu 9-slice 16 x2 (보관함과 같은 틀·자리) */
+  .dimbg { position: absolute; inset: 0; background: rgba(13, 10, 16, 0.75); } /* 게임 COLORS.overlay 그대로 */
+  .popup { position: absolute; left: 12px; right: 12px; top: 96px; bottom: 48px; border: 32px solid transparent; border-image: url('../assets/ui/menu/popup_menu.png') 16 fill / 32px stretch; display: flex; flex-direction: column; gap: 8px; }
+  .popup.sm { left: 40px; right: 40px; top: 230px; bottom: auto; }
+  .popup .emblem { position: absolute; left: 50%; top: -58px; margin-left: -24px; width: 48px; height: 48px; background: var(--pur-d); }
+  .popup .ptitle { text-align: center; font-size: 22px; line-height: 24px; color: var(--gold-l); margin-top: -6px; margin-bottom: 4px; }
+  .popup .x { right: -26px; top: -30px; }
+  .tabs { display: flex; gap: 4px; }
+  .tab { flex: 1; height: 44px; display: grid; place-items: center; font-weight: bold; color: var(--dim); cursor: pointer;
+    border: solid transparent; border-width: 12px 12px 6px; border-image: url('../assets/ui/upgrade/tab_off.png') 6 6 3 6 fill / 12px 12px 6px stretch; }
+  .tab.on { border-image-source: url('../assets/ui/upgrade/tab_on.png'); color: var(--bone); }
+  .sec2 { border: 8px solid transparent; border-image: url('../assets/ui/menu/inset.png') 4 fill / 8px stretch; padding: 2px 4px 4px; display: flex; flex-direction: column; gap: 10px; }
+  .sec-h { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .sec-h b { color: var(--gold-l); }
+  .kv { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 22px; }
+  .steps { display: flex; gap: 6px; }
+  .step { flex: 1; height: 54px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--dim);
+    border: 8px solid transparent; border-image: url('../assets/ui/upgrade/card.png') 4 fill / 8px stretch; }
+  .step.cur { border-image-source: url('../assets/ui/upgrade/card_selected.png'); color: var(--bone); }
+  .step.done { color: var(--i3); }
+  .irow { display: flex; align-items: center; gap: 10px; min-height: 60px; border: 8px solid transparent; border-image: url('../assets/ui/upgrade/card.png') 4 fill / 8px stretch; }
+  .irow img { width: 32px; height: 32px; flex: none; }
+  .irow .nm { flex: 1; font-weight: bold; }
+  .irow .btn { width: 120px; height: 48px; flex: none; }
+  .foot { flex-direction: row; align-items: center; gap: 10px; min-height: 52px; margin-top: auto; }
+
+  /* 안내 */
+  .tdim { position: absolute; background: rgba(13, 10, 16, 0.75); }
+  .tframe { position: absolute; border: 2px solid var(--gold-l); outline: 2px solid var(--o); }
+  .tbub { position: absolute; left: 30px; right: 30px; border: 16px solid transparent; border-image: url('../assets/ui/menu/plate.png') 8 fill / 16px stretch; display: flex; flex-direction: column; gap: 10px; line-height: 1.6; }
+  .toast { position: absolute; left: 40px; right: 40px; top: 430px; text-align: center; line-height: 1.6; border: 16px solid transparent; border-image: url('../assets/ui/menu/plate.png') 8 fill / 16px stretch; pointer-events: none; }
+  .fly { position: absolute; width: 16px; height: 16px; background: url('../assets/ui/icons/ore_small.png') 0 0 / 16px; }
+  .showtap [data-tap] { outline: 2px solid var(--green-l); outline-offset: -2px; }
+
+  /* 메인 메뉴 미리보기 */
+  .menu { background: url('../assets/menu/menu_bg.png') 0 0 / 540px 960px; }
+  .mi { position: absolute; width: 48px; height: 48px; background-size: 48px; cursor: pointer; }
+  .mine-ic { background-image: url('../assets/ui/menu/btn_mine.png'); }
+  .mine-ic:active { background-image: url('../assets/ui/menu/btn_mine_pressed.png'); }
+  .mine-ic .lk { position: absolute; right: -2px; bottom: -2px; width: 24px; height: 24px; }
+  .mine-ic.locked > i { opacity: 1; }
+
+  /* ---------- 옆 패널(게임 UI 아님) ---------- */
+  .side { width: 400px; line-height: 1.7; display: flex; flex-direction: column; gap: 8px; }
+  .side .box { background: var(--i1); border: 2px solid var(--i2); padding: 8px 10px; }
+  .side h2 { color: var(--gold-l); font-size: 11px; margin-bottom: 4px; }
+  .side li { margin-left: 14px; }
+  .side button { font: inherit; color: var(--bone); background: var(--i2); border: 2px solid var(--i3); padding: 4px 8px; margin: 2px 2px 2px 0; cursor: pointer; }
+  .side button.on { border-color: var(--gold-l); color: var(--gold-l); }
+  .side table { border-collapse: collapse; width: 100%; }
+  .side td, .side th { border: 1px solid var(--i2); padding: 2px 5px; text-align: left; font-weight: normal; }
+  .side th { color: var(--dim); }
+  .ok { color: var(--green-l); } .bad { color: var(--red-l); }
+</style>
+</head>
+<body>
+
+<div class="phone" id="phone"><div id="scr"></div><div id="pop"></div><div id="tut"></div><div id="fx"></div></div>
+
+<div class="side">
+  <div class="box">
+    <h2>시안</h2>
+    <div id="vtabs"></div>
+    <div class="dim" id="vdesc"></div>
+  </div>
+  <div class="box">
+    <h2>개발용 (게임 UI 아님)</h2>
+    <div>프리셋: <button data-dev="p:fresh">막 해금</button><button data-dev="p:mid">중반</button><button data-dev="p:end">100층</button><button data-dev="p:max">최대 Lv 보기</button></div>
+    <div>시간: <button data-dev="h:1">+1시간</button><button data-dev="h:8">+8시간</button><button data-dev="day">하루 초기화</button></div>
+    <div>상태: <button data-dev="ore0">원석 0</button><button data-dev="spent">정제 횟수 소진</button><button data-dev="dia">다이아 +100</button><button data-dev="adfree" id="bAdfree">광고 제거 보유</button><button data-dev="lock" id="bLock">광산 잠김</button></div>
+    <div>보기: <button data-dev="lang" id="bLang">KO</button><button data-dev="tap" id="bTap">터치 영역 표시</button><button data-dev="zoom" id="bZoom">75%로 보기</button><button data-dev="tut">안내 다시</button></div>
+    <div id="stat" class="dim"></div>
+    <div>탭 수: <b class="gl" id="taps">0</b> <button data-dev="taps0">0으로</button> <span class="dim">(폰 안에서 누른 횟수)</span></div>
+  </div>
+  <div class="box">
+    <h2>자동 점검 (지금 화면 · 지금 언어)</h2>
+    <div id="chk"></div>
+  </div>
+  <div class="box">
+    <h2>"수확 → 골드 주머니 정제 → 강화" 탭 수</h2>
+    <table>
+      <tr><th>시안</th><th>순서</th><th>탭</th></tr>
+      <tr><td>A</td><td>수확 · 정제소 · 정제 · 닫기 · 강화</td><td>5</td></tr>
+      <tr><td>B</td><td>수확 · 정제소 · 정제 · 닫기 · 광맥 · 강화</td><td>6</td></tr>
+      <tr><td>C</td><td>수레 · 바로 정제 · 강화</td><td class="ok">3</td></tr>
+    </table>
+  </div>
+  <div class="box">
+    <h2>자리 표시 읽는 법</h2>
+    <ul>
+      <li>색 네모 + 글자 = 아직 없는 그림(광맥 수정 1~3단계, 수레 빈/반/가득, 정제소 건물·문장, 메뉴 아이콘).</li>
+      <li>시안 C는 실제 그림(assets/mine, 3배). A·B는 자리 표시 그대로.</li>
+      <li>틀·버튼·탭·배지·자물쇠·숫자 글꼴은 assets/ui 실제 파일(2배).</li>
+      <li>강화 버튼: 강화하면 오늘 살 수 있던 골드 주머니를 못 사게 될 때만 "한 번 더 탭"(2초).</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// ===== 수치: docs/mine.md 5장 · 8장 · 10장(config/mine.json 초안) 그대로. R은 250 고정(시안 가정). =====
+const C = { pb: 10, pg: 1.12, cb: 40, cg: 1.2, perFloors: 5, baseMax: 5, hours: [8, 9, 10, 11, 12], sCost: [0, 150, 400, 900, 2000], bigBonus: 4, bigDia: 150,
+  gold: [50, 100, 200, 400], R: 250, rMul: 2, items: { shuffle: 60, hammer: 80, scythe_h: 100, scythe_v: 100, dye: 120 }, itemsDay: 3, ads: 2, boostH: 2, dia: [20, 40, 80] };
+const VEINS = [
+  { id: 'emerald', boss: 10, c: ['#0c2814', '#1c5228', '#3a8a3c', '#9cd872'] },
+  { id: 'sapphire', boss: 20, c: ['#0c1838', '#1c3a76', '#386cbc', '#8cc4ee'] },
+  { id: 'topaz', boss: 30, c: ['#3a2808', '#7a5212', '#c28a20', '#f2d264'] },
+  { id: 'ruby', boss: 40, c: ['#3a0814', '#741426', '#b82a3c', '#ec6a6a'] },
+  { id: 'amethyst', boss: 50, c: ['#220e38', '#48206e', '#7a3cae', '#c48ce6'] },
+];
+const L = {
+  ko: { title: '저주받은 수정 광산', store: '창고', fullIn: '가득까지 {0}', full: '가득 참', capH: '보관 {0}시간',
+    emerald: '에메랄드 광맥', sapphire: '사파이어 광맥', topaz: '토파즈 광맥', ruby: '루비 광맥', amethyst: '자수정 광맥',
+    up: '강화', again: '한 번 더 탭', maxAt: '{0}층 도달 시<br>Lv+1', boss: '{0}층 보스', bossSub: '처치하면 열립니다', perH: '시간당',
+    harvest: '수확', refinery: '정제소', boost: '가속', boostT: '광산 가속', ground: '지상 입구 (탑 바닥, 사슬 문)', deep: '봉인된 심층', yard: '용광로 작업장',
+    cartE: '수레: 빈', cartH: '수레: 반', cartF: '수레: 가득', crystal: '수정<br>{0}단계', tapCart: '수레를 눌러 수확',
+    tGold: '골드 주머니', tItem: '아이템', left: '오늘 남은 횟수 {0}/{1}', nextCost: '다음 비용', gain: '받는 양', refine: '정제', quick: '바로 정제',
+    done: '오늘은 끝 · 자정에 초기화', short: '원석 {0} 부족', have: '보유 원석', dayMax: '하루 최대 골드 {0} (R×8)',
+    shuffle: '섞기', hammer: '망치', scythe_h: '가로 낫', scythe_v: '세로 낫', dye: '염료',
+    sUp: '창고 강화', cap: '보관 상한', hrs: '{0}시간', bigS: '큰 창고', bigD: '보관 +4시간 · 1회 구매', owned: '보유 중', max: '최대',
+    ad: '광고 보고 받기', free: '무료로 받기', inst: '즉시 채굴', bAmt: '2시간 분량 (상한 무시)', leftN: '남은 {0}/{1}',
+    t1: '광맥이 시간이 지나면 원석을 캡니다. 앱을 꺼 둬도 쌓여요.', t2: '원석으로 광맥을 키우면 더 많이 캡니다.', t3: '정제소에서 원석을 골드와 아이템으로 바꾸세요.', next: '다음', start: '시작',
+    guard: '강화하면 오늘 골드 주머니({0})를 못 삽니다. 한 번 더 누르면 강화.', locked: '10층 보스를 물리치면 광산이 열립니다', mine: '광산',
+    gotG: '골드 +{0}', gotI: '{0} +1', gotO: '수레 +{0}', adPlay: '(광고 재생 자리)' },
+  en: { title: 'Cursed Crystal Mine', store: 'Storage', fullIn: 'Full in {0}', full: 'Full', capH: 'Cap {0}h',
+    emerald: 'Emerald Vein', sapphire: 'Sapphire Vein', topaz: 'Topaz Vein', ruby: 'Ruby Vein', amethyst: 'Amethyst Vein',
+    up: 'Upgrade', again: 'Tap again', maxAt: 'Lv+1 at<br>floor {0}', boss: 'Floor {0} boss', bossSub: 'Defeat to unlock', perH: 'Per hour',
+    harvest: 'Harvest', refinery: 'Refinery', boost: 'Boost', boostT: 'Mine Boost', ground: 'Surface gate (tower base)', deep: 'Sealed depths', yard: 'Furnace workshop',
+    cartE: 'Cart: empty', cartH: 'Cart: half', cartF: 'Cart: full', crystal: 'Crystal<br>stage {0}', tapCart: 'Tap the cart to harvest',
+    tGold: 'Gold Pouch', tItem: 'Items', left: 'Left today {0}/{1}', nextCost: 'Next cost', gain: 'You get', refine: 'Refine', quick: 'Quick refine',
+    done: 'Done today · resets at midnight', short: 'Need {0} more ore', have: 'Ore owned', dayMax: 'Daily gold cap {0} (R×8)',
+    shuffle: 'Shuffle', hammer: 'Hammer', scythe_h: 'H-Scythe', scythe_v: 'V-Scythe', dye: 'Dye',
+    sUp: 'Storage Upgrade', cap: 'Capacity', hrs: '{0}h', bigS: 'Big Storage', bigD: '+4h capacity · one-time', owned: 'Owned', max: 'MAX',
+    ad: 'Watch ad', free: 'Claim free', inst: 'Instant Mine', bAmt: '2h of ore (ignores cap)', leftN: '{0}/{1} left',
+    t1: 'Veins dig ore over time. It piles up even while the app is closed.', t2: 'Spend ore to grow a vein and it digs more.', t3: 'Turn ore into gold and items at the refinery.', next: 'Next', start: 'Start',
+    guard: "Upgrading leaves too little for today's gold pouch ({0}). Tap again to upgrade.", locked: 'Defeat the floor 10 boss to open the mine', mine: 'Mine',
+    gotG: 'Gold +{0}', gotI: '{0} +1', gotO: 'Cart +{0}', adPlay: '(ad plays here)' },
+};
+let lang = 'ko';
+const t = (k, ...a) => L[lang][k].replace(/\{(\d)\}/g, (_, i) => a[i]);
+
+const PRESET = {
+  fresh: { top: 10, veins: [1, 0, 0, 0, 0], sLv: 1, ore: 0, cart: 50, dia: 30, tut: 0 }, // 해금 선물 50이 첫 수레에
+  mid: { top: 40, veins: [5, 4, 4, 3, 0], sLv: 2, ore: 260, cart: 250, dia: 120, tut: 3 },
+  end: { top: 100, veins: [21, 20, 20, 19, 19], sLv: 5, ore: 6400, cart: 1e9, dia: 400, tut: 3 },
+  max: { top: 30, veins: [11, 11, 10, 0, 0], sLv: 3, ore: 900, cart: 100, dia: 60, tut: 3 },
+};
+let S, view = 'A', lastV = 'A', popup = null, rTab = 'gold', sel = null, armed = null, armT = 0, adFree = false, taps = 0, Z = 1;
+function load(k) { S = { big: false, gold: 0, unlocked: true, d: { gold: 0, items: 0, ads: 0, dia: 0 }, ...structuredClone(PRESET[k]) }; S.cart = Math.min(S.cart, cap()); popup = null; sel = null; }
+
+const rate1 = (lv) => C.pb * C.pg ** (lv - 1);
+const cost = (lv) => Math.round(C.cb * C.cg ** (lv - 1));
+const rate = () => S.veins.reduce((a, lv) => a + (lv ? rate1(lv) : 0), 0);
+const capH = () => C.hours[S.sLv - 1] + (S.big ? C.bigBonus : 0); // 큰 창고 = 보관 +4시간(docs/mine.md 16장)
+const cap = () => capH() * rate();
+const maxLv = () => C.baseMax + Math.floor(S.top / C.perFloors);
+const nextFloor = () => (Math.floor(S.top / C.perFloors) + 1) * C.perFloors;
+const pouch = () => C.gold[S.d.gold]; // 다 쓰면 undefined
+const boostAmt = () => Math.round(C.boostH * rate());
+const hasBadge = () => S.unlocked && (S.cart >= 0.8 * cap() || (pouch() != null && S.ore >= pouch())); // 7-1
+// 문서 표(5-1)와 맞는지 자체 확인
+console.assert(cost(5) === 83 && cost(20) === 1278 && cost(25) === 3180 && rate1(5).toFixed(1) === '15.7' && rate1(20).toFixed(1) === '86.1', 'mine.md 5-1 표와 다름');
+
+const f1 = (x) => (x >= 100 ? Math.round(x).toLocaleString('en-US') : x.toFixed(1));
+const cm = (n) => Math.floor(n).toLocaleString('en-US');
+const fmtH = (h) => `${Math.floor(h)}:${String(Math.floor((h % 1) * 60)).padStart(2, '0')}`;
+const FC = '0123456789+-x!,/', FW = [7, 5, 7, 7, 7, 7, 7, 7, 7, 7, 8, 6, 7, 4, 4, 7];
+const num = (s, v = 'white') => `<span class="num">${[...String(s)].map((c) => { const i = FC.indexOf(c); return `<i style="width:${FW[i] * 2}px;background-image:url(../assets/ui/font/damage_${v}.png);background-position:-${i * 16}px 0"></i>`; }).join('')}</span>`;
+const ORE = '<i class="ore"></i>', GOLD = '<img class="ic16" src="../assets/ui/icons/gold.png" alt="">', DIA = '<img class="ic16" src="../assets/ui/icons/diamond.png" alt="">';
+const stage = (lv) => (lv <= 5 ? 1 : lv <= 15 ? 2 : 3);
+const cvars = (v) => `--c1:${v.c[0]};--c2:${v.c[1]};--c3:${v.c[2]};--c4:${v.c[3]}`;
+const firstUp = () => S.veins.findIndex((lv) => lv > 0);
+
+// ===== 부품 =====
+function topBar() {
+  const full = S.cart >= cap(), pct = Math.min(1, S.cart / cap());
+  return `<div class="abs top">
+    <div class="btn sec back" data-act="back" data-tap>←</div>
+    <div class="ttl ol2 nw">${t('title')}</div>
+    <div class="inset orebox" id="oreBox">${'<i class="ore lg"></i>'}${num(cm(S.ore), 'yellow')}</div>
+    <div class="store"><span class="dim nw">${t('store')} Lv${S.big ? '★' : S.sLv}</span>
+      <div class="gauge ${full ? 'full' : ''}"><i style="width:calc(${pct * 100}% + ${pct * 8}px)"></i></div>
+      <span class="nw ${full ? 'gl' : ''}">${full ? t('full') : t('fullIn', fmtH((cap() - S.cart) / rate()))}</span><span class="dim nw">/ ${t('capH', capH())}</span></div>
+  </div>`;
+}
+const crystal = (lv) => `<div class="ph crystal s${stage(lv || 1)}">${lv ? t('crystal', stage(lv)) : ''}</div>`;
+function upBtn(i, wide) {
+  const lv = S.veins[i];
+  if (lv >= maxLv()) return `<div class="maxbox" ${wide ? 'style="width:auto;flex:1"' : ''}>${t('maxAt', nextFloor())}</div>`;
+  const c = cost(lv), ok = S.ore >= c;
+  return `<div class="btn ${ok ? '' : 'off'} up" ${wide ? 'style="width:auto;flex:1"' : ''} data-act="up:${i}" data-tap ${i === firstUp() && view !== 'B' ? 'data-tut="up"' : ''}>
+    <span class="nw">${armed === 'up' + i ? t('again') : t('up')}</span><span class="cost ${ok ? '' : 'red'}">${ORE}${cm(c)}</span></div>`;
+}
+function veinRow(i, y, h, cmp) {
+  const v = VEINS[i], lv = S.veins[i];
+  if (!lv) return `<div class="abs vein lock ${cmp ? 'cmp' : ''}" style="top:${y}px;height:${h}px${cmp ? ';border:0;background:url(../assets/mine/row_locked.png) 0 0/540px 96px' : ''}"><div class="slot">${cmp ? '' : crystal(0)}</div>
+    <div class="vinfo"><div class="nm nw">${i + 1}. ${t(v.id)}</div><div class="nw" style="display:flex;align-items:center;gap:6px"><img class="lockimg" src="../assets/ui/icons/lock.png" alt=""><b>${t('boss', v.boss)}</b></div><div class="nw">${t('bossSub')}</div></div></div>`;
+  const mx = lv >= maxLv();
+  // 시안 C(cmp)만 실제 그림: assets/mine/row_*.png(180x32) + crystals_*.png(24x24 x 3단계), 3배
+  const art = cmp ? `;border:0;background:url(../assets/mine/row_${v.id}.png) 0 0/540px 96px` : '';
+  const cry = cmp ? `<div style="width:72px;height:72px;background:url(../assets/mine/crystals_${v.id}.png) -${(stage(lv) - 1) * 72}px 0/216px 72px"></div>` : crystal(lv);
+  return `<div class="abs vein ${cmp ? 'cmp' : ''}" style="top:${y}px;height:${h}px;${cvars(v)}${art}"><div class="slot">${cry}</div>
+    <div class="vinfo"><div class="nm nw ol">${i + 1}. ${t(v.id)}</div>
+      <div class="nw"><span class="lv">Lv ${lv}</span> <span class="dim">/ ${maxLv()}</span></div>
+      <div class="nw">${f1(rate1(lv))}/h${mx ? '' : ` → <b class="gr">${f1(rate1(lv + 1))}</b>`}</div></div>
+    ${upBtn(i)}</div>`;
+}
+// 시안 C: assets/mine/cart.png (84x60 x 빈/반/가득), 3배. 수레 자체가 수확 버튼.
+function cartArt() {
+  const n = Math.floor(S.cart), p = S.cart / cap(), st = p < 0.1 ? 0 : p < 0.8 ? 1 : 2;
+  return `<div class="cart tap" id="cart" data-tut="cart" data-act="harvest" data-tap style="width:252px;height:180px;background:url(../assets/mine/cart.png) -${st * 252}px 0/756px 180px;cursor:pointer;text-align:center">
+    <div style="position:absolute;left:0;right:0;top:66px">${num(cm(n))}</div><b class="ol nw" style="position:absolute;left:0;right:0;top:92px">${n ? '▲ ' + t('harvest') : t('tapCart')}</b>
+    ${st === 2 ? '<i class="spk" style="left:84px;top:12px"></i><i class="spk" style="left:132px;top:3px;animation-delay:-350ms"></i><i class="spk" style="left:171px;top:21px;animation-delay:-180ms"></i>' : ''}</div>`;
+}
+function cartBox(w, h, tap) {
+  const n = Math.floor(S.cart), p = S.cart / cap(), st = p < 0.1 ? 'E' : p < 0.8 ? 'H' : 'F'; // 빈 <10% / 반 / 가득 >=80%(배지 기준과 같게)
+  return `<div class="ph cart ${tap ? 'tap' : ''}" id="cart" data-tut="cart" ${tap ? 'data-act="harvest" data-tap' : ''} style="width:${w}px;height:${h}px">
+    <div class="fill ${st === 'E' ? 'e' : ''}" style="height:${st === 'H' ? 50 : 100}%"></div>
+    <b class="ol">${t('cart' + st)}</b><div style="margin:6px 0">${num(cm(n))}</div>${tap ? `<span class="ol" style="margin-bottom:8px">${n ? '▲ ' + t('harvest') : t('tapCart')}</span>` : ''}</div>`;
+}
+const harvestBtn = (style) => { const n = Math.floor(S.cart); return `<div class="btn ${n ? '' : 'off'}" style="${style}" data-act="harvest" data-tap><span class="big">${t('harvest')}</span><span>+${cm(n)}</span></div>`; };
+const refBadge = () => (pouch() != null && S.ore >= pouch() ? '<i class="badge"></i>' : '');
+const sideBtns = (h) => `
+  <div class="btn sec" style="flex:1;height:${h}px" data-act="pop:ref" data-tap data-tut="ref"><span class="nw">${t('refinery')}</span>${refBadge()}</div>
+  <div class="btn sec" style="flex:1;height:${h}px" data-act="pop:store" data-tap><span class="nw">${t('store')} ${'Lv' + S.sLv + (S.big ? '★' : '')}</span></div>
+  <div class="btn sec" style="flex:1;height:${h}px" data-act="pop:boost" data-tap><span class="nw">${t('boost')} ${C.ads - S.d.ads}</span></div>`;
+
+// ===== 시안 A: 기획서 그대로 =====
+function viewA() {
+  return topBar()
+    + `<div class="abs strip" style="top:124px;height:32px">${t('ground')}</div>`
+    + VEINS.map((_, i) => veinRow(i, 156 + i * 110, 110)).join('')
+    + `<div class="abs strip" style="top:706px;height:32px"><img class="ic16" src="../assets/ui/icons/lock.png" alt="">${t('deep')}</div>`
+    + `<div class="abs" style="left:12px;right:12px;top:746px;display:flex;gap:10px">${cartBox(150, 96)}${harvestBtn('flex:1;height:96px')}</div>`
+    + `<div class="abs" style="left:12px;right:12px;top:852px;display:flex;gap:8px">${sideBtns(60)}</div>`;
+}
+// ===== 시안 B: 단면 + 바텀 시트 =====
+function viewB() {
+  const ch = VEINS.map((v, i) => {
+    const lv = S.veins[i], pos = `top:${164 + i * 100}px;${i % 2 ? 'left:282px' : 'left:18px'}`;
+    if (!lv) return `<div class="abs chamber lock ${sel === i ? 'sel' : ''}" style="${pos}" data-act="sel:${i}" data-tap><div class="slot"><img class="lockimg" src="../assets/ui/icons/lock.png" alt=""></div><div class="vinfo"><div class="nm nw">${t(v.id)}</div><b class="nw">${t('boss', v.boss)}</b></div></div>`;
+    const can = lv < maxLv() && S.ore >= cost(lv);
+    return `<div class="abs chamber ${sel === i ? 'sel' : ''}" style="${pos};${cvars(v)}" data-act="sel:${i}" data-tap ${i === firstUp() ? 'data-tut="up"' : ''}><div class="slot">${crystal(lv)}</div>
+      <div class="vinfo"><div class="nm nw ol">${t(v.id)}</div><div class="nw"><span class="lv">Lv ${lv}</span> ${can ? `<b class="gl">▲ ${t('up')}</b>` : ''}</div><div class="nw">${f1(rate1(lv))}/h</div></div></div>`;
+  }).join('');
+  let sheet = '';
+  if (sel != null) {
+    const v = VEINS[sel], lv = S.veins[sel];
+    sheet = `<div class="abs sheet ${rise ? 'rise' : ''}" style="${cvars(v)}">
+      <div class="x" style="right:-12px;top:-14px" data-act="sel:x" data-tap><img src="../assets/ui/menu/btn_close.png" alt="닫기"></div>
+      <div style="display:flex;gap:12px;align-items:center;height:80px"><div class="slot" style="width:80px;display:grid;place-items:center">${crystal(lv)}</div>
+        <div class="vinfo"><div class="nw gl ol2" style="font-size:22px;line-height:24px">${t(v.id)}</div>${lv ? `<div class="nw"><span class="lv">Lv ${lv}</span> <span class="dim">/ ${maxLv()}</span></div>` : ''}</div></div>
+      ${lv ? `<div class="sec2"><div class="kv"><span class="dim">${t('perH')}</span><span class="nw">${f1(rate1(lv))}${lv < maxLv() ? ` → <b class="gr">${f1(rate1(lv + 1))}</b>` : ''}</span></div></div>` : `<div class="sec2"><div class="kv"><img class="lockimg" src="../assets/ui/icons/lock.png" alt=""><span><b>${t('boss', v.boss)}</b> · ${t('bossSub')}</span></div></div>`}
+      <div style="display:flex;gap:8px;margin-top:auto">
+        <div class="btn sec" style="width:56px;height:64px" data-act="sel:${(sel + 4) % 5}" data-tap>◀</div>
+        ${lv ? upBtn(sel, true) : '<div style="flex:1"></div>'}
+        <div class="btn sec" style="width:56px;height:64px" data-act="sel:${(sel + 1) % 5}" data-tap>▶</div></div>
+    </div>`;
+  }
+  return topBar()
+    + `<div class="abs strip" style="top:124px;height:32px">${t('ground')}</div><div class="abs shaft" style="top:156px;height:660px"></div>` + ch
+    + `<div class="abs strip" style="top:668px;height:144px;flex-direction:column"><span><img class="ic16" src="../assets/ui/icons/lock.png" alt=""> ${t('deep')}</span>${cartBox(200, 96, true)}</div>`
+    + `<div class="abs" style="left:12px;right:12px;top:824px;display:flex;gap:8px">${harvestBtn('flex:1.6;height:76px')}${sideBtns(76)}</div>` + sheet;
+}
+// ===== 시안 C: 수레가 수확 버튼, 정제소는 건물 + 바로 정제 =====
+function viewC() {
+  const pc = pouch(), okQ = pc != null && S.ore >= pc;
+  const quick = `<div class="btn ${okQ ? '' : 'off'}" style="width:250px;height:64px" data-act="gold" data-tap>
+    ${pc == null ? `<span>${t('done')}</span>` : `<span class="nw">${t('quick')} (${4 - S.d.gold}/4)</span><span class="cost ${okQ ? '' : 'red'}">${okQ ? `${ORE}${pc} → ${GOLD}${cm(C.R * C.rMul)}` : t('short', pc - S.ore)}</span>`}</div>`;
+  return topBar()
+    + VEINS.map((_, i) => veinRow(i, 124 + i * 96, 96, true)).join('')
+    // 작업장 180x119, 정제소 83x60 @ (4,9), 수레 84x60 @ (92,9) - 전부 3배. 자리는 art/mine/build_mine.py REF_AT / CART_AT.
+    + `<div class="abs" style="left:0;top:604px;width:540px;height:357px;background:url(../assets/mine/workshop.png) 0 0/540px 357px;text-align:center;padding-top:6px"><span class="ol">${t('yard')}</span></div>`
+    + `<div class="abs" style="left:12px;top:631px;width:249px;height:180px;background:url(../assets/mine/refinery.png) 0 0/249px 180px;cursor:pointer" data-act="pop:ref" data-tap data-tut="ref"><i class="fire"></i>
+        <div style="position:absolute;left:12px;top:147px;width:225px;height:27px;display:flex;flex-direction:column;justify-content:space-between;align-items:center;line-height:12px"><b class="nw gl">${t('refinery')}</b><span class="nw cost" style="height:12px">${GOLD}${4 - S.d.gold}/4 · ${t('tItem')} ${C.itemsDay - S.d.items}/${C.itemsDay}</span></div></div>`
+    + `<div class="abs" style="left:276px;top:631px">${cartArt()}</div>`
+    + `<div class="abs" style="left:12px;right:12px;top:824px;display:flex;gap:8px">${quick}
+        <div class="btn sec" style="flex:1;height:64px" data-act="pop:store" data-tap><span class="nw">${t('store')} ${'Lv' + S.sLv + (S.big ? '★' : '')}</span></div>
+        <div class="btn sec" style="flex:1;height:64px" data-act="pop:boost" data-tap><span class="nw">${t('boost')} ${C.ads - S.d.ads}</span></div></div>`;
+}
+// ===== 메인 메뉴 입구 미리보기 (배치: mainMenuScreen DEFAULT_LAYOUT) =====
+function mineIcon(x, y, locked, badge, act) {
+  return `<div class="mi mine-ic ${locked ? 'locked' : ''}" style="left:${x}px;top:${y}px" ${act ? 'data-act="enter" data-tap' : ''}>
+    ${badge ? '<i class="badge" style="left:36px;top:-4px"></i>' : ''}${locked ? '<img class="lk" src="../assets/ui/icons/lock.png" alt="">' : ''}</div>`;
+}
+function viewMenu() {
+  const ic = (id, x, y) => `<div class="mi" style="left:${x}px;top:${y}px;background-image:url(../assets/ui/menu/btn_${id}.png)"></div>`;
+  return `<div class="abs menu" style="inset:0"></div>` + ic('attendance', 20, 28) + ic('event', 20, 92) + ic('mail', 20, 156) + ic('settings', 472, 28) + ic('shop', 472, 92)
+    + `<div class="abs" style="left:154px;top:28px;width:232px;height:56px;border:16px solid transparent;border-image:url(../assets/ui/menu/plate.png) 8 fill/16px stretch"></div>`
+    + `<div class="abs btn" style="left:90px;top:760px;width:360px;height:64px;border-width:16px 28px 20px;border-image:url(../assets/ui/menu/btn_play.png) 8 14 10 14 fill/16px 28px 20px stretch"></div>`
+    + mineIcon(472, 156, !S.unlocked, hasBadge(), true)
+    + `<div class="abs" style="left:300px;top:228px;width:228px;border:16px solid transparent;border-image:url(../assets/ui/menu/plate.png) 8 fill/16px stretch">
+        <div class="dim" style="margin-bottom:8px">입구 3상태 (x472 y156, 48×48)</div>
+        <div style="display:flex;justify-content:space-between;text-align:center;height:72px">
+          ${[['기본', 0, 0], ['빨간 점', 0, 1], ['잠김', 1, 0]].map(([n, l, b]) => `<div style="position:relative;width:56px">${mineIcon(4, 0, l, b)}<div style="position:absolute;top:56px;width:56px">${n}</div></div>`).join('')}</div></div>`;
+}
+
+// ===== 팝업 =====
+const popHead = (title, emb) => `<div class="dimbg" data-act="pop:x"></div><div class="popup ${emb ? '' : 'sm'}">
+  ${emb ? '<img class="emblem" style="background:none" src="../assets/ui/menu/emblem_refinery.png" alt="">' : ''}<div class="x" data-act="pop:x" data-tap><img src="../assets/ui/menu/btn_close.png" alt="닫기"></div><div class="ptitle ol2 nw">${title}</div>`;
+function popRef() {
+  const pc = pouch(), g = C.R * C.rMul;
+  let body;
+  if (rTab === 'gold') {
+    const ok = pc != null && S.ore >= pc;
+    body = `<div class="sec2"><div class="sec-h"><b>${t('tGold')}</b><span class="nw">${t('left', 4 - S.d.gold, 4)}</span></div>
+      <div class="steps">${C.gold.map((c, i) => `<div class="step ${i < S.d.gold ? 'done' : i === S.d.gold ? 'cur' : ''}"><span>${i < S.d.gold ? '✓' : i + 1}</span><span class="cost">${ORE}${c}</span></div>`).join('')}</div>
+      <div class="kv"><span class="dim">${t('nextCost')}</span><span class="cost ${pc != null && !ok ? 'red' : ''}">${pc == null ? '-' : ORE + pc}</span></div>
+      <div class="kv"><span class="dim">${t('gain')}</span><span class="cost">${GOLD}${num(cm(g), 'yellow')}<span class="dim">(R×2)</span></span></div>
+      <div class="btn ${ok ? '' : 'off'}" style="height:64px" data-act="gold" data-tap>${pc == null ? `<span>${t('done')}</span>` : `<span class="big">${t('refine')}</span>${ok ? '' : `<span class="red">${t('short', pc - S.ore)}</span>`}`}</div>
+      <div class="dim" style="text-align:center">${t('dayMax', cm(g * 4))}</div></div>`;
+  } else {
+    const left = C.itemsDay - S.d.items;
+    body = `<div class="sec2"><div class="sec-h"><b>${t('tItem')}</b><span class="nw">${t('left', left, C.itemsDay)}</span></div>
+      ${Object.entries(C.items).map(([id, c]) => { const ok = left > 0 && S.ore >= c; return `<div class="irow"><img src="../assets/items/${id}.png" alt=""><span class="nm nw">${t(id)}</span>
+        <div class="btn ${ok ? '' : 'off'}" data-act="item:${id}" data-tap><span class="cost ${left > 0 && !ok ? 'red' : ''}">${ORE}${c}</span></div></div>`; }).join('')}
+      ${left ? '' : `<div class="dim" style="text-align:center">${t('done')}</div>`}</div>`;
+  }
+  return popHead(t('refinery'), t('refinery')) + `<div class="tabs"><div class="tab ${rTab === 'gold' ? 'on' : ''}" data-act="rtab:gold" data-tap>${t('tGold')}</div><div class="tab ${rTab === 'item' ? 'on' : ''}" data-act="rtab:item" data-tap>${t('tItem')}</div></div>
+    ${body}<div class="sec2 foot"><i class="ore lg"></i>${num(cm(S.ore), 'yellow')}<span class="dim">${t('have')}</span></div></div>`;
+}
+function popStore() {
+  const mx = S.sLv >= 5, c = C.sCost[S.sLv], ok = !mx && S.ore >= c, okD = S.dia >= C.bigDia;
+  return popHead(t('sUp')) + `<div class="sec2"><div class="sec-h"><b>${t('cap')}</b><span>Lv ${S.sLv} / 5</span></div>
+      <div class="steps">${C.hours.map((h, i) => `<div class="step ${i < S.sLv - 1 ? 'done' : i === S.sLv - 1 ? 'cur' : ''}"><span>Lv${i + 1}</span><span>${t('hrs', h)}</span></div>`).join('')}</div>
+      <div class="btn ${ok ? '' : 'off'}" style="height:60px" data-act="store" data-tap>${mx ? `<span>${t('max')}</span>` : `<span class="nw">${t('hrs', C.hours[S.sLv - 1])} → ${t('hrs', C.hours[S.sLv])}</span><span class="cost ${ok ? '' : 'red'}">${ORE}${cm(c)}</span>`}</div></div>
+    <div class="sec2"><div class="sec-h"><b>${t('bigS')}</b><span class="nw">${t('bigD')}</span></div>
+      <div class="btn pri ${S.big || !okD ? 'off' : ''}" style="height:60px" data-act="big" data-tap>${S.big ? `<span>${t('owned')}</span>` : `<span class="cost ${okD ? '' : 'red'}">${DIA}${C.bigDia}</span>`}</div></div>
+    <div class="sec2 foot" style="margin-top:0"><i class="ore lg"></i>${num(cm(S.ore), 'yellow')}<span style="flex:1"></span>${DIA}${num(cm(S.dia), 'blue')}</div></div>`;
+}
+function popBoost() {
+  const aL = C.ads - S.d.ads, dL = C.dia.length - S.d.dia, dc = C.dia[S.d.dia], okD = dL > 0 && S.dia >= dc;
+  return popHead(t('boostT')) + `<div class="sec2"><div class="kv"><span class="dim">${t('bAmt')}</span><span class="cost">${ORE}${num('+' + cm(boostAmt()))}</span></div></div>
+    <div class="sec2"><div class="sec-h"><b>${adFree ? t('free') : t('ad')}</b><span class="nw">${t('leftN', aL, C.ads)}</span></div>
+      <div class="btn ${aL ? '' : 'off'}" style="height:60px" data-act="ad" data-tap><span class="nw">${aL ? (adFree ? t('free') : '▶ ' + t('ad')) : t('done')}</span></div></div>
+    <div class="sec2"><div class="sec-h"><b>${t('inst')}</b><span class="nw">${t('leftN', dL, C.dia.length)}</span></div>
+      <div class="steps">${C.dia.map((c, i) => `<div class="step ${i < S.d.dia ? 'done' : i === S.d.dia ? 'cur' : ''}"><span>${i < S.d.dia ? '✓' : i + 1}</span><span class="cost">${DIA}${c}</span></div>`).join('')}</div>
+      <div class="btn pri ${okD ? '' : 'off'}" style="height:60px" data-act="diab" data-tap>${dL ? `<span class="cost ${okD ? '' : 'red'}">${DIA}${dc}</span>` : `<span>${t('done')}</span>`}</div></div>
+    <div class="sec2 foot" style="margin-top:0">${DIA}${num(cm(S.dia), 'blue')}</div></div>`;
+}
+
+// ===== 그리기 =====
+const $ = (id) => document.getElementById(id);
+const phone = $('phone');
+const VDESC = { A: '기획서 그대로: 세로 갱도 5층 목록, 하단에 수레 + 수확 + 정제소.', B: '단면 그림이 대부분. 광맥을 누르면 아래에서 상세 패널이 올라와 강화.', C: '자유 제안: 수레가 곧 수확 버튼, 정제소는 건물, 골드 주머니는 화면에서 바로 정제.', M: '메인 메뉴 오른쪽 열 3번째(상점 아래). 아이콘을 누르면 광산으로.' };
+function render() {
+  $('scr').innerHTML = { A: viewA, B: viewB, C: viewC, M: viewMenu }[view]();
+  $('pop').innerHTML = view === 'M' ? '' : popup === 'ref' ? popRef() : popup === 'store' ? popStore() : popup === 'boost' ? popBoost() : '';
+  $('vtabs').innerHTML = [['A', '시안 A'], ['B', '시안 B'], ['C', '시안 C'], ['M', '메뉴 입구']].map(([k, n]) => `<button class="${view === k ? 'on' : ''}" data-dev="v:${k}">${n}</button>`).join('');
+  $('vdesc').textContent = VDESC[view];
+  $('stat').innerHTML = `최고 ${S.top}층 · 최대 Lv ${maxLv()} · 시간당 ${f1(rate())} · 상한 ${cm(cap())} (${capH()}h) · 수레 ${cm(S.cart)} · 원석 ${cm(S.ore)} · 골드 +${cm(S.gold)} · 다이아 ${S.dia}<br>오늘: 주머니 ${S.d.gold}/4 · 아이템 ${S.d.items}/3 · 광고 ${S.d.ads}/2 · 즉시 채굴 ${S.d.dia}/3 · 메뉴 빨간 점 ${hasBadge() ? '켜짐' : '꺼짐'}`;
+  $('taps').textContent = taps; $('bLang').textContent = lang.toUpperCase();
+  $('bAdfree').className = adFree ? 'on' : ''; $('bLock').className = S.unlocked ? '' : 'on';
+  drawTut(); check(); rise = false;
+}
+// 터치 44px 미만 / 글자 잘림 / 화면 밖을 지금 화면에서 잰다(offset 값 = 확대와 무관)
+function check() {
+  const small = [], cut = [], out = [], pr = phone.getBoundingClientRect();
+  phone.querySelectorAll('[data-tap]').forEach((e) => { if (e.offsetWidth < 44 || e.offsetHeight < 44) small.push(`${e.dataset.act} ${e.offsetWidth}×${e.offsetHeight}`); });
+  phone.querySelectorAll('.nw').forEach((e) => { if (e.scrollWidth > e.clientWidth + 1) cut.push(e.textContent.trim().slice(0, 24)); });
+  phone.querySelectorAll('.btn > span, .maxbox, .step, .tab').forEach((e) => { const box = e.closest('.btn') || e; if (e.scrollWidth > e.clientWidth + 1 || (box !== e && e.offsetWidth > box.clientWidth + 1) || e.scrollHeight > e.clientHeight + 1) cut.push(e.textContent.trim().slice(0, 24)); });
+  phone.querySelectorAll('#scr *, #pop *').forEach((e) => { const r = e.getBoundingClientRect(); if (r.width && (r.left < pr.left - 1 || r.right > pr.right + 1) && !e.closest('.sheet,.menu')) out.push(e.className); });
+  const line = (n, a) => `<div class="${a.length ? 'bad' : 'ok'}">${a.length ? '✗' : '✓'} ${n}${a.length ? ': ' + [...new Set(a)].join(' / ') : ''}</div>`;
+  $('chk').innerHTML = line('터치 영역 44px 이상', small) + line('글자 잘림 없음', cut) + line('540 폭 밖으로 안 나감', out);
+  $('chk').dataset.bad = small.length + cut.length + out.length;
+}
+function drawTut() {
+  const el = S.tut < 3 && view !== 'M' && !popup && phone.querySelector(`[data-tut="${['cart', 'up', 'ref'][S.tut]}"]`);
+  if (!el) { $('tut').innerHTML = ''; return; }
+  const p = phone.getBoundingClientRect(), r = el.getBoundingClientRect();
+  const x = (r.left - p.left) / Z - 2 - 6, y = (r.top - p.top) / Z - 2 - 6, w = r.width / Z + 12, h = r.height / Z + 12; // -2 = 폰 테두리
+  const bub = y + h / 2 > 480 ? `bottom:${960 - y + 12}px` : `top:${y + h + 12}px`;
+  $('tut').innerHTML = `<div class="tdim" style="left:0;top:0;width:540px;height:${y}px"></div><div class="tdim" style="left:0;top:${y + h}px;width:540px;height:${960 - y - h}px"></div>
+    <div class="tdim" style="left:0;top:${y}px;width:${x}px;height:${h}px"></div><div class="tdim" style="left:${x + w}px;top:${y}px;width:${540 - x - w}px;height:${h}px"></div>
+    <div class="tframe" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>
+    <div class="tbub" style="${bub}"><div>${t('t' + (S.tut + 1))}</div><div style="display:flex;align-items:center;justify-content:space-between"><span class="dim">${S.tut + 1} / 3</span>
+      <div class="btn" style="width:140px;height:48px" data-act="tut" data-tap>${S.tut < 2 ? t('next') : t('start')}</div></div></div>`;
+}
+let toastT = 0, rise = false;
+function toast(msg) { let e = $('toast'); if (!e) { e = document.createElement('div'); e.id = 'toast'; e.className = 'toast'; phone.appendChild(e); } e.textContent = msg; e.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { e.hidden = true; }, 2000); }
+// 수확: 원석 조각이 수레에서 상단 원석 숫자로 날아간다(느낌만)
+function fly(from) {
+  const p = phone.getBoundingClientRect(), a = from.getBoundingClientRect(), b = $('oreBox').getBoundingClientRect();
+  const sx = (a.left + a.width / 2 - p.left) / Z, sy = (a.top + a.height / 2 - p.top) / Z, dx = (b.left + 16 - p.left) / Z - sx, dy = (b.top + 10 - p.top) / Z - sy;
+  for (let i = 0; i < 8; i++) {
+    const e = document.createElement('div'); e.className = 'fly'; e.style.left = sx + (i % 4) * 14 - 21 + 'px'; e.style.top = sy + (i > 3 ? 12 : -4) + 'px'; $('fx').appendChild(e);
+    e.animate([{ transform: 'translate(0,0)' }, { transform: `translate(${dx}px,${dy}px)` }], { duration: 420, delay: i * 40, easing: 'steps(10)', fill: 'backwards' }).onfinish = () => e.remove();
+  }
+}
+
+// ===== 동작 =====
+const ACT = {
+  back() { popup = null; sel = null; view = 'M'; },
+  enter() { if (!S.unlocked) return toast(t('locked')); view = lastV; },
+  harvest() { const n = Math.floor(S.cart); if (n < 1) return; fly($('cart')); S.cart -= n; S.ore += n; },
+  up(i) {
+    i = +i; const lv = S.veins[i], c = cost(lv), pc = pouch();
+    if (!lv || lv >= maxLv() || S.ore < c) return;
+    // 실수 방지: 지금 살 수 있는 골드 주머니를 이 강화 때문에 못 사게 될 때만 한 번 더 확인(안내 중에는 생략)
+    if (S.tut >= 3 && pc != null && S.ore >= pc && S.ore - c < pc && armed !== 'up' + i) { armed = 'up' + i; clearTimeout(armT); armT = setTimeout(() => { armed = null; render(); }, 2000); return toast(t('guard', pc)); }
+    armed = null; S.ore -= c; S.veins[i] = lv + 1; // 실제 게임은 여기서 먼저 수레 정산(6장 2번)
+  },
+  sel(i) { rise = sel == null; sel = i === 'x' || sel === +i ? null : +i; },
+  pop(k) { popup = k === 'x' ? null : k; if (k === 'ref') rTab = 'gold'; },
+  rtab(k) { rTab = k; },
+  gold() { const pc = pouch(); if (pc == null || S.ore < pc) return; S.ore -= pc; S.d.gold++; S.gold += C.R * C.rMul; toast(t('gotG', cm(C.R * C.rMul))); },
+  item(id) { const c = C.items[id]; if (S.d.items >= C.itemsDay || S.ore < c) return; S.ore -= c; S.d.items++; toast(t('gotI', t(id))); },
+  store() { const c = C.sCost[S.sLv]; if (S.sLv >= 5 || S.ore < c) return; S.ore -= c; S.sLv++; },
+  big() { if (S.big || S.dia < C.bigDia) return; S.dia -= C.bigDia; S.big = true; },
+  ad() { if (S.d.ads >= C.ads) return; S.d.ads++; S.cart += boostAmt(); toast((adFree ? '' : t('adPlay') + ' ') + t('gotO', cm(boostAmt()))); },
+  diab() { const c = C.dia[S.d.dia]; if (c == null || S.dia < c) return; S.dia -= c; S.d.dia++; S.cart += boostAmt(); toast(t('gotO', cm(boostAmt()))); },
+  tut() { S.tut++; },
+};
+phone.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const [k, v] = a.dataset.act.split(':');
+  if (a.dataset.tap != null && k !== 'tut') taps++;
+  ACT[k](v); render();
+});
+const DEV = {
+  p(k) { load(k); if (view === 'M') view = lastV; }, v(k) { view = k; if (k !== 'M') lastV = k; popup = null; sel = null; },
+  h(n) { if (S.cart < cap()) S.cart = Math.min(S.cart + rate() * n, cap()); }, // 상한을 넘긴 가속분은 그대로 둔다
+  day() { S.d = { gold: 0, items: 0, ads: 0, dia: 0 }; }, ore0() { S.ore = 0; }, spent() { S.d.gold = 4; S.d.items = 3; S.d.ads = 2; S.d.dia = 3; },
+  dia() { S.dia += 100; }, adfree() { adFree = !adFree; }, lock() { S.unlocked = !S.unlocked; view = 'M'; },
+  lang() { lang = lang === 'ko' ? 'en' : 'ko'; }, tap() { $('bTap').classList.toggle('on'); phone.classList.toggle('showtap'); },
+  zoom() { Z = Z === 1 ? 0.75 : 1; phone.style.zoom = Z; $('bZoom').classList.toggle('on'); }, tut() { S.tut = 0; popup = null; if (view === 'M') view = lastV; }, taps0() { taps = 0; },
+};
+document.querySelector('.side').addEventListener('click', (e) => { const b = e.target.closest('[data-dev]'); if (!b) return; const [k, v] = b.dataset.dev.split(':'); DEV[k](v); render(); });
+
+// ?v=A&p=mid&lang=en&pop=ref 로 바로 열기(스크린샷용)
+const Q = new URLSearchParams(location.search);
+load(Q.get('p') || 'mid'); view = Q.get('v') || 'A'; if (view !== 'M') lastV = view; lang = Q.get('lang') || 'ko'; popup = Q.get('pop'); if (Q.get('tab')) rTab = Q.get('tab'); if (Q.get('sel')) sel = +Q.get('sel');
+document.fonts.ready.then(render); render();
+</script>
+</body>
+</html>

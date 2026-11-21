@@ -168,21 +168,19 @@ def dim(im):
     return out
 
 
-# ---- 4. 석상과 전투: 석상 5개가 쏘고, 적이 왼쪽으로 걸어온다 ----
+# ---- 4. 수호자와 전투: 수호자 5명이 쏘고, 적이 왼쪽으로 걸어온다 ----
 def battle():
     c = Image.new('RGBA', (216, 60))
-    colors = ['red', 'blue', 'yellow', 'green', 'purple']
     back, front = [(0, 'red'), (1, 'yellow'), (2, 'purple')], [(0, 'blue'), (1, 'green')]
-    for i, col in back:
-        paste(c, frame(f'statues/sheets/statue_idle_{col}.png', 0, 16), 2 + i * 18, 14)
+    for i, col in back:  # guardian_idle = 20x26 프레임, 원본은 왼쪽을 봐서 뒤집는다
+        paste(c, flip(frame(f'statues/sheets/guardian_idle_{col}.png', 0, 20)), 2 + i * 21, 4)
     for i, col in front:
-        paste(c, frame(f'statues/sheets/statue_idle_{col}.png', 0, 16), 11 + i * 18, 34)
+        paste(c, flip(frame(f'statues/sheets/guardian_idle_{col}.png', 0, 20)), 12 + i * 21, 32)
     for x, y, col in [(66, 22, 'red'), (92, 40, 'blue'), (120, 28, 'yellow')]:
         paste(c, frame(f'towers/sheets/projectile_{col}.png', 1, 8), x, y)
     for x, rel in [(140, 'enemies/goblin_run_anim_f1.png'), (166, 'enemies/masked_orc_idle_anim_f0.png'), (192, 'enemies/goblin_run_anim_f3.png')]:
         e = flip(img(rel))
         paste(c, e, x, 54 - e.height)
-    del colors
     return c
 
 

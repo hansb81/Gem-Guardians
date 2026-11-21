@@ -196,10 +196,10 @@ Deno.test("앱(익명 사용자 JWT)·anon은 쿠폰 표·운영 함수·판정 
     await assertRejects(() => db.query("select public.coupon_redeem($1, 'SECRET1')", [A]));
     await db.exec("reset role;");
   }
-  // service_role(Edge Function)은 판정 함수만
+  // service_role(Edge Function): 판정 함수 + 관리자 함수(admin)가 쓰는 운영 함수(20261116000000_admin.sql부터)
   await db.exec("set role service_role;");
   assertEquals((await redeem(db, A, "SECRET1")).ok, true);
-  await assertRejects(() => db.query(`select public.coupon_create('HACK2', 'a', 'b', '{"diamonds":1}', null)`));
+  await db.query(`select public.coupon_create('ADMIN2', 'a', 'b', '{"diamonds":1}', null)`);
   await db.exec("reset role;");
 });
 

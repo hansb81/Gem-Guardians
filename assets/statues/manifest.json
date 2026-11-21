@@ -42,6 +42,14 @@
       "name": "자수정 메두사"
     }
   },
+  "look": {
+    "_doc": "레벨 등급 시트(config/balance.json towerLookTiers). 색: [있는 등급]. 파일 = 기본 시트 이름 + _g{등급}. 등급 1과 목록에 없는 등급은 기본 시트",
+    "red": [2, 3, 4],
+    "blue": [2, 3, 4],
+    "yellow": [2, 3, 4],
+    "green": [2, 3, 4],
+    "purple": [2, 3, 4]
+  },
   "anims": {
     "statue_idle_red": {
       "sheet": "sheets/guardian_idle_red.png",

@@ -33,6 +33,8 @@ const BLEED_FILL = '#0d0a10'; // frame 밖 기본 블리드(배경 manifest에 b
 const COMBO_SFX = { line: 'line_fire', bomb: 'bomb_explode', box: 'box_open', color: 'color_burst' };
 // 연쇄 몇 단계에서 combo_great를 들려줄지(README "연쇄 5단계 이상 도달 시 1번").
 const COMBO_GREAT_CASCADE = 5;
+const STAMP_AT = 700; // 클리어 팝업에서 첫 클리어 도장이 나타나는 ms
+const STAMP_FALL_MS = 130; // 도장이 내려꽂히는 시간(이후 = 닿음)
 
 // assets/effects/manifest.json 애니메이션 하나의 프레임 번호를 ageMs로 찾는다.
 // frameMs는 숫자(고정 길이, box_soul/color_wisp처럼 loop:true) 또는 배열(프레임마다
@@ -261,8 +263,8 @@ export class CanvasRenderer {
   // 메인 메뉴(mainMenuScreen.js) - ctx/css 크기만 공유하고 그리기는 MainMenuScreen이 직접 한다.
   // alpha < 1이면 타이틀 문 열림 전환 위로 겹쳐지는 크로스페이드다(titleScreen.menuFadeAlpha).
   // 전투 scene 위에 메뉴의 종료 확인 모달만(뒤로가기 - 정비 팝업에서).
-  drawMenuPopup(mainMenuScreen) {
-    mainMenuScreen.drawPopupOnly(this.ctx, this.cssWidth, this.cssHeight, this.assets);
+  drawMenuPopup(mainMenuScreen, now = 0) {
+    mainMenuScreen.drawPopupOnly(this.ctx, this.cssWidth, this.cssHeight, this.assets, now);
   }
 
   drawMainMenu(mainMenuScreen, playerState, now, alpha = 1) {
@@ -2810,6 +2812,8 @@ export class CanvasRenderer {
     ctx.imageSmoothingEnabled = false;
     ctx.fillStyle = cfg.overlayColor;
     ctx.fillRect(screen.full.x, screen.full.y, screen.full.width, screen.full.height); // 블리드까지
+    const shake = kind === 'win' && clearReward ? this._clearShake(clearReward) : null;
+    if (shake) ctx.translate(shake[0], shake[1]); // 도장 "쿵"에 카드째 흔들림(ctx.restore로 복구)
 
     const popupPath = `popups/popup_${kind}.png`;
     const popupState = getUi(this.assets, popupPath);
@@ -2852,7 +2856,8 @@ export class CanvasRenderer {
     buttons.forEach(([action, label], i) => {
       const bx = vertical ? cardX + 12 : cardX + 12 + i * (btnWidth + btnGap);
       const btnY = vertical ? cardY + cardHeight - 16 - btnHeight - (buttons.length - 1 - i) * (btnHeight + btnGap) : cardY + cardHeight - 16 - btnHeight;
-      const disabled = action === 'adContinue' && itemUi?.adBusy; // 불러오는 중 - 반투명, 터치 판정 없음.
+      // 광고 불러오는 중 / 클리어 골드 연출 중 - 반투명, 터치 판정 없음(연타로 연출을 건너뛰지 않게).
+      const disabled = (action === 'adContinue' && itemUi?.adBusy) || (action === 'next' && clearReward && !this._clearGoldAnim?.done);
       if (disabled) ctx.globalAlpha = 0.5;
       const isPrimary = i === 0;
       const isGold = action === 'revive'; // 부활은 btn_gold + 깃털 아이콘(docs/items.md C3).
@@ -3005,7 +3010,7 @@ export class CanvasRenderer {
     if (width === 0 || height === 0) return;
     const layout = layoutPrepPopup(width, height, state.context, state.tab);
     this._prepItemUi = itemUi;
-    state.view.drawStatue ??= (c, color, cx, cy, size) => this._battleRenderer.drawTowerIcon(c, this.assets, color, cx, cy, size);
+    state.view.drawStatue ??= (c, color, cx, cy, size, grade) => this._battleRenderer.drawTowerIcon(c, this.assets, color, cx, cy, size, grade);
     state.view.drawVault ??= (rect) =>
       this._prepItemUi?.config && this._prepItemUi.inventory ? this.inventoryTab.draw(this.ctx, rect, this.assets, this._prepItemUi, this._slotDrawers(), performance.now()) : null;
     drawPrepPopup(ctx, this.assets, state, layout);
@@ -3035,17 +3040,37 @@ export class CanvasRenderer {
 
   // 클리어 팝업 골드 내역(렌더 로컬 시각, gameState에 없음). 클리어 골드가 처치 골드까지 올라간 뒤,
   // 첫 클리어면 "첫 클리어 ×2!" 도장이 찍히고 클리어 보너스만큼 더 올라간다. 그다음 콤보 보너스가 올라간다.
+  // 클리어 연출 경과 ms(보상이 바뀌면 0부터). done = 골드가 다 올라감 → 그 전엔 "다음 층" 버튼을 막는다.
+  _clearAnimMs(reward) {
+    if (this._clearGoldAnim?.reward !== reward) this._clearGoldAnim = { reward, t0: performance.now(), thud: false, done: false };
+    return performance.now() - this._clearGoldAnim.t0;
+  }
+
+  // 첫 클리어 도장이 닿은 직후 팝업 카드가 흔들리는 정수 오프셋(픽셀 아트라 반올림).
+  _clearShake(reward) {
+    if (reward.firstClearMul == null) return null;
+    const age = this._clearAnimMs(reward) - STAMP_AT - STAMP_FALL_MS;
+    if (age < 0 || age >= 280) return null;
+    const amp = 7 * (1 - age / 280);
+    return [Math.round(Math.sin(age * 0.11) * amp), Math.round(Math.cos(age * 0.15) * amp * 0.6)];
+  }
+
   _drawClearGold(reward, x, y, w, h, headH) {
     const { ctx } = this;
-    if (this._clearGoldAnim?.reward !== reward) this._clearGoldAnim = { reward, t0: performance.now() };
-    const ms = performance.now() - this._clearGoldAnim.t0;
+    const ms = this._clearAnimMs(reward);
+    const anim = this._clearGoldAnim;
     const ease = (from, dur) => { const p = Math.max(0, Math.min(1, (ms - from) / dur)); return 1 - (1 - p) * (1 - p); };
     const first = reward.firstClearMul != null;
-    const STAMP_AT = 700;
     const comboAt = first ? 1350 : 700;
+    anim.done = ms >= comboAt + 650;
+    if (first && !anim.thud && ms >= STAMP_AT + STAMP_FALL_MS) {
+      anim.thud = true;
+      audio.play('wall_hit_heavy'); // 도장 "쿵"
+      haptics.heavy();
+    }
     const clearTotal = reward.killGold + reward.bonusGold;
     const clearShown = first
-      ? Math.round(reward.killGold * ease(200, 500) + reward.bonusGold * ease(STAMP_AT + 150, 500))
+      ? Math.round(reward.killGold * ease(200, 500) + reward.bonusGold * ease(STAMP_AT + STAMP_FALL_MS, 500))
       : Math.round(clearTotal * ease(200, 500));
     const comboShown = Math.round(reward.comboGold * ease(comboAt, 650));
     const max = reward.comboFull ? ' MAX' : '';
@@ -3069,33 +3094,62 @@ export class CanvasRenderer {
       ctx.textAlign = 'right';
       drawText(ctx, value, x + w, ly);
     });
-    if (first && ms >= STAMP_AT) this._drawFirstClearStamp(reward.firstClearMul, x + w * 0.52, y + lineH * 0.5, size, Math.min(1, (ms - STAMP_AT) / 150));
+    if (first && ms >= STAMP_AT) this._drawFirstClearStamp(reward.firstClearMul, x + w * 0.52, y + lineH * 0.5, size, ms - STAMP_AT);
     ctx.textAlign = 'center';
   }
 
-  // "첫 클리어 ×2!" 도장 - 이미지 없이 기울어진 빨간 테두리 + 글자. p(0~1) = 찍히는 진행(크게 → 제자리).
-  _drawFirstClearStamp(mul, cx, cy, size, p) {
+  // "첫 클리어 ×2!" 도장 - 이미지 없이 기울어진 빨간 테두리 + 글자. age = STAMP_AT부터 ms.
+  // 크게 떠 있다가 가속하며 내려꽂힘(STAMP_FALL_MS) → 눌렸다 튀어오름 + 흰 번쩍임 + 충격파 테두리·방사선.
+  _drawFirstClearStamp(mul, cx, cy, size, age) {
     const { ctx } = this;
+    const color = HUD_CONFIG.popup.loseColor;
     const text = t('popup.win.firstClear', { mul });
+    const fall = Math.min(1, age / STAMP_FALL_MS);
+    const hit = age - STAMP_FALL_MS; // 0 이상 = 닿은 뒤
     ctx.save();
     ctx.font = getFontString(Math.round(size * 0.9), true);
-    const tw = ctx.measureText(text).width;
-    const bw = tw + 10;
+    const bw = ctx.measureText(text).width + 10;
     const bh = size * 1.5;
     ctx.translate(Math.round(cx), Math.round(cy));
-    ctx.rotate(-0.14);
-    const scale = 1 + (1 - p) * 0.8;
+    ctx.rotate(-0.14 - (1 - fall) * 0.35);
+
+    if (hit >= 0 && hit < 340) {
+      const k = hit / 340;
+      const e = 1 - (1 - k) * (1 - k);
+      ctx.globalAlpha = 1 - k;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = Math.max(1, 4 * (1 - k));
+      const gx = bw * 0.45 * e, gy = bh * 0.9 * e;
+      ctx.strokeRect(-bw / 2 - gx, -bh / 2 - gy, bw + gx * 2, bh + gy * 2);
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i * Math.PI) / 4 + Math.PI / 8;
+        const c = Math.cos(a), s = Math.sin(a);
+        const r0 = 1.05 + e * 0.5, r1 = r0 + 0.45 * (1 - k);
+        ctx.moveTo(c * (bw / 2) * r0, s * bh * r0);
+        ctx.lineTo(c * (bw / 2) * r1, s * bh * r1);
+      }
+      ctx.stroke();
+    }
+
+    let scale = 1 + (1 - fall * fall) * 2.4; // ease-in: 점점 빨라지며 내려온다
+    if (hit >= 0 && hit < 180) scale = 1 - 0.16 * Math.sin((Math.PI * hit) / 180);
     ctx.scale(scale, scale);
-    ctx.globalAlpha = Math.min(1, p * 1.5);
+    ctx.globalAlpha = Math.min(1, fall * 2);
     ctx.fillStyle = 'rgba(27, 31, 42, 0.85)';
     ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
-    ctx.strokeStyle = HUD_CONFIG.popup.loseColor;
+    ctx.strokeStyle = color;
     ctx.lineWidth = 2;
     ctx.strokeRect(-bw / 2, -bh / 2, bw, bh);
-    ctx.fillStyle = HUD_CONFIG.popup.loseColor;
+    ctx.fillStyle = color;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     drawText(ctx, text, 0, 0);
+    if (hit >= 0 && hit < 140) {
+      ctx.globalAlpha = 0.7 * (1 - hit / 140);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+    }
     ctx.restore();
   }
 

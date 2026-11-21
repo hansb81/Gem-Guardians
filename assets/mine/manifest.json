@@ -1,0 +1,143 @@
+{
+ "version": 1,
+ "design": "저주받은 수정 광산 (docs/mine.md 15장, 시안 C)",
+ "native": [
+  180,
+  320
+ ],
+ "drawScale": 3,
+ "imageSmoothing": false,
+ "veins": [
+  "emerald",
+  "sapphire",
+  "topaz",
+  "ruby",
+  "amethyst"
+ ],
+ "row": {
+  "file": "row_{vein}.png",
+  "locked": "row_locked.png",
+  "w": 180,
+  "h": 32,
+  "crystalAt": [
+   4,
+   4
+  ],
+  "note": "광맥 줄 배경. 수정(24x24)은 crystalAt에 얹는다. 글자·버튼은 x31 오른쪽."
+ },
+ "crystals": {
+  "file": "crystals_{vein}.png",
+  "w": 24,
+  "h": 24,
+  "frames": 3,
+  "note": "가로 1줄. 프레임 = 단계(0: Lv1~5, 1: Lv6~15, 2: Lv16+)."
+ },
+ "workshop": {
+  "file": "workshop.png",
+  "w": 180,
+  "h": 119,
+  "refineryAt": [
+   4,
+   9
+  ],
+  "cartAt": [
+   92,
+   9
+  ],
+  "railY": 63,
+  "sealedGate": [
+   124,
+   100,
+   49,
+   19
+  ],
+  "note": "용광로 작업장 배경. 레일 y63~65는 수레 레일과 같은 줄. sealedGate = 봉인된 심층 문(P2 자리)."
+ },
+ "refinery": {
+  "file": "refinery.png",
+  "w": 83,
+  "h": 60,
+  "anchor": [
+   41,
+   59
+  ],
+  "fire": {
+   "file": "refinery_fire.png",
+   "x": 25,
+   "y": 30,
+   "w": 19,
+   "h": 15,
+   "frames": 4,
+   "frameMs": 160,
+   "loop": true
+  },
+  "sign": {
+   "rect": [
+    1,
+    47,
+    81,
+    13
+   ],
+   "text": [
+    4,
+    49,
+    75,
+    9
+   ],
+   "note": "건물 아래 간판. 글자 2줄(이름 / 오늘 남은 횟수)은 코드로."
+  }
+ },
+ "cart": {
+  "file": "cart.png",
+  "w": 84,
+  "h": 60,
+  "frames": 3,
+  "anchor": [
+   42,
+   59
+  ],
+  "states": [
+   "empty",
+   "half",
+   "full"
+  ],
+  "stateAt": [
+   0,
+   0.1,
+   0.8
+  ],
+  "sparkle": {
+   "file": "cart_sparkle.png",
+   "w": 7,
+   "h": 7,
+   "frames": 2,
+   "frameMs": 350,
+   "at": [
+    [
+     28,
+     4
+    ],
+    [
+     44,
+     1
+    ],
+    [
+     57,
+     7
+    ]
+   ],
+   "note": "full 상태에서만, 조각마다 시작 시점을 어긋나게."
+  }
+ },
+ "particles": {
+  "pickSpark": {
+   "colors": [
+    "#e8dcc0",
+    "#c28a20",
+    "{vein V4}"
+   ],
+   "sizePx": 1,
+   "note": "곡괭이 불꽃. 그림 없이 코드로: 광맥마다 2~3초 간격, 수정 자리에서 3~5개가 위로 튀었다 떨어짐(약 300ms)."
+  }
+ }
+}

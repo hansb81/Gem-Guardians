@@ -40,6 +40,12 @@
    48,
    48
   ],
+  "mine": [
+   472,
+   156,
+   48,
+   48
+  ],
   "playButton": [
    90,
    760,
@@ -300,6 +306,24 @@
    "w": 20,
    "h": 20,
    "use": "경쟁 모드 아이콘 20x20 (교차 검)"
+  },
+  "btn_mine": {
+   "file": "btn_mine.png",
+   "w": 24,
+   "h": 24,
+   "use": "mine 아이콘 버튼 24x24 (오른쪽 열 3번째, 화면 [472,156,48,48])"
+  },
+  "btn_mine_pressed": {
+   "file": "btn_mine_pressed.png",
+   "w": 24,
+   "h": 24,
+   "use": "눌림 상태"
+  },
+  "emblem_refinery": {
+   "file": "emblem_refinery.png",
+   "w": 24,
+   "h": 24,
+   "use": "정제소 팝업 윗변 가운데 문장 24x24"
   }
  }
 }

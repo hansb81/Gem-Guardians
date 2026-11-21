@@ -32,7 +32,7 @@ const SKILL_BUTTONS = [
 // 치트 켜기/끄기(?dev=1에서 오른쪽 위 버튼) - 끄면 패널을 숨기고 H/K 키와 배속을 끈다. 이 기기에만 기억(저장 키 'devCheats').
 export const devCheats = { on: true };
 
-export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, ranking = null, server = null, cloud = null }) {
+export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerSpecialFx, triggerCombo, triggerShuffle, addSpecial, ranking = null, server = null, cloud = null, mine = null }) {
   const panel = document.createElement('div');
   panel.style.cssText =
     'position:fixed;top:0;left:0;z-index:9999;background:rgba(0,0,0,0.75);color:#fff;' +
@@ -144,6 +144,16 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
     }
   }
 
+  // 랜덤 칸(평범한 잼)을 특수 잼으로 바꾼다 - 터뜨리지 않고 보드에 놓기만.
+  if (addSpecial) {
+    for (const [label, kind] of [['화살 추가', 'line'], ['폭탄 추가', 'bomb'], ['박스 추가', 'box'], ['무지개 추가', 'color']]) {
+      const btn = document.createElement('button');
+      btn.textContent = label;
+      btn.onclick = () => addSpecial(kind);
+      panel.append(btn);
+    }
+  }
+
   // 셔플 연출(§셔플 애니메이션) 확인용 - 가능한 수가 있어도 강제로 셔플을 한 번 재생한다.
   if (triggerShuffle) {
     const shuffleBtn = document.createElement('button');
@@ -185,8 +195,34 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
       e.weak = on ? [weak] : [];
     }
   };
-  panel.append(effectsBtn, immuneBtn, logPre);
+  // 성벽 타격 이펙트·소리 확인 - 살아 있는 적을 방어선으로 끌어온다(엘리트 = rank만 바꿈, 결계 = 10초 켜기).
+  const wallBtns = [['성벽 타격(일반)', 'normal'], ['성벽 타격(엘리트)', 'elite'], ['성벽 타격(결계)', 'shield']].map(([label, mode]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = () => {
+      const bs = controller.battleState;
+      if (!bs) return;
+      if (mode === 'shield') bs.shieldWall(10, controller.itemsConfig?.items.barrier?.blockFlashSec ?? 0);
+      for (const e of bs.enemies ?? []) {
+        if (e.state !== 'alive') continue;
+        e.progress = 1;
+        if (mode !== 'shield' && e.rank !== 'boss') e.rank = mode;
+      }
+    };
+    return b;
+  });
+  panel.append(effectsBtn, immuneBtn, ...wallBtns, logPre);
   if (ranking) appendRankingDev(panel, ranking);
+  // 광산(docs/mine.md) - 메뉴 입구가 생기기 전까지 여기서 연다. 치트는 광산 화면에서 바로 반영된다.
+  if (mine) {
+    for (const [label, fn] of [['광산 열기', mine.open], ['원석 +1000', () => mine.cheat('ore')], ['광산 +1시간', () => mine.cheat('hour')],
+      ['광산 하루 초기화', () => mine.cheat('day')], ['광맥 전부 열기', () => mine.cheat('veins')], ['광산 안내 다시', () => mine.cheat('guide')]]) {
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.onclick = fn;
+      panel.append(b);
+    }
+  }
   // 게임 서버 켜기/끄기(config/server.json enabled를 이 기기에서만 덮어씀) - 바꾸면 새로고침.
   if (server) {
     const b = document.createElement('button');

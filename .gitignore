@@ -8,6 +8,7 @@ Thumbs.db
 .claude/settings.local.json
 reports/
 dist/
+dist-admin/
 *.ait
 
 # Supabase 비밀값 (supabase secrets로만)
@@ -25,3 +26,7 @@ supabase/.temp/
 signing-key*
 android/*.zip
 keystore.properties
+
+# Threads 포스팅(tools/threads) - 토큰·키, 변환된 미디어
+.env.threads
+threads/media-cache/

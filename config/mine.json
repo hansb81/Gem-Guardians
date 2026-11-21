@@ -12,11 +12,12 @@
   "cost":  { "base": 40, "growth": 1.20 },
   "maxLv": { "base": 5, "perFloors": 5 },
   "storage": { "hours": [8, 9, 10, 11, 12], "cost": [0, 150, 400, 900, 2000], "bigBonusHours": 4, "bigDia": 150 },
-  "gold":  { "perDay": 4, "costs": [50, 100, 200, 400], "rMul": 2 },
+  "gold":  { "perDay": 4, "costs": [50, 100, 200, 400], "rMul": 2, "confirmFrom": 3 },
   "items": { "perDay": 3, "costs": { "shuffle": 60, "hammer": 80, "scythe_h": 100, "scythe_v": 100, "dye": 120 } },
   "ads":   { "perDay": 2, "hours": 2 },
   "diaBoost": { "hours": 2, "costs": [20, 40, 80] },
   "passBonus": { "monthly": 0.25 },
   "unlockGift": 50,
-  "badgeFill": 0.8
+  "badgeFill": 0.8,
+  "emptyFill": 0.1
 }

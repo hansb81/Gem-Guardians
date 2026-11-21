@@ -226,3 +226,22 @@ test("pauseFor('ad')는 AudioContext를 suspend(효과음 포함), 결제('purch
   audio.resumeFor('purchase');
   assert.equal(audio.bgm.gain.value, audio.bgmVolume);
 });
+
+test('rebuildOnResume(Android): 광고·백그라운드에서 돌아오면 AudioContext를 새로 만들고 곡을 다시 튼다', async () => {
+  stubStorage();
+  fakeAudio('running');
+  const audio = new AudioManager({ rebuildOnResume: true });
+  audio.setBgmManifest(bgmManifest);
+  audio.playBgm('bgm_menu');
+  await flush();
+  const old = audio._ctx;
+  old.close = async () => { old.closed = true; };
+  audio.pauseFor('ad');
+  audio.resumeFor('ad');
+  await flush();
+  assert.equal(old.closed, true);
+  assert.notEqual(audio._ctx, old);
+  assert.equal(audio._ctx.loops.length, 1);
+  assert.equal(audio._ctx.loops[0].loopEnd, bgmManifest.tracks.bgm_menu.loopEndSec);
+  delete globalThis.AudioContext;
+});

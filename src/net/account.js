@@ -18,6 +18,10 @@ export function maskEmail(email) {
   return m ? `${m[1]}***${m[2]}` : null;
 }
 
+// §4-1 빈 게스트: 최고 1층 + 결제 0건(다이아는 안 봄 - 결제가 없으면 출석 등 무료 보상뿐이라 새 폰에 깔고 로그인할 때 묻지 않게).
+// 타이틀 처음 실행 판정(§15)도 이걸 쓴다.
+export const isEmptyGuest = (bestFloor, purchases) => bestFloor <= 1 && purchases === 0;
+
 const fail = (reason, extra) => ({ ok: false, reason, ...extra });
 
 export function createAccount() {
@@ -67,8 +71,7 @@ export function createAccount() {
     const device = saveSummary(d.playerState.snapshot());
     let keep;
     if (!got.save) keep = 'device'; // B는 연결만 하고 저장 전
-    // §4-1 빈 게스트: 최고 1층 + 결제 0건(다이아는 안 봄 - 결제가 없으면 출석 등 무료 보상뿐이라 새 폰에 깔고 로그인할 때 묻지 않게)
-    else if (device.bestFloor <= 1 && purchases === 0) keep = 'server';
+    else if (isEmptyGuest(device.bestFloor, purchases)) keep = 'server';
     else keep = await d.chooseConflict({ server: got.save, device, purchases });
     if (keep !== 'server' && keep !== 'device') {
       await restoreA(a); // [취소] = 게스트 A 그대로(B 세션은 로컬에서 버려짐)

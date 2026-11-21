@@ -12,6 +12,19 @@ export function fxTier(level, tiers) {
   return n;
 }
 
+// 수호자 모습 등급(config/balance.json towerLookTiers) = 1 + 레벨 이하인 구간 값의 개수. 이펙트 tier와 별개.
+export const lookGrade = (level, tiers) => 1 + (tiers ? fxTier(level, tiers) : 0);
+
+// (kind 'idle'|'attack', 색, 등급)으로 그릴 towerAnims 키. 그 등급 시트가 없거나 로드 실패면 낮은 등급, 끝내 기본 시트.
+export function lookAnimKey(towerAnims, kind, color, grade) {
+  for (let g = grade; g >= 2; g--) {
+    const k = `tower_${kind}_${color}_g${g}`;
+    const a = towerAnims?.get(k);
+    if (a && a.state.loaded && !a.state.failed) return k;
+  }
+  return `tower_${kind}_${color}`;
+}
+
 // 설정 팝업의 "수호자 이펙트" 토글(저장 키 'guardianFx', 기본 켜짐). 매 프레임 읽으므로 메모리에 둔다.
 let fxOn = null;
 export const guardianFxSetting = {

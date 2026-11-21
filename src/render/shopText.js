@@ -101,10 +101,12 @@ export function productText(p, env) {
       if (pk.pass) {
         const pass = { ...pk.pass, now: cfg.products[p.id].grant.diamonds };
         const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n })).join('');
+        const minePct = Math.round((env.data?.mine?.passBonus?.[p.pack] ?? 0) * 100); // 월간 패스 = 광산 생산 +25%(config/mine.json)
+        const mine = minePct ? t('shop.pass.mine', { pct: minePct }) : '';
         return {
-          name, desc: [t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus, t('shop.pass.total', { n: fmt(pass.now + pass.daily * pass.days) })],
-          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus,
-          info: [[t('shop.info.instant'), t('shop.grant.dia', { n: pass.now })], [t('shop.info.daily'), t('shop.grant.dia', { n: pass.daily }) + plus], [t('shop.info.period'), t('shop.info.days', { n: pass.days })]],
+          name, desc: [t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus, t('shop.pass.total', { n: fmt(pass.now + pass.daily * pass.days) }) + (minePct ? t('shop.pass.mineCard', { pct: minePct }) : '')], // 카드는 세 줄뿐이라 짧은 문구
+          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus + mine,
+          info: [[t('shop.info.instant'), t('shop.grant.dia', { n: pass.now })], [t('shop.info.daily'), t('shop.grant.dia', { n: pass.daily }) + plus], [t('shop.info.period'), t('shop.info.days', { n: pass.days })], ...(minePct ? [[t('shop.pass.mineInfo'), t('shop.pass.mineVal', { pct: minePct })]] : [])],
         };
       }
       const parts = grantParts(cfg.products[p.id].grant);

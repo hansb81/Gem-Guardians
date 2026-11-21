@@ -304,6 +304,38 @@
       "volume": 1.0,
       "maxInstances": 1,
       "minGapMs": 150
+    },
+    "wall_hit": {
+      "event": "일반 몬스터가 성벽을 침 (wallDamaged, sourceEnemyId 있음). step = 1~3 랜덤",
+      "files": [
+        "wall_hit_1",
+        "wall_hit_2",
+        "wall_hit_3"
+      ],
+      "durationMs": 496,
+      "volume": 0.7,
+      "maxInstances": 3,
+      "minGapMs": 90
+    },
+    "wall_hit_heavy": {
+      "event": "엘리트/보스가 성벽을 침",
+      "files": [
+        "wall_hit_heavy"
+      ],
+      "durationMs": 959,
+      "volume": 0.9,
+      "maxInstances": 2,
+      "minGapMs": 120
+    },
+    "wall_block": {
+      "event": "결계가 몬스터 공격을 막음 (wallBlocked, source enemy)",
+      "files": [
+        "wall_block"
+      ],
+      "durationMs": 665,
+      "volume": 0.6,
+      "maxInstances": 2,
+      "minGapMs": 120
     }
   }
 }

@@ -66,6 +66,7 @@ export class RewardPopup {
     const lines = [];
     for (const [key, lv] of Object.entries(r.skills)) lines.push(t('reward.skill', { name: t(`shop.skill.${key}.name`), lv }));
     for (const f of r.flags) lines.push(t(`reward.flag.${f}`));
+    if (r.notes) lines.push(...r.notes); // 안내 줄(광산 해금 등)
 
     const cardW = snap(Math.min(width - 32, 320));
     const perRow = Math.max(1, Math.floor((cardW - 32 + GAP) / (SLOT + 16 + GAP)));
@@ -90,7 +91,7 @@ export class RewardPopup {
     ctx.textBaseline = 'middle';
     ctx.fillStyle = '#f2d264';
     ctx.font = getFontString(18, true);
-    drawText(ctx, t('reward.title'), cardX + cardW / 2, cardY + 36);
+    drawText(ctx, r.title ?? t('reward.title'), cardX + cardW / 2, cardY + 36);
 
     let y = cardY + 62;
     for (let row = 0; row < rows; row++) {

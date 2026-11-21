@@ -23,3 +23,10 @@
 - 전투 화면의 석상 5개는 지금 `sheets/guardian_idle_{color}.png`(4프레임, 160ms)와 `sheets/guardian_attack_{color}.png`(7프레임, 80ms, fireFrame 3)를 쓴다. 20x26, `drawScale` 1.5.
 - 원본은 `art/guardians/mockup/build_mockup.py`. `--export-statues`로 시트와 manifest 항목을 다시 내보낸다(왼쪽을 보게 뒤집어 저장).
 - 기존 석상 파일(`{color}.png`, `sheets/statue_idle_{color}.png`)은 지우지 않았다. 도움말 그림은 아직 기존 석상을 쓴다. 랭킹·닉네임 화면은 수호자 idle 첫 프레임을 1.5배로 그린다. 소환 연출은 빛기둥 속에 수호자 idle 첫 프레임을 그린다(석상 소환 시트는 안 씀).
+
+## 레벨 등급 모습 (2026-11-19)
+- 등급 = 1 + `config/balance.json` `towerLookTiers`([20, 35, 50]) 중 레벨 이하인 값의 개수(Lv1~19 = 1, 20~34 = 2, 35~49 = 3, 50+ = 4). 이펙트용 `towerFxTiers`와 별개.
+- 시트 = 기본 시트 이름 + `_g{등급}`(예: `guardian_idle_red_g2.png`). manifest `look`에 적힌 등급만 로드한다(지금 5색 모두 [2, 3, 4]). 없는 등급은 낮은 등급, 끝내 없으면 기본 시트.
+- 등급 idle은 12프레임(시트 너비 / 20), attack은 기본과 같은 7프레임·fireFrame·muzzle. frameMs·위치·배율은 같다.
+- 등급 모습을 쓰는 곳: 전투 대기·공격, 층 시작 소환 연출, 강화 팝업 초상(idle 0번).
+- 기본 모습 그대로인 곳(결정): 랭킹 팝업 석상(다른 플레이어 레벨을 모름), 강화 팝업의 잠긴 탑 실루엣.

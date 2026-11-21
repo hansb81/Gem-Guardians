@@ -1,6 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fxTier, outlineMask } from '../src/render/guardianFx.js';
+import { fxTier, outlineMask, lookGrade, lookAnimKey } from '../src/render/guardianFx.js';
+
+test('guardianFx: 모습 등급 = 1 + 구간 수, 없는 등급 시트는 낮은 등급 -> 기본', () => {
+  const tiers = [20, 35, 50];
+  assert.deepEqual([1, 19, 20, 34, 35, 49, 50, 200].map((l) => lookGrade(l, tiers)), [1, 1, 2, 2, 3, 3, 4, 4]);
+  assert.equal(lookGrade(99, null), 1);
+  const ok = { state: { loaded: true, failed: false } };
+  const anims = new Map([['tower_idle_red_g2', ok], ['tower_idle_red_g3', { state: { loaded: true, failed: true } }]]);
+  assert.equal(lookAnimKey(anims, 'idle', 'red', 4), 'tower_idle_red_g2'); // g4 없음, g3 실패
+  assert.equal(lookAnimKey(anims, 'idle', 'red', 1), 'tower_idle_red');
+  assert.equal(lookAnimKey(anims, 'idle', 'blue', 4), 'tower_idle_blue');
+});
 
 test('guardianFx: tier = 레벨 이하인 구간 값의 개수', () => {
   const tiers = [10, 20, 35, 50, 70];

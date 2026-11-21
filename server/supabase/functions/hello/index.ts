@@ -14,6 +14,7 @@ handle("hello", async ({ uid, user, body, db }) => {
   const row: Record<string, unknown> = { id: uid, last_seen_at: new Date().toISOString() };
   if (PLATFORMS.includes(body.platform as string)) row.platform = body.platform;
   if (typeof body.legacyId === "string" && body.legacyId.length <= 64) row.legacy_id = body.legacyId;
+  if (typeof body.appVersion === "string" && body.appVersion.length <= 32) row.app_version = body.appVersion; // 관리자 레벨 지급 버전 경고(docs/admin.md §4-3)
   // 연결된 로그인 수단(docs/auth.md §5-1 4번) - 익명 표시는 빼고.
   row.linked = [...new Set((user.identities ?? []).map((i) => i.provider).filter((p) => p && p !== "anonymous"))];
   // 토스: getAnonymousKey 값은 해시로만 보관(같은 토스 사용자 찾기·문의 대응용, §5).

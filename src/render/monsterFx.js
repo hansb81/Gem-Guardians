@@ -126,6 +126,11 @@ export class MonsterFx {
   }
 
   // 석상 투사체가 닿은 순간(battleRenderer._drawTowerProjectiles).
+  // 성벽 타격(wall_hit_s/_l, wall_block) - startMs는 돌진 가운데(now + wall.hitAtMs).
+  wallHit(key, x, y, startMs) {
+    this._sprites.push({ key, x, y, startMs });
+  }
+
   hit(color, x, y, now) {
     this._sprites.push({ key: `hit_${color}`, x, y, startMs: now });
   }

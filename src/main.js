@@ -7,6 +7,7 @@ import { isNeighbor, itemTargetCells } from './render/itemBarRenderer.js';
 import { TitleScreen } from './render/titleScreen.js';
 import { MainMenuScreen } from './render/mainMenuScreen.js';
 import { ShopScreen } from './render/shopScreen.js';
+import { MineScreen } from './render/mineScreen.js';
 import { RewardPopup, rewardFromDelta } from './render/rewardPopup.js';
 import { loadBattleData } from './game/loadBattleData.js';
 import { loadBalanceData } from './game/loadBalanceData.js';
@@ -29,8 +30,9 @@ import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
 import { restore, flushPendingPurchases, startPendingPurchases } from './shop/iap.js';
 import { storage } from './platform/storage.js';
-import { guardianFxSetting } from './render/guardianFx.js';
+import { guardianFxSetting, lookGrade } from './render/guardianFx.js';
 import { loadServerConfig, setupServer } from './game/serverUi.js';
+import { titleLoginMode, linkFromTitle } from './game/titleLogin.js';
 import { showRewarded } from './game/ads.js';
 import { continueOptions, recordUse } from './game/adContinue.js';
 import { CloudSave, saveSummary } from './net/cloudSave.js';
@@ -91,8 +93,10 @@ mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 �
 mainMenuScreen.popupAd = () => platform.caps.popupBanner && !playerState.inventory.isUnlocked('adFree');
 mainMenuScreen.popupAdDebug = () => platform.adTesting;
 const shopScreen = new ShopScreen();
+const mineScreen = new MineScreen();
 function exitTitle() {
-  if (scene !== 'title' || !titleScreen.tapReady) return;
+  if (scene !== 'title' || !titleScreen.tapReady || titleScreen.login.busy) return;
+  if (mainMenuScreen.account) mainMenuScreen.account.msg = null; // 타이틀 실패 문구를 계정 팝업에 남기지 않음
   titleScreen.startExit(); // 터치 -> resume -> ui_door_open 다음에 곡 전환.
   audio.playBgm(bgmForScene('menu'), { crossfadeMs: 1600 }); // 문 열림(1.6초)이 끝날 때 메뉴 곡만 남는다.
   audio.preloadBgm(bgmForScene('game', controller?.currentFloor));
@@ -170,8 +174,9 @@ function leaveShop() {
   startFade(SHOP_FADE_MS, null, () => {
     // 젬 스킬 레벨·4번째 슬롯을 산 경우 다음 전투에 반영되도록 층을 다시 만든다(아직 시작 전이라 진행 손실 없음).
     // 게임(정비 팝업)으로 돌아갈 때는 층을 다시 만들지 않는다 - 아래 버튼(다음 층/재도전)이 새 층을 만든다.
-    if (shopReturnScene === 'menu' && shopScreen.changed) controller?.retryFloor();
+    if (shopReturnScene !== 'game' && shopScreen.changed) controller?.retryFloor();
     scene = shopReturnScene;
+    if (scene === 'mine') mineScreen.onResume(); // 산 다이아를 바로 반영
   });
 }
 function requestShopBack() {
@@ -183,6 +188,42 @@ window.addEventListener('popstate', () => {
   if (shopScreen.closeOverlay()) history.pushState({ gg: 'shop' }, ''); // 팝업만 닫고 상점에 남는다.
   else leaveShop();
 });
+// 광산(docs/mine.md 15장) - 상점과 같은 전체 화면 scene, 같은 뒤로 가기 경로(history 한 칸).
+// 입구 = 메인 메뉴 오른쪽 열 3번째 버튼(mainMenuScreen.mine).
+function enterMine() {
+  if (!mineScreen.ready || scene === 'mine' || fade) return;
+  startFade(SHOP_FADE_MS, null, () => {
+    mineScreen.open();
+    scene = 'mine';
+  });
+  history.pushState({ gg: 'mine' }, '');
+}
+function leaveMine() {
+  startFade(SHOP_FADE_MS, null, () => {
+    scene = 'menu';
+  });
+}
+// 광산에서 다이아가 모자라 상점(다이아)으로 - history에 상점 칸을 하나 더 쌓아, 상점을 닫으면 광산(열려 있던 팝업 그대로)으로 돌아온다.
+function mineToShop() {
+  if (!controller?.shopConfig || fade) return;
+  shopReturnScene = 'mine';
+  startFade(SHOP_FADE_MS, null, () => {
+    shopScreen.open('dia');
+    scene = 'shop';
+  });
+  history.pushState({ gg: 'shop' }, '');
+}
+function requestMineBack() {
+  if (history.state?.gg === 'mine') history.back();
+  else leaveMine();
+}
+window.addEventListener('popstate', () => {
+  if (scene !== 'mine' || fade) return;
+  if (mineScreen.closeOverlay()) history.pushState({ gg: 'mine' }, ''); // 팝업만 닫고 광산에 남는다.
+  else leaveMine();
+});
+// 백그라운드에서 돌아오면 바로 정산(1초 틱을 기다리지 않는다).
+platform.lifecycle.onResume(() => scene === 'mine' && mineScreen.onResume());
 // 각 scene을 그린 다음 마지막에 불러 오버레이를 덮는다.
 function drawFade(rawDtMs) {
   if (!fade) return;
@@ -209,6 +250,19 @@ let invPress = null;
 let invDrag = null;
 const INV_DRAG_PX = 8;
 const INV_HOLD_MS = 500;
+let mineVeinToast = false; // 새 광맥 토스트 대기(보상 팝업이 닫히면 띄운다)
+// 메뉴의 광산 버튼 상태(객체 하나를 재사용 - 매 프레임 만들지 않는다). 설정을 읽은 뒤 mainMenuScreen.mine에 연결.
+const mineMenu = {
+  get locked() {
+    return !playerState.mine.unlocked;
+  },
+  get badge() {
+    return mineScreen.menuBadge();
+  },
+  get floor() {
+    return mineScreen.env.cfg.veins[0].unlockBossFloor;
+  },
+};
 const rewardPopup = new RewardPopup(); // 공통 획득 팝업(보스 첫 처치·상점 패키지/패스/무료)
 let shownClearReward = null;
 // 아이템 조준(docs/items.md 0장) - { slot, id, hover, first, down } | null. 조준 중엔 전투만
@@ -326,7 +380,6 @@ function startCloudSave() {
     deviceId: platform.identity.getUserId().catch(() => null), // platformUserId(웹·Capacitor 공통)
     appVersion: GAME_INFO.version,
   });
-  if (CloudSave.takeLoadedNotice()) mainMenuScreen.showToast(t('menu.saveConflict.loaded'));
   Account.init({
     client: authClient,
     net,
@@ -371,6 +424,7 @@ function startCloudSave() {
       confirm: false,
     };
   }
+  if (CloudSave.takeLoadedNotice()) showNotice(t('menu.saveConflict.loaded')); // 계정 줄(titleLoginOn) 뒤에 - 타이틀 로그인으로 불러왔으면 타이틀에
   const inv = playerState.inventory;
   const grant = inv.grant.bind(inv);
   inv.grant = (...args) => {
@@ -430,9 +484,37 @@ async function runAccount(fn) {
   } finally {
     if (acc) acc.busy = false;
   }
-  if (r?.ok && r.kind === 'linked') mainMenuScreen.showToast(t(r.switched ? 'menu.account.switchedToast' : 'menu.account.linkedToast'));
+  if (r?.ok && r.kind === 'linked') showNotice(t(r.switched ? 'menu.account.switchedToast' : 'menu.account.linkedToast'));
   else if (r && !r.ok && r.reason !== 'cancel' && acc) acc.msg = ACCOUNT_FAILS.has(r.reason) ? r.reason : 'error';
   return r;
+}
+// 타이틀 로그인 입구(docs/auth.md §15) - 서버 켜짐 + Google 로그인 수단이 있을 때만. 같은 Account.link를 부른다.
+let titleNetReady = false; // serverUi.started 끝(hello·웹 리다이렉트 처리 뒤)
+const titleLoginOn = () => serverUi.enabled && !!mainMenuScreen.account?.googleOn();
+// 토스트: 타이틀에 로그인 입구가 있으면 타이틀에(메뉴 토스트는 메뉴가 보일 때부터라 타이틀에선 안 보인다).
+function showNotice(text) {
+  (scene === 'title' && titleLoginOn() ? titleScreen : mainMenuScreen).showToast(text);
+}
+function syncTitleLogin() {
+  const acc = mainMenuScreen.account;
+  const l = titleScreen.login;
+  if (!titleScreen.tapReady || !titleLoginOn()) {
+    l.mode = null;
+    return;
+  }
+  const state = Account.state();
+  l.mode = titleLoginMode({
+    loginOn: true,
+    ready: titleNetReady,
+    netOn: net.on,
+    state,
+    tutorialDone: !!playerState.tutorial?.done,
+    bestFloor: playerState.bestFloor,
+    purchases: playerState.inventory.data.grantedTx.filter((tx) => String(tx).startsWith('iap:')).length,
+  });
+  l.busy = acc.busy;
+  l.msg = acc.msg;
+  l.email = state.email ?? null;
 }
 // 메뉴의 계정 동작(계정 팝업·연결 권유·삭제 입력 칸 Enter). 처리했으면 true.
 function accountAction(action) {
@@ -462,6 +544,7 @@ let serverUi = { enabled: false, handleMenuAction: () => false, pointerUp: () =>
 const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServerConfig()]).then(([battleData, balanceData, serverConfig]) => {
   if (!battleData || !balanceData) return;
   serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE, beforeStart: accountRedirect }) };
+  serverUi.started?.then(() => (titleNetReady = true));
   controller = new BattleController({
     balance: balanceData.balance,
     enemies: balanceData.enemies,
@@ -469,6 +552,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
     floorsData: balanceData.floorsData,
     itemsConfig: balanceData.items,
     shopConfig: balanceData.shop,
+    mineConfig: balanceData.mine,
     towersBaseData: balanceData.balance.tower.towers,
     battleConfig: {
       cascadeBonusPerStep: balanceData.balance.tower.puzzleShot.cascadeBonus,
@@ -500,7 +584,6 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
   // 층의 floor.obstacles로 퍼즐 보드를 새로 만든다(docs/balance.md 7장) - gameState를
   // 재대입하므로 battleBridge/animator의 "이전 보드 기준" 기억도 같이 비워야 한다.
   function resetPuzzleBoard(floorObstacles) {
-    mineConfig: balanceData.mine,
     gameState = new GameState({
       seed: Date.now(),
       obstaclesConfig: balanceData.obstacles,
@@ -519,6 +602,22 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
     gameState.shuffleBoard({ skipClear: true });
   }
 
+  if (balanceData.mine) {
+    mineScreen.setEnv({
+      cfg: balanceData.mine,
+      player: playerState,
+      save: () => playerState.save(),
+      floorGold: () => normalFloorReward(balanceData, playerState.bestFloor), // R - 상점과 같은 기준
+      serverToday: () => serverUi.att?.status?.today ?? null, // 출석 상태의 서버 날짜(KST) - 없으면 기기 시각
+      itemIcons: () => renderer.itemAssets?.icons,
+      guide: renderer.tutorial, // 강조 틀 그림(hl_frame) 재사용
+      adFree: () => playerState.inventory.isUnlocked('adFree'),
+      // 광고 가속 = 패배 이어하기와 같은 보상형 광고 흐름(src/game/ads.js), 횟수만 따로(mine.daily.ads). 보상형이 없는 플랫폼은 광고 칸이 숨는다.
+      canAd: () => platform.caps.rewarded,
+      watchAd: () => showRewarded('mine', { loadTimeoutMs: balanceData.items.adContinue.loadTimeoutMs }),
+    });
+    mainMenuScreen.mine = () => mineMenu;
+  }
   if (balanceData.shop) {
     shopScreen.setEnv({
       cfg: balanceData.shop,
@@ -568,8 +667,10 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       triggerSpecialFx: devTriggerSpecialFx,
       triggerCombo: devTriggerCombo,
       triggerShuffle: () => gameState.shuffleBoard(),
+      addSpecial: devAddSpecial,
       ranking: ranking.service ? ranking.dev() : null,
       server: serverUi.devToggle,
+      mine: balanceData.mine ? { open: enterMine, cheat: (kind) => mineScreen.dev(kind) } : null,
       cloud: serverUi.enabled
         ? {
             upload: async () => {
@@ -616,6 +717,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       },
       shopScreen,
       enterShop,
+      titleScreen,
       mainMenuScreen, // 예: __gg.mainMenuScreen.events = [{ id: 1, title: { ko: "테스트" } }]
     };
   }
@@ -678,6 +780,22 @@ function devTriggerCombo(kindA, kindB) {
       }
     }
   }
+}
+
+// 개발용(?dev=1) - 랜덤한 평범한 잼 칸(특수 잼·방해요소·애니메이션 중 칸 제외) 하나를 특수 잼으로 바꾼다.
+// 무지개는 아이템(무지개 결정)과 같은 경로(useRainbow)라 생성 연출까지 나온다. 칸 고르기는 보드 seed RNG.
+function devAddSpecial(kind) {
+  const { board } = gameState;
+  const free = [];
+  for (let i = 0; i < board.grid.length; i++) {
+    const row = Math.floor(i / board.cols);
+    const col = i % board.cols;
+    if (board.grid[i] >= 0 && !board.specials[i] && !board.occupants[i] && board.isCellStable(row, col)) free.push({ row, col });
+  }
+  if (free.length === 0) return;
+  const { row, col } = free[Math.floor(board.rng() * free.length)];
+  if (kind === 'color') gameState.useRainbow(row, col);
+  else board.setSpecial(row, col, { kind, direction: kind === 'line' ? (board.rng() < 0.5 ? 'horizontal' : 'vertical') : null });
 }
 
 // 보드 쪽(gameState.update)이 멈춰야 하는 조건 - 일시정지/팝업/전투 종료. 소환 연출 중은
@@ -976,7 +1094,9 @@ canvas.addEventListener('pointerdown', (e) => {
       if (mainMenuScreen.handlePointerDown(frameX(e), frameY(e)) === 'exitApp') platform.lifecycle.exit();
       return;
     }
-    exitTitle();
+    const hit = titleScreen.hitLogin(frameX(e), frameY(e));
+    if (hit === 'google') runAccount(() => linkFromTitle(Account, serverUi.started));
+    else if (hit !== 'block') exitTitle(); // null(평소) | 'guest'
     return;
   }
 
@@ -1000,6 +1120,7 @@ canvas.addEventListener('pointerdown', (e) => {
         scene = 'game';
       });
     } else if (action === 'openShop') enterShop();
+    else if (action === 'openMine') enterMine();
     else if (action === 'openShopGold') enterShop('dia', 'goldex');
     else if (action === 'openShopDia') enterShop('dia');
     else if (action === 'exitApp') platform.lifecycle.exit();
@@ -1009,6 +1130,12 @@ canvas.addEventListener('pointerdown', (e) => {
 
   if (scene === 'shop') {
     if (shopScreen.handlePointerDown(x, y) === 'exit') requestShopBack();
+    return;
+  }
+  if (scene === 'mine') {
+    const act = mineScreen.handlePointerDown(x, y);
+    if (act === 'exit') requestMineBack();
+    else if (act === 'shopDia') mineToShop();
     return;
   }
 
@@ -1134,6 +1261,7 @@ canvas.addEventListener('pointermove', (e) => {
     shopScreen.handlePointerMove(frameX(e), frameY(e));
     return;
   }
+  if (scene === 'mine') return;
   if (!sliderDrag) return;
   audio.setVolume(sliderDrag.channel, (frameX(e) - sliderDrag.rect.x) / sliderDrag.rect.width);
 });
@@ -1157,6 +1285,7 @@ window.addEventListener('pointerup', (e) => {
     playerState.inventory.markItemsSeen(playerState.bestFloor); // 빨간 점 1(새 아이템) 끔.
   }
   if (scene === 'shop') shopScreen.handlePointerUp();
+  mineScreen.handlePointerUp(); // 강화 버튼 꾹 누르기 끝 + 미뤄 둔 저장
 });
 window.addEventListener('pointercancel', () => {
   renderer.tutorial.touching = false;
@@ -1169,6 +1298,7 @@ window.addEventListener('pointercancel', () => {
   sliderDrag = null;
   mainMenuScreen.handlePointerUp();
   shopScreen.cancelPointer();
+  mineScreen.cancelPointer();
 });
 
 canvas.addEventListener(
@@ -1207,6 +1337,11 @@ const backHandlers = [
     if (!shopScreen.closeOverlay()) requestShopBack();
     return true;
   },
+  () => {
+    if (scene !== 'mine') return false;
+    if (!mineScreen.closeOverlay()) requestMineBack();
+    return true;
+  },
   () => scene === 'menu' && ranking.isOpen && (ranking.close(), true),
   () => scene === 'menu' && prep != null && ((prep = null), (upgradeHold = null), true),
   () => scene === 'menu' && mainMenuScreen.closePopup(),
@@ -1237,6 +1372,10 @@ platform.lifecycle.onBack(() => backHandlers.some((h) => h()));
 window.addEventListener('keydown', (e) => {
   if (scene === 'shop' && e.code === 'Escape' && !fade) {
     if (!shopScreen.closeOverlay()) requestShopBack();
+    return;
+  }
+  if (scene === 'mine' && e.code === 'Escape' && !fade) {
+    if (!mineScreen.closeOverlay()) requestMineBack();
     return;
   }
   if (scene !== 'title' || mainMenuScreen.popup) return;
@@ -1456,6 +1595,7 @@ function buildBattleHud() {
     towerNextAttacks: playerState.towerLevels.map((lvl) => towerAttack(balance, lvl + 1)),
     maxLevel: balance.tower.maxLevel,
     towerFxTiers: balance.towerFxTiers ?? null, // 수호자 레벨 구간 이펙트(guardianFx.js)
+    towerLookTiers: balance.towerLookTiers ?? null, // 수호자 모습 등급 시트(guardianFx.lookGrade)
     guardianFx: guardianFxSetting.enabled(),
   };
 }
@@ -1489,7 +1629,7 @@ function drawPrep(now) {
     const level = playerState.towerLevel(i);
     const atk = towerAttack(balance, level);
     v.totalAttack += atk;
-    v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
+    v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, look: lookGrade(level, balance.towerLookTiers), atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
   });
   v.all = statueAllInfo(balance, playerState.towerLevels, playerState.gold);
   renderer.drawPrepPopup(prep, buildItemUi());
@@ -1505,6 +1645,12 @@ function loop(now) {
   lastTime = now;
 
   if (scene === 'title') {
+    syncTitleLogin();
+    // 타이틀에서 Google 연결 중 진행 고르기(onPick)가 나오면 타이틀 위에 바로(입력은 위 pointerdown의 팝업 분기).
+    if (cloudConflict?.onPick && !mainMenuScreen.popup) {
+      mainMenuScreen.openSaveConflict(cloudConflict);
+      cloudConflict = null;
+    }
     renderer.drawTitle(titleScreen, now, rawDtMs);
     // 문 열림 전환 끝부분(1250~2200ms)은 메인 메뉴를 그 위에 겹쳐 띄운다.
     const menuAlpha = titleScreen.menuFadeAlpha();
@@ -1540,6 +1686,12 @@ function loop(now) {
   if (scene === 'shop') {
     renderer.drawShop(shopScreen, now);
     renderer.drawRewardPopup(rewardPopup);
+    drawFade(rawDtMs);
+    requestAnimationFrame(loop);
+    return;
+  }
+  if (scene === 'mine') {
+    renderer.drawShop(mineScreen, now); // 전체 화면 scene 공용: 블리드 + screen.draw
     drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;
@@ -1620,7 +1772,7 @@ function loop(now) {
       buildItemUi()
     );
     if (!paused) drawPrep(now);
-    renderer.drawMenuPopup(mainMenuScreen); // 뒤로가기 종료 확인(열려 있을 때만).
+    renderer.drawMenuPopup(mainMenuScreen, now); // 뒤로가기 종료 확인(열려 있을 때만) + 전투 중 한 줄 알림.
     if (tutorialRunning()) {
       renderer.drawTutorial(tutorial, now);
       tutorial.events.length = 0; // 이번 프레임에 그린 이벤트(손가락 강조) 소비.
@@ -1630,6 +1782,15 @@ function loop(now) {
     if (clear && clear !== shownClearReward) {
       shownClearReward = clear;
       rewardPopup.show(rewardFromDelta(clear.grant));
+      // 광산: 10층 보스 첫 처치 = 보상 팝업 다음에 해금 안내 1회, 20~50층 = 새 광맥 토스트(보상 팝업을 닫은 뒤).
+      if (clear.mineOpened?.length) {
+        if (clear.floor === mineMenu.floor) rewardPopup.show({ title: t('mine.openedTitle'), notes: [t('mine.openedHint')], gold: 0, diamonds: 0, items: {}, skills: {}, flags: [] });
+        else mineVeinToast = true;
+      }
+    }
+    if (mineVeinToast && !rewardPopup.active) {
+      mineVeinToast = false;
+      mainMenuScreen.showToast(t('mine.newVein'), true);
     }
     renderer.drawRewardPopup(rewardPopup);
   }
@@ -1657,6 +1818,7 @@ Promise.all([
 ])
   .then(([assets]) => {
     renderer.setAssets(assets);
+    titleScreen.uiAssets = assets;
     assetsReady = true;
     renderer.tutorial.load();
     if (DEV_ALLOWED && new URLSearchParams(location.search).has('sfxtest')) setupSfxTestPanel();

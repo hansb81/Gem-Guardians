@@ -186,7 +186,7 @@ export function hitPrepPopup(layout, x, y) {
 
 // state = openPrepState + flash { index, atMs, white } + view(그릴 값):
 // view = { floor, best, gold, totalAttack, towers: [{ color, name, level, atk, nextAtk, info: statueRowInfo }],
-//          nowMs, drawStatue(ctx, color, cx, cy, size), drawVault(rect) -> 터치 사각형 }
+//          nowMs, drawStatue(ctx, color, cx, cy, size, grade), drawVault(rect) -> 터치 사각형 }
 export function drawPrepPopup(ctx, assets, state, layout) {
   const { sheet, view } = { sheet: layout.sheet, view: state.view };
   ctx.save();
@@ -237,7 +237,7 @@ function drawStatueTab(ctx, assets, state, tab, view) {
     nine(ctx, assets, selected ? 'upgrade/card_selected.png' : 'upgrade/card.png', row.card, '#1f1b2b');
     const box = row.statueBox;
     nine(ctx, assets, 'menu/inset.png', box, C.outline);
-    view.drawStatue?.(ctx, tower.color, box.x + box.width / 2, box.y + box.height / 2, 40);
+    view.drawStatue?.(ctx, tower.color, box.x + box.width / 2, box.y + box.height / 2, 40, tower.look);
     // 방금 강화: 받침 상자에 1프레임 흰 테 + Lv 옆 초록 "+1" 0.6초.
     const justUp = flash && flash.index === i;
     if (justUp && flash.white) {

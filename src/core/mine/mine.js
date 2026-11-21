@@ -49,6 +49,8 @@ export function normalizeMine(saved, cfg = null) {
 export const veinRate = (cfg, lv) => cfg.prod.base * cfg.prod.growth ** (lv - 1); // 시간당, 광맥 1개
 export const veinCost = (cfg, lv) => Math.round(cfg.cost.base * cfg.cost.growth ** (lv - 1)); // lv -> lv+1
 export const maxVeinLevel = (cfg, bestFloor) => cfg.maxLv.base + Math.floor(bestFloor / cfg.maxLv.perFloors);
+// 최대 레벨이 다음에 오르는 층("N층 도달 시 Lv+1").
+export const nextMaxLevelFloor = (cfg, bestFloor) => (Math.floor(bestFloor / cfg.maxLv.perFloors) + 1) * cfg.maxLv.perFloors;
 // 보관 상한(시간) = 원석 창고 단계 + 큰 창고(다이아)면 bigBonusHours.
 export const capHours = (cfg, mine) => cfg.storage.hours[mine.storageLv - 1] + (mine.bigStorage ? cfg.storage.bigBonusHours : 0);
 
@@ -67,6 +69,20 @@ export function cartAt(cfg, mine, now, pass = false) {
   const dt = now - mine.anchorAt;
   if (mine.cart >= cap || !(dt > 0)) return mine.cart; // 가속으로 상한을 넘긴 분량은 줄지도 늘지도 않는다(15-2 #5)
   return Math.min(mine.cart + (dt / HOUR_MS) * ratePerHour(cfg, mine, pass), cap);
+}
+
+// 가득 차기까지 남은 시간(시간 단위). 이미 가득이거나 생산이 없으면 0.
+export function hoursToFull(cfg, mine, now, pass = false) {
+  const rate = ratePerHour(cfg, mine, pass);
+  const left = capacity(cfg, mine, pass) - cartAt(cfg, mine, now, pass);
+  return rate > 0 && left > 0 ? left / rate : 0;
+}
+
+// 수레 그림 상태(15-2 #4): 0 빈(emptyFill 미만) / 1 반 / 2 가득(badgeFill 이상 - 메뉴 배지와 같은 기준).
+export function cartState(cfg, mine, now, pass = false) {
+  const cap = capacity(cfg, mine, pass);
+  const fill = cap > 0 ? cartAt(cfg, mine, now, pass) / cap : 0;
+  return fill < cfg.emptyFill ? 0 : fill < cfg.badgeFill ? 1 : 2;
 }
 
 // ---------- 시간(6장 + 15-2 #5) ----------
@@ -157,6 +173,29 @@ export function nextGoldCost(cfg, mine, ctx) {
   return used < cfg.gold.perDay ? cfg.gold.costs[used] : null;
 }
 
+export const pouchGold = (cfg, R) => Math.round(R * cfg.gold.rMul);
+
+// 실수 방지(15-1): 이 강화를 하면 지금 살 수 있는 오늘의 골드 주머니를 못 사게 되는가.
+export function upgradeBlocksGold(cfg, mine, index, ctx) {
+  const pouch = nextGoldCost(cfg, mine, ctx);
+  return pouch != null && mine.ore >= pouch && mine.ore - veinCost(cfg, mine.veins[index]) < pouch;
+}
+
+// 실수 방지(15-1): 바로 정제는 confirmFrom번째(3번째 = 200)부터 한 번 더 확인.
+export function goldNeedsConfirm(cfg, mine, ctx) {
+  const used = mine.day === dayOf(ctx) ? mine.daily.gold : 0;
+  return used + 1 >= cfg.gold.confirmFrom;
+}
+
+// 오늘 남은 횟수(화면 표시용). 날짜가 바뀌었으면 전부 남은 것으로 본다(상태는 안 바꾼다).
+export function dailyLeft(cfg, mine, ctx) {
+  const d = mine.day === dayOf(ctx) ? mine.daily : newDaily();
+  return { gold: cfg.gold.perDay - d.gold, items: cfg.items.perDay - d.items, ads: cfg.ads.perDay - d.ads, dia: cfg.diaBoost.costs.length - d.diaBoost };
+}
+
+// 가속 한 번에 들어오는 원석(kind 'ad' | 'dia').
+export const boostAmount = (cfg, mine, kind, pass = false) => (kind === 'ad' ? cfg.ads.hours : cfg.diaBoost.hours) * ratePerHour(cfg, mine, pass);
+
 // 골드 주머니: 하루 perDay회, 비용 costs[n], 골드 R x rMul. txId mine:gold:{날짜}:{n}.
 export function refineGold(cfg, mine, ctx) {
   if (!mine.unlocked) return fail('locked');
@@ -166,7 +205,7 @@ export function refineGold(cfg, mine, ctx) {
   if (n >= cfg.gold.perDay) return fail('limit');
   const cost = cfg.gold.costs[n];
   if (mine.ore < cost) return fail('noOre');
-  const gold = Math.round(ctx.R * cfg.gold.rMul);
+  const gold = pouchGold(cfg, ctx.R);
   const res = ctx.inventory.grant({ gold }, { src: 'mine', txId: `mine:gold:${day}:${n + 1}` });
   // duplicate = 이 날짜의 n번째는 이미 받았다(시계를 돌려 날짜 키가 되돌아온 경우) - 원석은 안 빼고 횟수만 맞춘다.
   if (res.ok || res.reason === 'duplicate') mine.daily.gold = n + 1;

@@ -12,7 +12,7 @@
 import { loadImage } from './assetLoader.js';
 import { LayeredBg } from './layeredBg.js';
 import { getFontString } from '../config/fonts.js';
-import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton } from './uiKit.js';
+import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton, drawGoogleButton } from './uiKit.js';
 import { t, getLocale, setLocale, LOCALE_IDS } from '../config/i18n.js';
 import { storage } from '../platform/storage.js';
 import { audio } from '../audio/AudioManager.js';
@@ -43,7 +43,7 @@ const COLORS = {
   redLight: '#ec6a6a',
   dim: '#a59cb2', // 보조 글자(characters.hex)
   overlay: 'rgba(13, 10, 16, 0.75)',
-  title: '#ffe14a', // 메뉴 팝업 제목(인게임 HUD 제목 #f2d264와 다름).
+  title: '#f2d264', // 팝업 제목 - 인게임 HUD 제목과 같은 색(2026-11-07 통일).
 };
 
 const DEFAULT_LAYOUT = {
@@ -53,6 +53,7 @@ const DEFAULT_LAYOUT = {
   mail: [20, 156, 48, 48], // assets/ui/menu/manifest.json layoutA_screenPx - assets/menu/manifest.json엔 아직 없다.
   settings: [472, 28, 48, 48],
   shop: [472, 92, 48, 48],
+  mine: [472, 156, 48, 48], // 광산(docs/mine.md 15-3) - 글자 라벨 없음
   playButton: [90, 760, 360, 64],
 };
 // 신단 받침대 = 보관함 입구(manifest.altarInventory). 떠 있는 결정(crystalReserved) = 랭킹 입구(docs/ranking.md 2장).
@@ -262,7 +263,8 @@ export class MainMenuScreen {
     this.popupAd = () => false; // main.js: 이벤트 팝업에 광고 칸을 그릴지(caps.popupBanner + 광고 제거 없음)
     this.popupAdDebug = () => false; // main.js: 테스트 광고면 배너 목표 위치 테두리(실기기 위치 확인용)
     this.itemIcons = () => null; // main.js: renderer.itemAssets.icons(아이템 팩, 하단 바와 같은 그림)
-    this._toast = null; // { text, until } 메뉴 한 줄 알림 - until은 메뉴에 처음 그려질 때 정한다
+    this._toast = null; // { text, until, game } 메뉴 한 줄 알림 - until은 처음 그려질 때 정한다. game = 전투 scene 위에도 그린다
+    this.mine = () => null; // main.js: 광산 입구 { locked, badge, floor } | null(설정 없음 - 버튼 안 그림)
     this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
@@ -316,8 +318,8 @@ export class MainMenuScreen {
   }
 
   // 메뉴 한 줄 알림(예: 받지 못한 보상 복구). 타이틀에서 불려도 메뉴가 보일 때부터 TOAST.ms 동안.
-  showToast(text) {
-    this._toast = { text, until: null };
+  showToast(text, game = false) {
+    this._toast = { text, until: null, game };
   }
 
   _drawToast(ctx, nowMs) {
@@ -332,13 +334,14 @@ export class MainMenuScreen {
   }
 
   // 메뉴 밖(전투 scene)에서 종료 확인 모달만 위에 덮어 그린다 - 입력도 같은 handlePointerDown으로 받는다.
-  drawPopupOnly(ctx, width, height, assets = null) {
-    if (!this.popup || width <= 0 || height <= 0) return;
+  drawPopupOnly(ctx, width, height, assets = null, nowMs = 0) {
+    if ((!this.popup && !this._toast?.game) || width <= 0 || height <= 0) return;
     this._assets = assets;
     this._setTransform(width, height);
     ctx.save();
     ctx.imageSmoothingEnabled = false;
-    this._drawPopup(ctx, width, height);
+    if (this._toast?.game) this._drawToast(ctx, nowMs);
+    if (this.popup) this._drawPopup(ctx, width, height);
     ctx.restore();
   }
 
@@ -417,12 +420,17 @@ export class MainMenuScreen {
   _drawUi(ctx, playerState) {
     const layout = this._layout();
     this._drawCurrencyBar(ctx, playerState);
-    // 이벤트는 받을 보상이 있다고 보고 배지를 띄운다(보상 상태가 생기면 여기에 연결).
+    // 이벤트 배지는 끔(보상 상태가 생기면 여기에 연결).
     this._drawIconButton(ctx, 'attendance', layout.attendance, COLORS.gold, this.attendanceBadge());
-    this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, true);
+    this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, false);
     this._drawIconButton(ctx, 'mail', layout.mail, COLORS.bone, this.mailBadge());
     this._drawIconButton(ctx, 'settings', layout.settings, COLORS.bg3, false);
     this._drawIconButton(ctx, 'shop', layout.shop, COLORS.blue, false);
+    const mine = this.mine();
+    if (mine) {
+      this._drawIconButton(ctx, 'mine', layout.mine, COLORS.gold, !mine.locked && mine.badge);
+      if (mine.locked) this._sprite(ctx, 'icons/lock.png', layout.mine[0] + 22, layout.mine[1] + 22); // 잠김: 오른쪽 아래에 자물쇠
+    }
     this._drawPlayButton(ctx);
     this._drawAltarPlate(ctx, playerState);
     this._drawRankingPlate(ctx);
@@ -1018,31 +1026,9 @@ export class MainMenuScreen {
 
   // ---- 계정 팝업(docs/auth.md §5) ----
 
-  // Google 브랜드 버튼(라이트 테마): 흰 바탕·#747775 테두리·G 로고(공식 PNG)·#1F1F1F 글자, 시스템 글꼴(Roboto 계열).
+  // Google 브랜드 버튼(uiKit drawGoogleButton - 타이틀과 같은 그림).
   _drawGoogleButton(ctx, rect) {
-    const r = this._toScreen(rect);
-    const down = this._pressed === 'accountGoogle';
-    const k = this._transform.k;
-    ctx.save();
-    ctx.fillStyle = down ? '#F2F2F2' : '#FFFFFF';
-    ctx.strokeStyle = '#747775';
-    ctx.lineWidth = Math.max(1, k);
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.width, r.height, 4 * k);
-    else ctx.rect(r.x, r.y, r.width, r.height);
-    ctx.fill();
-    ctx.stroke();
-    if (uiReady(this._googleG)) {
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(this._googleG.img, r.x, r.y, r.height, r.height); // 정사각 G 타일(자체 흰 바탕·테두리)
-    }
-    // 브랜드 가이드: Roboto Medium, 없으면 시스템 sans(Android = Roboto·Noto CJK). 번들 'Noto Sans'는 라틴 Regular뿐이라 한글은 시스템 글꼴로.
-    ctx.font = `500 ${14 * k}px Roboto, 'Noto Sans', system-ui, sans-serif`;
-    ctx.fillStyle = '#1F1F1F';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(t('menu.account.google'), r.x + (r.width + r.height) / 2, r.y + r.height / 2);
-    ctx.restore();
+    drawGoogleButton(ctx, this._toScreen(rect), this._transform.k, { g: this._googleG, label: t('menu.account.google'), down: this._pressed === 'accountGoogle' });
   }
 
   _drawAccountPopup(ctx, [cx, cy, cw]) {
@@ -1408,6 +1394,13 @@ export class MainMenuScreen {
     if (pressButton(x, y, this._toScreen(layout.shop))) {
       this._pressed = 'shop';
       return 'openShop'; // 상점은 팝업이 아니라 전체 화면 씬(src/render/shopScreen.js) - main.js가 넘어간다.
+    }
+    const mine = this.mine();
+    if (mine && pressButton(x, y, this._toScreen(layout.mine))) {
+      this._pressed = 'mine';
+      if (!mine.locked) return 'openMine';
+      this.showToast(t('mine.lockedToast', { floor: mine.floor }));
+      return null;
     }
     // 상단 재화 바: 골드 칸 → 골드 교환, 다이아 칸 → 다이아 탭. 경계는 두 칸(BAR_ITEMS) 사이.
     const [bx, by, bw, bh] = layout.currencyBar;

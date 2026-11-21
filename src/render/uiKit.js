@@ -108,3 +108,28 @@ export function drawDamage(ctx, img, font, text, cx, y, k = 2) {
     x += (gw - 1) * k;
   }
 }
+
+// Google 브랜드 버튼(라이트 테마): 흰 바탕·#747775 테두리·G 로고(공식 PNG, assets/ui/auth/CREDITS.md)·#1F1F1F 글자, 시스템 글꼴(Roboto 계열).
+// r = 화면 좌표 {x,y,width,height}, k = basis -> 화면 배율. 계정 팝업과 타이틀이 같이 쓴다.
+export function drawGoogleButton(ctx, r, k, { g = null, label, down = false, fontPx = 14 }) {
+  ctx.save();
+  ctx.fillStyle = down ? '#F2F2F2' : '#FFFFFF';
+  ctx.strokeStyle = '#747775';
+  ctx.lineWidth = Math.max(1, k);
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(r.x, r.y, r.width, r.height, 4 * k);
+  else ctx.rect(r.x, r.y, r.width, r.height);
+  ctx.fill();
+  ctx.stroke();
+  if (uiReady(g)) {
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(g.img, r.x, r.y, r.height, r.height); // 정사각 G 타일(자체 흰 바탕·테두리)
+  }
+  // 브랜드 가이드: Roboto Medium, 없으면 시스템 sans(Android = Roboto·Noto CJK). 번들 'Noto Sans'는 라틴 Regular뿐이라 한글은 시스템 글꼴로.
+  ctx.font = `500 ${fontPx * k}px Roboto, 'Noto Sans', system-ui, sans-serif`;
+  ctx.fillStyle = '#1F1F1F';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, r.x + (r.width + r.height) / 2, r.y + r.height / 2);
+  ctx.restore();
+}

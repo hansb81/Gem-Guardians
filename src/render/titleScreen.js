@@ -8,7 +8,7 @@ import { LayeredBg } from './layeredBg.js';
 import { DoorTransition, DOOR_TRANSITION_MS, uiFadeAlpha, menuFadeAlpha } from './doorTransition.js';
 import { audio } from '../audio/AudioManager.js';
 import { getFontString } from '../config/fonts.js';
-import { drawText, drawNine } from './uiKit.js';
+import { drawText, drawNine, drawGoogleButton, getUi, getUiMeta, uiReady } from './uiKit.js';
 import { t } from '../config/i18n.js';
 import { drawImageSnapped, screen } from './screenFit.js';
 
@@ -22,6 +22,21 @@ const DRAW_SCALE = 3; // manifest.text 좌표계 기준(네이티브 180x320의 
 const GAUGE = { cx: 270, cy: 880, w: 280, h: 16, labelDy: -26, fill: { x: 4, y: 4, h: 8, padRight: 4 }, slice: [4, 0, 4, 0] };
 const GAUGE_EASE_MS = 150; // 실제 진행률을 이 시간 상수로 따라간다(한 번에 튀지 않고 차오르게).
 const GAUGE_MIN_SPEED = 1 / 1200; // 최소 속도(1/ms) - 끝까지 확실히 찬다.
+// 로그인 입구(docs/auth.md §15, 540x960 기준). 문 그림 아래(네이티브 y 251 = 753) ~ 버전 글자(950) 사이.
+// first = [게스트로 시작] / [Google로 계속하기] + 안내 두 줄, guest = "터치하여 시작"(880) 아래 글자 버튼.
+// iOS(L4): Apple 버튼은 Google 위에 - 그때 guest를 위로 한 칸 올리거나 높이를 줄인다.
+const LOGIN = {
+  guest: [120, 770, 300, 60],
+  google: [120, 842, 300, 60],
+  noteY: [924, 942],
+  linkY: 928, // 글자 버튼 / 연결된 계정 이메일 줄
+  linkW: 300,
+  linkMinPx: 44, // 글자 버튼 터치 높이 최소(css px)
+  busyY: { first: 836, guest: 928 },
+  msgY: { first: 924, guest: 840 },
+  toastY: 300,
+};
+const TOAST_MS = 3000;
 
 async function fetchJson(path) {
   try {
@@ -46,6 +61,13 @@ export class TitleScreen {
     this.fontReady = false;
     // 에셋 로딩이 끝나야 true - 그 전엔 "화면을 터치하세요" 대신 로딩 게이지(main.js가 입력도 막는다).
     this.tapReady = false;
+    // 로그인 입구 상태 - main.js가 타이틀 프레임마다 채운다. mode: null(기본) | 'first' | 'guest' | 'linked'.
+    this.login = { mode: null, busy: false, msg: null, email: null };
+    this.uiAssets = null; // CanvasRenderer.assets(금색 버튼) - 로딩 뒤 main.js가 넣는다
+    this._googleG = null;
+    loadImage('assets/ui/auth/google_g_light_square.png').then((s) => (this._googleG = s));
+    this._t = { offsetX: 0, offsetY: 0, k: 1 }; // 최근 draw()의 변환 - hitLogin에 쓴다
+    this._toast = null;
     this.loadTarget = 0; // 실제 진행률 0~1(setLoadProgress)
     this.loadShown = 0; // 화면에 그리는 값 - loadTarget을 부드럽게 따라간다
     this.gaugeTrack = null;
@@ -101,6 +123,41 @@ export class TitleScreen {
     return !this.tapReady || this.loadShown < 1;
   }
 
+  // 지금 보이는 로그인 입구(로딩 게이지 동안·전환 중엔 없음).
+  get loginMode() {
+    return this.gaugeVisible || this.exiting ? null : this.login.mode;
+  }
+
+  // 타이틀 터치 판정(화면 css px). 'guest' | 'google' | 'block'(시작 아님) | null(평소처럼 시작).
+  hitLogin(x, y) {
+    const mode = this.loginMode;
+    if (!mode) return this.login.mode === 'first' && !this.exiting ? 'block' : null; // 게이지가 마저 차는 사이 터치로 버튼을 건너뛰지 않게
+    if (this.login.busy) return 'block';
+    if (mode === 'first') {
+      if (this._hit(x, y, LOGIN.guest)) return 'guest';
+      if (this._hit(x, y, LOGIN.google)) return 'google';
+      return 'block'; // 처음 실행은 버튼으로만 시작
+    }
+    if (mode === 'guest' && this._hit(x, y, this._linkRect())) return 'google';
+    return null;
+  }
+
+  _linkRect() {
+    const h = Math.max(LOGIN.linkMinPx / this._t.k, 44);
+    return [270 - LOGIN.linkW / 2, LOGIN.linkY - h / 2, LOGIN.linkW, h];
+  }
+
+  _hit(x, y, [bx, by, bw, bh]) {
+    const { offsetX, offsetY, k } = this._t;
+    const rx = offsetX + bx * k;
+    const ry = offsetY + by * k;
+    return x >= rx && x < rx + bw * k && y >= ry && y < ry + bh * k;
+  }
+
+  showToast(text) {
+    this._toast = { text, until: null };
+  }
+
   // main.js가 탭/클릭/Enter/Space 시 호출한다 - 이미 진행 중이면 무시.
   startExit() {
     if (this.exiting) return;
@@ -149,6 +206,9 @@ export class TitleScreen {
       const offsetX = (width - NATIVE_W * scale) / 2;
       const offsetY = (height - NATIVE_H * scale) / 2;
       const k = scale / DRAW_SCALE;
+      this._t.offsetX = offsetX;
+      this._t.offsetY = offsetY;
+      this._t.k = k;
 
       ctx.save();
       ctx.imageSmoothingEnabled = false;
@@ -161,6 +221,8 @@ export class TitleScreen {
         this._drawLogo(ctx, offsetX, offsetY, scale, nowMs);
         if (this.gaugeVisible) this._drawGauge(ctx, offsetX, offsetY, k);
         if (this.fontReady) this._drawText(ctx, offsetX, offsetY, k, nowMs);
+        if (this.loginMode) this._drawLogin(ctx, offsetX, offsetY, k, nowMs);
+        if (this._toast && this.fontReady) this._drawToast(ctx, offsetX, offsetY, k, nowMs);
         ctx.globalAlpha = 1;
       }
       if (this.exiting && this._blackFadeFromMs < 0) {
@@ -245,7 +307,7 @@ export class TitleScreen {
       ctx.font = getFontString(sz(13));
       ctx.fillStyle = '#e8dcc0';
       drawText(ctx, `${t('loading.default')} ${Math.floor(this.loadShown * 100)}%`, sx(GAUGE.cx), sy(GAUGE.cy + GAUGE.labelDy), { outlineColor, outlineWidth });
-    } else if (Math.floor(nowMs / tap.blinkMs) % 2 === 0) {
+    } else if (this.loginMode !== 'first' && Math.floor(nowMs / tap.blinkMs) % 2 === 0) {
       ctx.font = getFontString(sz(tap.fontPx));
       ctx.fillStyle = tap.color;
       drawText(ctx, t('title.tap'), sx(tap.cx), sy(tap.cy), { outlineColor, outlineWidth });
@@ -257,5 +319,51 @@ export class TitleScreen {
     ctx.font = getFontString(sz(version.fontPx));
     ctx.fillStyle = version.color;
     drawText(ctx, version.text, sx(version.right), sy(version.bottom), { outlineColor, outlineWidth });
+  }
+
+  // 로그인 입구(§15). first = 버튼 두 개 + 안내, guest = 글자 버튼, linked = 이메일 한 줄. busy면 그 자리에 "연결 중…".
+  _drawLogin(ctx, offsetX, offsetY, k, nowMs) {
+    const { mode, busy, msg, email } = this.login;
+    const sr = ([x, y, w, h]) => ({ x: offsetX + x * k, y: offsetY + y * k, width: w * k, height: h * k });
+    const text = (str, cy, px, color, outline = true) => {
+      ctx.font = getFontString(px * k);
+      ctx.fillStyle = color;
+      drawText(ctx, str, offsetX + 270 * k, offsetY + cy * k, { outline, outlineColor: '#0d0a10', outlineWidth: 2 });
+    };
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (busy) text(t('menu.account.busy'), LOGIN.busyY[mode === 'first' ? 'first' : 'guest'], 18, '#f2d264');
+    else if (mode === 'first') {
+      const g = sr(LOGIN.guest);
+      const path = 'menu/btn_play.png'; // 메뉴 [플레이]와 같은 청동 금색
+      const img = getUi(this.uiAssets, path);
+      const meta = getUiMeta(this.uiAssets, path);
+      if (uiReady(img) && meta?.slice) drawNine(ctx, img.img, meta.slice, g.x, g.y, g.width, g.height, 2 * k);
+      else {
+        ctx.fillStyle = '#c28a20';
+        ctx.fillRect(g.x, g.y, g.width, g.height);
+      }
+      text(t('title.guest'), LOGIN.guest[1] + LOGIN.guest[3] / 2, 20, '#0d0a10', false); // 메뉴 [플레이]처럼 어두운 글자, 외곽선 없음
+      drawGoogleButton(ctx, sr(LOGIN.google), k, { g: this._googleG, label: t('title.google'), fontPx: 18 });
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+    } else if (mode === 'guest') text(t('title.link'), LOGIN.linkY, 14, '#e8dcc0');
+    else if (mode === 'linked' && email) text(email, LOGIN.linkY, 12, '#8a7f99');
+    if (msg) text(t(`menu.account.fail.${msg}`), LOGIN.msgY[mode === 'first' ? 'first' : 'guest'], 13, '#ec6a6a');
+    else if (mode === 'first' && !busy) t('title.note').forEach((l, i) => text(l, LOGIN.noteY[i], 12, '#b8ab94'));
+  }
+
+  _drawToast(ctx, offsetX, offsetY, k, nowMs) {
+    const tt = this._toast;
+    tt.until ??= nowMs + TOAST_MS;
+    if (nowMs >= tt.until) {
+      this._toast = null;
+      return;
+    }
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = getFontString(13 * k);
+    ctx.fillStyle = '#f2d264';
+    drawText(ctx, tt.text, offsetX + 270 * k, offsetY + LOGIN.toastY * k, { outlineColor: '#0d0a10', outlineWidth: 2 });
   }
 }

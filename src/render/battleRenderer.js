@@ -10,7 +10,9 @@ import { pickSummonFrame } from '../battle/summon.js';
 import { ditherPattern, drawItemIconFallback } from './itemBarRenderer.js';
 import { SkillFx } from './skillFx.js';
 import { MonsterFx, isBigMonster } from './monsterFx.js';
-import { FX_SLOT_STAGGER_MS, fxTier, GuardianAttackFx, atkCfg, atkFrame, drawAtkSprite, quantizeAngle, drawGuardianFxBack, drawGuardianFxBehind, drawGuardianFxFront, drawGuardianOutline } from './guardianFx.js';
+import { createRng } from '../core/rng.js';
+import { audio } from '../audio/AudioManager.js';
+import { FX_SLOT_STAGGER_MS, fxTier, lookGrade, lookAnimKey, GuardianAttackFx, atkCfg, atkFrame, drawAtkSprite, quantizeAngle, drawGuardianFxBack, drawGuardianFxBehind, drawGuardianFxFront, drawGuardianOutline } from './guardianFx.js';
 
 // tower.color 값('red'|'blue'|'yellow'|'green'|'purple')은 GEM_TYPES의 id와 같은 이름을
 // 쓰므로 그대로 색상표로 재사용한다(하드코딩 회피).
@@ -154,6 +156,8 @@ export class BattleRenderer {
     this._brightProjectiles = new Map(); // 색(또는 공격 연출 시트 키) -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
     this._brightSheetFn = (key, img) => this._brightSheet(key, img);
     this._seenRevives = new WeakSet(); // 이미 파편을 뿌린 wallRevived 이벤트
+    this._seenWallHits = new WeakSet(); // 이미 타격 이펙트·소리를 낸 wallDamaged/wallBlocked 이벤트
+    this._wallRng = createRng(0x5a11); // 성벽 타격 높이 흔들기·음높이(Math.random 금지)
     this._monsterFx = new MonsterFx(); // 몬스터 타격·사망(assets/effects/monster)
     this._atkFx = new GuardianAttackFx(); // 수호자 일반 공격 시전·명중·잔상(attack_manifest.json)
     this._hud = null; // 투사체를 쏜 순간의 레벨·이펙트 설정(_spawnTowerProjectile)
@@ -231,8 +235,7 @@ export class BattleRenderer {
 
     this._drawFloorLabel(ctx, layout.floorLabel, hud, assets);
     this._drawWallHealthBar(ctx, layout.wallBar, battleState, assets);
-    this._drawTrack(ctx, layout.track);
-    this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now, battleState);
+    this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now, battleState, paused);
     this._skillFx.update(battleState, layout.track, assets, now, this.particles, this.shake);
     this._skillFx.draw(ctx, battleState, layout.track, assets, now, rect);
     if (battleState.wallShieldSec > 0) {
@@ -407,8 +410,9 @@ export class BattleRenderer {
   // 정지 그림으로 그린다. 로드 실패 시 _drawTowerFallback과 같은 색 도형으로 대신한다.
   // 석상 원본은 왼쪽을 본다(assets/statues/README.md) - 전투 화면 탑과 같은 방향(오른쪽)을
   // 보도록 여기서도 좌우 반전한다(_drawTowers의 ctx.scale(-1,1)과 같은 패턴).
-  drawTowerIcon(ctx, assets, color, cx, cy, size) {
-    const animData = assets?.towerAnims?.get(`tower_idle_${color}`);
+  // grade = 수호자 모습 등급(guardianFx.lookGrade) - 초상은 그 등급 idle 0번 프레임.
+  drawTowerIcon(ctx, assets, color, cx, cy, size, grade = 1) {
+    const animData = assets?.towerAnims?.get(lookAnimKey(assets?.towerAnims, 'idle', color, grade));
     if (animData && animData.state.loaded && !animData.state.failed) {
       const scale = size / animData.frameH;
       const w = animData.frameW * scale;
@@ -731,14 +735,16 @@ export class BattleRenderer {
         this._drawPlinth(ctx, assets, bg, tower.color, -frameW / 2, foot.y - frameH, scale);
         ctx.restore();
       } else if (slot && !slot.done && this._summonColorReady(assets, tower.color)) {
-        this._drawSummonSlot(ctx, panelRect, assets, bg, tower.color, drawX, foot, frameW, frameH, scale, slot.frame);
+        this._drawSummonSlot(ctx, panelRect, assets, bg, tower.color, drawX, foot, frameW, frameH, scale, slot.frame, lookGrade(hud?.towerLevels?.[i] ?? 0, hud?.towerLookTiers));
       } else {
         // 소환 연출이 끝났거나(slot.done), 연출이 없거나(에셋 로딩 실패) - 기존 idle/attack.
         // 석상은 공격 프레임이 없다(assets/statues/README.md) - tower_attack_{색}가 로드돼
         // 있을 때만 쓰고, 없으면 attack 모드에서도 idle을 그린다(네온만 맥동, 몸은 안 움직임).
+        // 레벨 등급 시트(guardianFx.lookAnimKey) - 공격 중에도 같은 등급. 프레임 수·타이밍은 시트 그대로.
         const attackKey = `tower_attack_${tower.color}`;
         const isAttackAnim = anim.mode === 'attack' && assets?.towerAnims?.has(attackKey);
-        const animData = assets?.towerAnims?.get(isAttackAnim ? attackKey : `tower_idle_${tower.color}`);
+        const grade = lookGrade(hud?.towerLevels?.[i] ?? 0, hud?.towerLookTiers);
+        const animData = assets?.towerAnims?.get(lookAnimKey(assets?.towerAnims, isAttackAnim ? 'attack' : 'idle', tower.color, grade));
 
         const flash = fx?.flashUntilMs > now;
         if (animData && animData.state.loaded && !animData.state.failed) {
@@ -819,7 +825,7 @@ export class BattleRenderer {
   // 소환 연출 한 슬롯: 받침 → pillar_back → statue_summon → pillar_front(README 그리기 순서).
   // 빛기둥은 석상 왼쪽 위 기준 (-8,-24) 네이티브 px(x 배율)에 그리고, 전투 패널(panelRect)
   // 밖으로 넘치면 clip한다. drawX/foot은 _drawTowers가 이미 구한 발 좌표를 그대로 쓴다.
-  _drawSummonSlot(ctx, panelRect, assets, bg, color, drawX, foot, frameW, frameH, scale, frame) {
+  _drawSummonSlot(ctx, panelRect, assets, bg, color, drawX, foot, frameW, frameH, scale, frame, grade = 1) {
     const pillarCfg = assets.summonManifest.pillarFrame ?? {};
     const offset = pillarCfg.offsetFromStatue ?? { x: -8, y: -24 };
     const pillarW = (pillarCfg.w ?? 32) * scale;
@@ -840,7 +846,7 @@ export class BattleRenderer {
     this._drawSummonFrame(ctx, assets.summonAnims.get(`pillar_back_${color}`), frame, pillarLocalX, pillarLocalY, pillarW, pillarH);
     // 수호자(idle 시트에 drawScale이 있는 그림)는 석상 소환 시트 대신 자기 idle 첫 프레임을
     // statueShowFrame부터 그린다 - 안 그러면 빛기둥 속에 예전 석상이 잠깐 보였다가 바뀐다.
-    const own = assets?.towerAnims?.get(`tower_idle_${color}`);
+    const own = assets?.towerAnims?.get(lookAnimKey(assets?.towerAnims, 'idle', color, grade));
     if (own?.drawScale) {
       if (frame >= (assets.summonManifest.statueShowFrame ?? 6) && own.state.loaded && !own.state.failed) {
         const w = own.frameW * own.drawScale;
@@ -1127,20 +1133,6 @@ export class BattleRenderer {
     this._towerProjectiles = next;
   }
 
-  _drawTrack(ctx, track) {
-    ctx.save();
-    // 방어선: 성벽과 맞닿는 트랙 왼쪽 끝.
-    ctx.strokeStyle = '#ff5555';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 4]);
-    ctx.beginPath();
-    ctx.moveTo(track.x, track.y);
-    ctx.lineTo(track.x, track.y + track.height);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.restore();
-  }
-
   _enemyPixelPos(track, enemy) {
     const progress = clamp(enemy.progress ?? 0, 0, 1);
     const x = track.x + track.width * (1 - progress);
@@ -1161,7 +1153,28 @@ export class BattleRenderer {
     return 1;
   }
 
-  _drawEnemies(ctx, track, enemies, events, towers, assets, now, battleState = null) {
+  // 성벽 타격(monster manifest.wall) - 이 적이 낸 새 wallDamaged/wallBlocked마다 한 번, 방어선(x)·몸 가운데(y ± jitterY)에
+  // 스프라이트 + 소리. 이벤트는 durationMs 동안 남아 있으니 처음 본 것만. 방해요소 피해(sourceEnemyId 없음)는 여기 안 걸린다.
+  _spawnWallHits(enemy, events, x, bodyY, assets, now, scale) {
+    for (const e of events) {
+      if (e.sourceEnemyId !== enemy.id || this._seenWallHits.has(e)) continue;
+      const blocked = e.type === 'wallBlocked' && e.source === 'enemy';
+      if (e.type !== 'wallDamaged' && !blocked) continue;
+      this._seenWallHits.add(e);
+      const w = assets?.monsterFxManifest?.wall ?? {};
+      const hitAtMs = w.hitAtMs ?? 60;
+      const j = w.jitterY ?? 3;
+      const big = (w.bigRanks ?? ['elite', 'boss']).includes(enemy.rank);
+      const key = blocked ? 'wall_block' : big ? 'wall_hit_l' : 'wall_hit_s';
+      const dy = Math.floor(this._wallRng() * (2 * j + 1)) - j;
+      this._monsterFx.wallHit(key, x, bodyY + dy * scale, now + hitAtMs);
+      if (blocked) audio.play('wall_block', { delayMs: hitAtMs });
+      else if (big) audio.play('wall_hit_heavy', { delayMs: hitAtMs });
+      else audio.play('wall_hit', { step: 1 + Math.floor(this._wallRng() * 3), delayMs: hitAtMs });
+    }
+  }
+
+  _drawEnemies(ctx, track, enemies, events, towers, assets, now, battleState = null, paused = false) {
     const laneSize = track.height / ENEMY_LANE_COUNT;
     const baseShapeSize = Math.min(laneSize * 0.6, 40);
     const rules = assets?.enemySpriteRules ?? {};
@@ -1274,6 +1287,7 @@ export class BattleRenderer {
       fxState.bodyX = uiCenterX;
       fxState.bodyY = pos.y - visualHeight / 2;
       fxState.headY = pos.y - visualHeight;
+      if (!dead && !paused) this._spawnWallHits(enemy, events, track.x, fxState.bodyY, assets, now, displayScale);
 
       if (!dead) {
         const isBoss = enemy.rank === 'boss';
@@ -1410,29 +1424,15 @@ export class BattleRenderer {
     ctx.restore();
   }
 
-  // wallDamaged(피해 숫자+플래시) / enemyReachLine(방어선 경고)처럼 특정 적/탑 그리기
+  // wallDamaged(피해 숫자+플래시)처럼 특정 적/탑 그리기
   // 루프에 속하지 않는 전역 이벤트 연출. towerAttack의 투사체는 _drawTowerProjectiles가
   // 공격 애니메이션 fireFrame 시점에 맞춰 별도로 그린다(이 메서드에서 다루지 않음).
   _drawEventOverlays(ctx, layout, battleState, assets) {
-    const { track, wallBar } = layout;
-    const enemies = battleState.enemies || [];
+    const { wallBar } = layout;
     const events = battleState.events || [];
 
     for (const event of events) {
-      if (event.type === 'enemyReachLine') {
-        const enemy = enemies.find((e) => e.id === event.enemyId);
-        if (!enemy) continue;
-        const pos = this._enemyPixelPos(track, enemy);
-        const t = clamp(event.elapsedMs / event.durationMs, 0, 1);
-        ctx.save();
-        ctx.globalAlpha = 1 - t;
-        ctx.strokeStyle = '#ff3b3b';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(track.x, pos.y, 8 + t * 18, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      } else if (event.type === 'wallDamaged') {
+      if (event.type === 'wallDamaged') {
         const t = clamp(event.elapsedMs / event.durationMs, 0, 1);
         ctx.save();
         ctx.globalAlpha = (1 - t) * 0.5;
