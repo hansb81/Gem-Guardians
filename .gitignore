@@ -30,3 +30,6 @@ keystore.properties
 # Threads 포스팅(tools/threads) - 토큰·키, 변환된 미디어
 .env.threads
 threads/media-cache/
+
+# 스토어·서명 키 정보(지문, 키 교체 기록)가 들어 있어 저장소에 올리지 않는다
+docs/platforms.md
