@@ -111,7 +111,7 @@ export function tintSheet(img, maskColors, ramp) {
 // onProgress(loadedCount, totalCount)를 받아 로드 진행률을 알려준다.
 // 반환값: CanvasRenderer.setAssets()에 그대로 꽂아 쓸 수 있는 형태.
 export async function loadAssets(onProgress) {
-  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest, monsterFxManifest, guardianFxManifest, guardianAtkManifest] = await Promise.all([
+  const [manifest, gemManifest, effectsConfig, sfxManifest, towerManifest, statueManifest, uiManifest, menuUiManifest, uiFont, obstacleManifest, effectFxManifest, bgManifest, enemiesConfig, summonManifest, skillManifest, shopUiManifest, rankingUiManifest, monsterFxManifest, guardianFxManifest, guardianAtkManifest, spiritManifest] = await Promise.all([
     fetchJson('assets/manifest.json'),
     fetchJson('assets/gems/manifest.json'),
     fetchJson('src/config/effects.json'),
@@ -132,6 +132,7 @@ export async function loadAssets(onProgress) {
     fetchJson('assets/effects/monster/manifest.json'),
     fetchJson('assets/guardians/fx/manifest.json'),
     fetchJson('assets/guardians/fx/attack_manifest.json'),
+    fetchJson('assets/spirits/manifest.json'),
   ]);
 
   const jobs = [];
@@ -303,6 +304,14 @@ export async function loadAssets(onProgress) {
   const effectAnims = new Map();
   const bgSheets = new Map();
   const bgPlinths = new Map();
+  // 정령 대기 시트(assets/spirits) - 한 장에 정령마다 한 줄(10x10 4프레임), manifest.spirits[id] = 줄 번호.
+  // 아직 그리는 곳이 없다(정령 시스템 대기).
+  // 초상 시트(24x24, portraitCols열, manifest.portraits[id] = 칸 번호)도 한 장. 정령석 아이콘은 uiManifest(icons/spirit_stone.png).
+  if (spiritManifest.sheet) jobs.push({ bucket: 'spirit', src: `assets/spirits/${spiritManifest.sheet}` });
+  if (spiritManifest.portraitSheet) jobs.push({ bucket: 'spiritPortrait', src: `assets/spirits/${spiritManifest.portraitSheet}` });
+
+  let spiritSheet = null;
+  let spiritPortraitSheet = null;
   const summonAnims = new Map();
   const skillAnims = new Map();
   const monsterFxAnims = new Map();
@@ -409,6 +418,8 @@ export async function loadAssets(onProgress) {
         monsterFxAnims.set(job.key, { ...job.anim, state });
       } else if (job.bucket === 'guardianFx') guardianFxSheets.set(job.key, state);
       else if (job.bucket === 'guardianAtk') guardianAtkSheets.set(job.key, state);
+      else if (job.bucket === 'spirit') spiritSheet = state;
+      else if (job.bucket === 'spiritPortrait') spiritPortraitSheet = state;
       else if (job.bucket === 'summonAnim') {
         summonAnims.set(job.key, { state, frameW: job.anim.frameW, frameH: job.anim.frameH, frames: job.anim.frames });
       }
@@ -463,6 +474,10 @@ export async function loadAssets(onProgress) {
     // 수호자 일반 공격 연출(attack_manifest.json) - 실패하면 battleRenderer가 proj_/hit_{색}으로 대체.
     guardianAtkManifest,
     guardianAtkSheets,
+    // 정령 대기 시트 한 장(assets/spirits/manifest.json: frameW/frameH/frames/frameMs, spirits[id] = 줄 번호).
+    spiritManifest,
+    spiritSheet,
+    spiritPortraitSheet,
     // manifest.tileSize/bodySize/drawScale은 잼과 같은 규격(assets/obstacles/README.md) -
     // manifest 로드 실패 시에도 fallback 도형만 그리면 되므로 기본값을 그대로 둔다.
     obstacleTileSize: obstacleManifest.tileSize ?? 48,

@@ -15,6 +15,11 @@
       "h": 16,
       "use": "다이아 재화 아이콘"
     },
+    "icons/spirit_stone.png": {
+      "w": 16,
+      "h": 16,
+      "use": "정령석 재화 아이콘"
+    },
     "icons/wall.png": {
       "w": 16,
       "h": 16,
