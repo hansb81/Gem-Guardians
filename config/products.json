@@ -24,6 +24,7 @@
   "pack.boss": {
     "type": "consumable",
     "grant": {
+      "diamonds": 800,
       "items": {
         "revive": 2,
         "hourglass": 3,
@@ -44,10 +45,10 @@
     "grant": {
       "slot4": true,
       "items": {
-        "rainbow": 3
+        "rainbow": 5
       }
     },
-    "priceKRW": 4900,
+    "priceKRW": 2900,
     "ids": {
       "toss": null,
       "android": null,
@@ -84,13 +85,14 @@
   "pack.chapter": {
     "type": "consumable",
     "grant": {
+      "diamonds": 250,
       "items": {
         "barrier": 3,
         "hourglass": 2,
         "booster_bomb": 2
       }
     },
-    "priceKRW": 3900,
+    "priceKRW": 1900,
     "ids": {
       "toss": null,
       "android": null,

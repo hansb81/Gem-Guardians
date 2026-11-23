@@ -43,7 +43,7 @@
     { "bonus": 2100, "stack": 5 }
   ],
   "diaItems": ["gold_coin", "revive"],
-  "slot4Dia": 100,
+  "slot4Dia": 300,
   "itemBundles": [
     { "item": "hammer", "count": 5, "dia": 20 },
     { "item": "dye", "count": 5, "dia": 20 },
@@ -66,7 +66,7 @@
     "starter": { "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5 },
     "boss": { "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3 },
     "slot4": { "once": true, "maxBestFloor": 20, "icon": "pack_slot4" },
-    "weekly": { "icon": "pack_weekly", "pass": { "daily": 60, "days": 7 } },
+    "weekly": { "icon": "pack_weekly", "pass": { "daily": 120, "days": 7 } },
     "monthly": { "icon": "pack_monthly", "pass": { "daily": 100, "days": 30, "dailyItems": { "dye": 1 } } },
     "chapter": { "perChapter": true, "icon": "pack_chapter" },
     "adfree": { "once": true, "icon": "pack_adfree" }
