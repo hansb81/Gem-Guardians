@@ -96,7 +96,10 @@ export async function run(env) {
   const BASE_SEEDS = target.baseSeeds;
   const BORDER = target.borderline;
   const players = env.players.filter((p) => PLAYERS.includes(p));
-  const probes = expectedTowerLevels(env.configs, PROBE_FLOOR_NUMBERS).filter((p) => p.floor >= env.floorsRange.from && p.floor <= env.floorsRange.to);
+  // 보스층 = 범위 안의 bossEvery 배수(1-100층이면 PROBE_FLOOR_NUMBERS와 같다, v13-4에서 101층 이후용으로 넓힘).
+  const every = balance.floorShape.bossEvery;
+  const bossFloors = Array.from({ length: Math.floor(env.floorsRange.to / every) }, (_, i) => (i + 1) * every).filter((f) => f >= env.floorsRange.from);
+  const probes = expectedTowerLevels(env.configs, bossFloors.length ? bossFloors : PROBE_FLOOR_NUMBERS).filter((p) => p.floor >= env.floorsRange.from && p.floor <= env.floorsRange.to);
   const csvRows = [];
   const outOfRange = [];
   const winCell = new Map(); // `${player}|${floor}|${col}` -> 문자열

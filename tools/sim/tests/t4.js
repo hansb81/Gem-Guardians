@@ -16,6 +16,8 @@ import { buyItems, SLOT4_ITEM } from '../itemBot.js';
 import { openUnlocks, skillLevelCards, skillMaxLevel } from '../skills.js';
 import { defaultShopSave } from '../../../src/core/shop/shop.js';
 import { combo, comboGold } from '../combo.js';
+import { failReason } from './t1.js';
+import { towerAttack } from '../../../src/core/economy/economy.js';
 import { newSpiritProg, spiritBossClear, spiritEquipBest, spiritLevelUp, spiritStats } from '../spiritProg.js';
 
 const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
@@ -90,7 +92,8 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   const attemptLog = []; // 시도마다 { floor, cleared, wall, aliveMax, timeSec, farm } - 하위 10% 성벽·동시 적 최대·층 시간용
   const track = (f, r, farm = false) => {
     const b = bucketOf(f);
-    attemptLog.push({ floor: f, cleared: r.status === 'cleared', wall: r.wallHealthPct, aliveMax: r.aliveMax, timeSec: r.timeSec, farm });
+    // cause(v13-4) = 진 판의 원인: timeout(600초) | 보스 | 적 누적 | 시한폭탄(T1 failReason과 같은 분류). 이긴 판은 ''.
+    attemptLog.push({ floor: f, cleared: r.status === 'cleared', wall: r.wallHealthPct, aliveMax: r.aliveMax, timeSec: r.timeSec, farm, cause: r.status === 'timeout' ? 'timeout' : failReason(r) });
     b.aliveSec += r.aliveSec;
     b.hit += Object.values(r.damageBySource).reduce((a, v) => a + v, 0);
     b.wasteBasic += r.waste.basic;
@@ -318,7 +321,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         }
         if (floor === itemsCfg.slots.unlock4BossFirstClear && !equipped.includes(SLOT4_ITEM)) equipped.push(SLOT4_ITEM);
       }
-      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry, skillLvAtEntry, continueUsed: result.continueUsed, goldAtEntry, unlockPending, clearSec: result.timeSec, ...(sp ? { spiritsAtEntry } : {}) });
+      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry, skillLvAtEntry, continueUsed: result.continueUsed, goldAtEntry, unlockPending, clearSec: result.timeSec, cumMin: cumulativeTimeSec / 60, ...(sp ? { spiritsAtEntry } : {}) });
       if (sp && tag === 'boss') spiritBossClear(sp, floor);
       const isWall = result.tag === 'boss' && bossWallMin != null ? floorTimeSec / 60 > bossWallMin : attempt - 1 >= wallFlagAt(result.tag);
       if (isWall) wallFloors.push(floor);
@@ -428,6 +431,9 @@ export async function run(env) {
   const timeCsv = [];
   const idleCsv = []; // --idle > 0일 때만 t4idle csv + 표
   const spiritCsv = []; // --spirits=prog일 때만 t4spirit csv + 표
+  const seedCsv = []; // v13-4: 시드·층별 클리어 기록(t4seed), 구간별 진 판 원인(t4failcause), 구간별 골드 흐름(t4flow) - 표는 안 만들고 csv만
+  const causeCsv = [];
+  const flowCsv = [];
   const spiritEcon = [];
   const special = env.configs.shop.skills.special;
   const unlockIds = Object.keys(special).filter((id) => special[id].unlockBossFloor);
@@ -447,6 +453,9 @@ ${wasteTable(runs, sim.players[player].secondsPerMove)}
 ${wasteCauseTable(runs)}`);
         extraRows.push(extraRow(label, runs, unlockIds));
         if (env.idle > 0) idleCsv.push(idleRow(player, strategy, runs));
+        seedCsv.push(...seedRows(env.configs, player, strategy, runs));
+        causeCsv.push(...failCauseRows(player, strategy, runs));
+        flowCsv.push(...flowRows(player, strategy, runs));
         if (env.spiritsProg) {
           const { rows, econ } = spiritRows(env.configs, player, strategy, runs);
           spiritCsv.push(...rows);
@@ -615,7 +624,7 @@ ${mdTable(['플레이어:전략', '구간', '장착 수', '평균 Lv', '평균 �
 ### T4 정령 경제 (시드 평균, % = 전체 획득 골드 대비)
 ${mdTable(Object.keys(spiritEcon[0]), spiritEcon.map((r) => Object.values(r)))}`
     : '';
-  return { csvRows, summaryMd: summaryMd + idleMd + spiritMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}), ...(spiritCsv.length ? { t4spirit: spiritCsv, t4spiritecon: spiritEcon } : {}) } };
+  return { csvRows, summaryMd: summaryMd + idleMd + spiritMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, t4seed: seedCsv, t4failcause: causeCsv, t4flow: flowCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}), ...(spiritCsv.length ? { t4spirit: spiritCsv, t4spiritecon: spiritEcon } : {}) } };
 }
 
 // --spirits=prog: 10층 구간별 장착 상태(클리어한 층의 진입 장착) + 경제 한 줄.
@@ -776,4 +785,41 @@ function wasteCauseTable(runs) {
     r.firstEnemySec.toFixed(2), r.swapsBeforeEnemy.toFixed(2), r.emptySec.toFixed(1), r.secPerAttempt.toFixed(1), r.minutesPerSeed.toFixed(1), r.failsPerSeed.toFixed(1), p(r.wallMean), r.emptySpawnsPerAttempt.toFixed(1),
     p(r.wallLow10), r.aliveAvg.toFixed(2), `${r.aliveMaxMean.toFixed(1)} / ${r.aliveMax}`]);
   return mdTable(['구간', '버려짐 a+b+c', '(a) 빈 전장', '(a) 중 소환 연출 중', '(b) 비행 중 소멸', '(b) 중 예약 폴백', '(c) 기술 허공', '오버킬 기본', '오버킬 기술', '오버킬 범위·독', '첫 적까지(초)', '첫 적까지 스왑', '빈 전장(초/시도)', '시도당 시간(초)', '구간 시간(분/시드, 재도전·사냥 포함)', '실패 시도(회/시드)', '클리어 시 남은 성벽', '즉시 등장(회/시도)', '남은 성벽 하위 10% 평균', '동시 적 평균', '동시 적 최대(시도 평균 / 구간 최대)'], rows);
+}
+
+// v13-4(101-200층 측정): 시드·층마다 클리어 기록 한 줄. towerAtk = 진입 레벨의 평균 공격력(towerAttack), skillLvAvg = 그때 스킬 Lv 평균(해금 안 된 0 포함),
+// spiritAtk = 진입 장착 공격 환산 %(prog일 때만), cumMin = 그 층을 깬 순간의 누적 시간.
+function seedRows(configs, player, strategy, runs) {
+  const colors = configs.balance.tower.towers.map((t) => t.color);
+  return runs.flatMap((r, s) => r.retriesByFloor.filter((x) => x.clearSec != null).map((x) => ({
+    player, strategy, seed: s + 1, floor: x.floor, tag: x.tag, retries: x.retries, floorMinutes: x.floorMinutes.toFixed(3), wallLeft: x.wallLeftPct.toFixed(3),
+    entryLv: x.avgLevelAtEntry.toFixed(2), towerAtk: (x.levelsAtEntry.reduce((t, l) => t + towerAttack(configs.balance, l), 0) / x.levelsAtEntry.length).toFixed(2),
+    skillLvAvg: x.skillLvAtEntry ? (Object.values(x.skillLvAtEntry).reduce((t, v) => t + v, 0) / Object.keys(x.skillLvAtEntry).length).toFixed(2) : '',
+    spiritAtk: x.spiritsAtEntry !== undefined ? spiritStats(configs.spirits, x.spiritsAtEntry ?? [], colors).atk.toFixed(2) : '', goldAtEntry: x.goldAtEntry, clearSec: x.clearSec.toFixed(2), cumMin: x.cumMin.toFixed(2),
+  })));
+}
+
+// v13-4: 10층 구간마다 도전(반복 사냥 제외) 수와 진 판 원인별 수(시드 합).
+function failCauseRows(player, strategy, runs) {
+  const out = new Map();
+  for (const x of runs.flatMap((r) => r.attemptLog.filter((a) => !a.farm))) {
+    const b = Math.floor((x.floor - 1) / 10);
+    const row = out.get(b) ?? { player, strategy, bucket: `${b * 10 + 1}-${b * 10 + 10}`, attempts: 0, fails: 0, timeout: 0, boss: 0, enemies: 0, bomb: 0 };
+    row.attempts++;
+    if (!x.cleared) {
+      row.fails++;
+      row[{ timeout: 'timeout', 보스: 'boss', '적 누적': 'enemies', 시한폭탄: 'bomb' }[x.cause] ?? 'enemies']++;
+    }
+    out.set(b, row);
+  }
+  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
+// v13-4: 10층 구간마다 시드 평균 수입·지출(flow 칸 그대로, spirit = 정령 레벨 골드).
+function flowRows(player, strategy, runs) {
+  return sumBuckets(runs).map((b, i) => (b ? {
+    player, strategy, bucket: `${i * 10 + 1}-${i * 10 + 10}`,
+    income: Math.round((b.first + b.replay + b.fail + b.exchange + b.combo) / runs.length), tower: Math.round(b.tower / runs.length), skill: Math.round(b.skill / runs.length),
+    unlock: Math.round(b.unlock / runs.length), item: Math.round(b.item / runs.length), spirit: Math.round(b.spirit / runs.length),
+  } : null)).filter(Boolean);
 }

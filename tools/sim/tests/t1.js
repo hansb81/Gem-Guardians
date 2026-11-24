@@ -10,7 +10,7 @@ const LEVEL_SETS = [
   { label: 'Lv20', level: 20 },
 ];
 
-function failReason(result) {
+export function failReason(result) {
   if (result.status !== 'failed') return '';
   const rankEntries = Object.entries(result.wallDamageByRank);
   const enemyTotal = rankEntries.reduce((s, [, v]) => s + v, 0);
