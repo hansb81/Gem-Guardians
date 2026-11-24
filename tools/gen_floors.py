@@ -57,7 +57,7 @@ def scaling(B, f):
     s = B['scaling']
     return {
         'hpMul': rdec(s['hpGrowth'] ** (f - 1), 4),
-        'wallDmgMul': rdec(s['wallDmgGrowth'] ** (f - 1), 4),
+        'wallDmgMul': rdec(wall_dmg_raw(B, f), 4),
         'speedMul': rdec(min(s['speedCap'], 1 + s['speedPerFloor'] * (f - 1)), 4),
         'defAdd': (f - 1) // s['defEvery'],
         'goldMul': rdec(s['goldGrowth'] ** (f - 1), 4),
@@ -243,6 +243,26 @@ def gen_floor(B, E, O, f):
     }
 
 
+def wall_dmg_raw(B, f):
+    """Wall damage floor multiplier before rounding (same as floorGen.js wallDmgRaw): after 100, wall.dmgGrowthAfter100 per floor."""
+    g = B['scaling']['wallDmgGrowth']
+    g2 = B['wall'].get('dmgGrowthAfter100', g)
+    if f <= 100 or g2 == g:
+        return g ** (f - 1)
+    return g ** 99 * g2 ** (f - 100)
+
+
+def boss_hp_mul_at(B, f):
+    """Boss HP floor multiplier (same as floorGen.js bossHpMulAt): own key, else for f > 100 the same slot of 1-100 x cycleMul."""
+    m = B['floorShape']['bossMul']
+    t = m.get('hpMulByFloor', {})
+    if str(f) in t:
+        return t[str(f)]
+    if f <= 100:
+        return 1
+    return t.get(str((f - 1) % 100 + 1), 1) * m.get('cycleMul', 1)
+
+
 def unit_stats(B, E, floor, spawn):
     """Final stats of one spawn entry on a floor (shared with sim)."""
     typ, _, rank = spawn.partition('@')
@@ -256,7 +276,7 @@ def unit_stats(B, E, floor, spawn):
     if rank == 'boss':
         return {
             'type': typ, 'rank': 'boss',
-            'hp': rnd(mul['hpBase'] * sc['hpMul'] * mul.get('hpMulByFloor', {}).get(str(floor['floor']), 1) * B['scaling'].get('enemyHpMul', 1)),
+            'hp': rnd(mul['hpBase'] * sc['hpMul'] * boss_hp_mul_at(B, floor['floor']) * B['scaling'].get('enemyHpMul', 1)),
             'def': sc['defAdd'] + mul['def'],
             'speed': (1.0 / mul['travelTime']) * sc['speedMul'],
             'wallDmg': rnd(mul['wallDmgBase'] * sc['wallDmgMul']),

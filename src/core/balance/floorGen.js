@@ -28,11 +28,19 @@ function scaling(B, f) {
   const s = B.scaling;
   return {
     hpMul: rdec(s.hpGrowth ** (f - 1), 4),
-    wallDmgMul: rdec(s.wallDmgGrowth ** (f - 1), 4),
+    wallDmgMul: rdec(wallDmgRaw(B, f), 4),
     speedMul: rdec(Math.min(s.speedCap, 1 + s.speedPerFloor * (f - 1)), 4),
     defAdd: Math.floor((f - 1) / s.defEvery),
     goldMul: rdec(s.goldGrowth ** (f - 1), 4),
   };
+}
+
+// 적 성벽 피해 층 배율(반올림 전). 100층까지 wallDmgGrowth^(f-1), 101층부터는 100층 누적에 wall.dmgGrowthAfter100(없으면 wallDmgGrowth)을 층마다 곱한다(v13-5).
+export function wallDmgRaw(B, f) {
+  const g = B.scaling.wallDmgGrowth;
+  const g2 = B.wall.dmgGrowthAfter100 ?? g;
+  if (f <= BOSS_CYCLE_FLOORS || g2 === g) return g ** (f - 1); // 같으면 예전 식 그대로(부동소수 차이 없게)
+  return g ** (BOSS_CYCLE_FLOORS - 1) * g2 ** (f - BOSS_CYCLE_FLOORS);
 }
 
 function wallHp(B, f) {
@@ -48,6 +56,17 @@ function pickWeighted(rng, items) {
     if (r < 0) return k;
   }
   return items[items.length - 1][0];
+}
+
+// 보스 HP 층 배율(floorShape.bossMul). 그 층 키가 있으면 그 값. 101층부터 키가 없으면 보스 순서가 10층마다 같은 자리로
+// 다시 돌므로 1~100층의 같은 자리 값(((f-1) % 100) + 1) x cycleMul, 그 키도 없으면 1.0 x cycleMul. 1~100층에서 키가 없으면 1.0.
+export const BOSS_CYCLE_FLOORS = 100; // floors.json 범위 = 보스 10종 x 10층 한 바퀴
+export function bossHpMulAt(B, f) {
+  const m = B.floorShape.bossMul;
+  const t = m.hpMulByFloor ?? {};
+  if (t[f] != null) return t[f];
+  if (f <= BOSS_CYCLE_FLOORS) return 1;
+  return (t[((f - 1) % BOSS_CYCLE_FLOORS) + 1] ?? 1) * (m.cycleMul ?? 1);
 }
 
 // 몬스터 id -> 역할 스탯 + 몬스터 자체 덮어쓰기(hp/def/travelTime/wallDmg/gold/threat/weight/unlockFloor).
@@ -244,7 +263,7 @@ export function unitStats(B, E, floor, spawn) {
     return {
       type,
       rank: 'boss',
-      hp: rnd(mul.hpBase * sc.hpMul * (mul.hpMulByFloor?.[floor.floor] ?? 1) * (B.scaling.enemyHpMul ?? 1)),
+      hp: rnd(mul.hpBase * sc.hpMul * bossHpMulAt(B, floor.floor) * (B.scaling.enemyHpMul ?? 1)),
       def: sc.defAdd + mul.def,
       speed: (1 / mul.travelTime) * sc.speedMul,
       wallDmg: rnd(mul.wallDmgBase * sc.wallDmgMul),

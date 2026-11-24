@@ -156,7 +156,8 @@ export function applySets(configs, setStr) {
       if (obj == null || typeof obj !== 'object') throw new Error(`--set 경로 없음: ${pair}`);
     }
     const last = keys.at(-1);
-    if (!(last in obj)) throw new Error(`--set 키 없음: ${pair}`);
+    // 층 번호 키(예: hpMulByFloor.150)는 새로 만들 수 있다(v13-5 101층 이후 보스 키 비교용). 그 밖의 없는 키는 오타로 보고 에러.
+    if (!(last in obj) && !(/^\d+$/.test(last) && !Array.isArray(obj))) throw new Error(`--set 키 없음: ${pair}`);
     done.push(`${file}.${keys.join('.')}: ${JSON.stringify(obj[last])} -> ${JSON.stringify(value)}`);
     obj[last] = value;
   }
