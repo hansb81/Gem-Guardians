@@ -2,6 +2,7 @@
 // 1층부터 올라가며, 시드 중 과반이 실패하는 첫 층에서 멈춘다.
 import { runFloorAttempt } from '../floorSim.js';
 import { mdTable } from '../report.js';
+import { newSpiritProg, spiritBossClear, spiritEquipBest } from '../spiritProg.js';
 
 const LEVEL_SETS = [
   { label: 'Lv1', level: 1 },
@@ -29,7 +30,11 @@ export async function run(env) {
     for (const { label, level } of LEVEL_SETS) {
       const towerLevels = [level, level, level, level, level];
       let maxFloorReached = 0;
+      // --spirits=prog: 시작 정령 + 올라가며 깬 보스층 첫 클리어 보상(레벨업 없음 - 골드 모델이 없다). 층마다 배율 합 최대 장착.
+      const sp = env.spiritsProg ? newSpiritProg(env.configs.spirits) : null;
+      const colors = balance.tower.towers.map((t) => t.color);
       for (let floor = 1; floor <= env.floorsRange.to; floor++) {
+        const spirits = sp ? spiritEquipBest(sp, colors, env.spiritEquip) : undefined;
         const results = [];
         for (let s = 0; s < env.seeds; s++) {
           results.push(
@@ -49,6 +54,7 @@ export async function run(env) {
               maxFloorSeconds: sim.maxFloorSeconds,
               summon,
               battleEffects,
+              spiritSlots: spirits,
             })
           );
         }
@@ -72,6 +78,7 @@ export async function run(env) {
         const majorityFail = fails.length > env.seeds / 2;
         if (majorityFail) break;
         maxFloorReached = floor;
+        if (sp && results[0].tag === 'boss') spiritBossClear(sp, floor);
       }
       maxFloorByPlayerLevel[`${player}|${label}`] = maxFloorReached;
     }

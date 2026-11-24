@@ -12,6 +12,7 @@ import { runOneProgression, median } from './t4.js';
 import { SLOT4_ITEM } from '../itemBot.js';
 import { readFileSync } from 'node:fs';
 import { defaultShopSave } from '../../../src/core/shop/shop.js';
+import { spiritStats } from '../spiritProg.js';
 
 // --t7base=<이전 T7 csv>: 기준 Lv·스킬 Lv를 그 파일의 기준 열(column 0) 값으로 고정한다(측정 전용 - 콤보·--set 비교에서 기준을 다시 잡지 않으려고).
 // csv skillLv는 Object.values(skillLv).join('/')라 키 순서는 defaultShopSave 그대로다(t4 진행의 skillLv와 같은 출처).
@@ -76,7 +77,14 @@ function entryLevels(env, player, floors, baseSeeds) {
         skillLv = {};
         for (const id of Object.keys(recs[0].skillLvAtEntry)) skillLv[id] = Math.round(median(recs.map((x) => x.skillLvAtEntry[id])));
       }
-      return [f, { lv, skillLv, reached: recs.length }];
+      // --spirits=prog: 그 층 진입 장착은 시드마다 레벨만 다르다(보스 보상은 층 seed) - 공격 환산이 중앙인 시드의 장착을 그대로 쓴다.
+      let spirits;
+      if (recs[0]?.spiritsAtEntry !== undefined) {
+        const colors = env.configs.balance.tower.towers.map((t) => t.color);
+        const byAtk = recs.map((x) => ({ x, a: spiritStats(env.configs.spirits, x.spiritsAtEntry ?? [], colors).atk })).sort((a, b) => a.a - b.a);
+        spirits = byAtk[Math.floor((byAtk.length - 1) / 2)].x.spiritsAtEntry;
+      }
+      return [f, { lv, skillLv, reached: recs.length, spirits }];
     })
   );
 }
@@ -109,6 +117,7 @@ export async function run(env) {
             towerLevels: [level, level, level, level, level], playerCfg: sim.players[player], modifierHooks: null,
             ...env.skillArgsAt(floor, ent.skillLv), itemBot: col.items ? itemBotFor(itemsCfg, floor) : null,
             seed, dt: sim.dt, maxFloorSeconds: sim.maxFloorSeconds, summon, battleEffects, shotFlight: !!env.flight, emptySpawn: env.emptySpawn,
+            spiritSlots: ent.spirits,
           });
           const casc = r.stats.cascadeSamples;
           const topRole = Object.entries(r.wallDamageByRole).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '-';
@@ -154,7 +163,7 @@ export async function run(env) {
           `${f1(spW)} / ${f1(spL)}`, cause,
         ]);
         csvRows.push({
-          player, floor, level, expTowerLevel, skillLv: ent.skillLv ? Object.values(ent.skillLv).join('/') : '', column: col.key, winRate: winRate.toFixed(3), se: se.toFixed(3), n: runs.length, verdict: v,
+          player, floor, level, expTowerLevel, skillLv: ent.skillLv ? Object.values(ent.skillLv).join('/') : '', ...(ent.spirits !== undefined ? { spirits: (ent.spirits ?? []).map((x) => (x ? `${x.id}:${x.lv}:${x.star}` : 'none')).join(' ') } : {}), column: col.key, winRate: winRate.toFixed(3), se: se.toFixed(3), n: runs.length, verdict: v,
           timeP10: f1(pct(times, 0.1)), timeP50: f1(pct(times, 0.5)), timeP90: f1(pct(times, 0.9)), timeSpread: spread?.toFixed(2) ?? '',
           specialsWin: f1(spW), specialsLoss: f1(spL), lossCause: cause,
         });

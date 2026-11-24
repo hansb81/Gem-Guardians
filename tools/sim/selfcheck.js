@@ -102,3 +102,21 @@ console.log('selfcheck ok');
   const line = (r) => `즉시 등장 ${r.emptySpawns}회, 빈 전장 사격 ${Math.round(r.waste.basic)}, 비행 중 소멸 ${Math.round(r.waste.flight)}, 층 시간 ${r.timeSec.toFixed(1)}초`;
   console.log(`emptySpawn ok (15층 seed 7, flight on, 기본값 ${c.balance.floorShape.emptySpawn})\n  off: ${line(off)}\n  on: ${line(on)}\n  predict: ${line(predict)}`);
 }
+
+// v13-3 --spirits=prog(spiritProg.js): 시작 정령, 보스 보상(층 seed), 배율 합 최대 장착(공명), 레벨업 상한·정령석.
+{
+  const { newSpiritProg, spiritBossClear, spiritEquipBest, spiritLevelUp } = await import('./spiritProg.js');
+  const colors = c.balance.tower.towers.map((t) => t.color);
+  const sp = newSpiritProg(c.spirits);
+  assert.deepEqual(Object.keys(sp.inv.data.perm.spirits), [c.spirits.startSpirit]);
+  spiritBossClear(sp, 10);
+  spiritBossClear(sp, 10); // 같은 층 두 번 = 한 번만(txId)
+  assert.equal(sp.stonesGot, c.spirits.bossReward.stones);
+  const slots = spiritEquipBest(sp, colors);
+  assert.equal(slots.filter(Boolean).length, 2); // 2마리 = 2칸, 나머지는 빈 칸
+  for (const [i, s] of slots.entries()) if (s) assert.equal(c.spirits.spirits[s.id].element, colors[i], '공명 칸에 끼워야 한다');
+  assert.equal(spiritLevelUp(sp, 1e9, 0, 100), 0); // 상한 0 = 안 올림
+  const used = spiritLevelUp(sp, 1e9, 1e9, 100);
+  assert.ok(used > 0 && sp.inv.data.perm.spiritStones >= 0 && sp.stonesSpent <= sp.stonesGot, `정령석 ${sp.stonesSpent}/${sp.stonesGot}`);
+  console.log(`spiritProg ok (10층 보상 후 장착 ${slots.map((s) => s?.id ?? '-').join(',')}, 레벨업 ${sp.levels}회 골드 ${used})`);
+}

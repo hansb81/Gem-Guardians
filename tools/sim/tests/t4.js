@@ -16,6 +16,7 @@ import { buyItems, SLOT4_ITEM } from '../itemBot.js';
 import { openUnlocks, skillLevelCards, skillMaxLevel } from '../skills.js';
 import { defaultShopSave } from '../../../src/core/shop/shop.js';
 import { combo, comboGold } from '../combo.js';
+import { newSpiritProg, spiritBossClear, spiritEquipBest, spiritLevelUp, spiritStats } from '../spiritProg.js';
 
 const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
 
@@ -74,10 +75,17 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   let goldSpentSkills = 0;
   // S4 골드 흐름 + S6 허공 사격·칸 잠금 계측, 10층 구간별(구간 = 그 시도의 층).
   const flow = [];
+  // --spirits=prog(tools/sim/spiritProg.js): 시작 정령 + 보스 첫 클리어 보상, 층 시작마다 장착, 탑·스킬 뒤 남은 골드로 레벨업.
+  const sp = env.spiritsProg ? newSpiritProg(env.configs.spirits) : null;
+  const colors = balance.tower.towers.map((t) => t.color);
+  let tutorial = !!sp; // 최초 튜토리얼 층(1층 첫 도전)은 게임에서 정령이 꺼진다(docs/spirits.md 10장 10)
+  let spiritGoldTotal = 0; // 재물 정령이 더 준 골드(모든 시도)
+  const rewardMemo = new Map();
+  const floorReward = (f) => rewardMemo.get(f) ?? rewardMemo.set(f, normalFloorReward(env.configs, f)).get(f);
   const comboByTag = { normal: 0, elite: 0, boss: 0 }; // --combogold 보너스(측정 전용) 층 종류별 합
   const bucketOf = (f) => (flow[Math.floor((f - 1) / 10)] ??= {
     first: 0, replay: 0, fail: 0, exchange: 0, combo: 0, tower: 0, skill: 0, unlock: 0, item: 0,
-    hit: 0, wasteBasic: 0, wasteSkill: 0, wasteFlight: 0, wasteFlightDoomed: 0, wasteSummon: 0, ovBasic: 0, ovSkill: 0, ovOther: 0, firstEnemySec: 0, attempts: 0, swapsBeforeEnemy: 0, emptySec: 0, timeSec: 0, swaps: 0, noMove: 0, swapsAnim: 0, clears: 0, wallLeft: 0, emptySpawns: 0, aliveSec: 0, rbShots: 0, rbDmg: 0, rbShotDmg: 0, rbGems: 0,
+    spirit: 0, hit: 0, wasteBasic: 0, wasteSkill: 0, wasteFlight: 0, wasteFlightDoomed: 0, wasteSummon: 0, ovBasic: 0, ovSkill: 0, ovOther: 0, firstEnemySec: 0, attempts: 0, swapsBeforeEnemy: 0, emptySec: 0, timeSec: 0, swaps: 0, noMove: 0, swapsAnim: 0, clears: 0, wallLeft: 0, emptySpawns: 0, aliveSec: 0, rbShots: 0, rbDmg: 0, rbShotDmg: 0, rbGems: 0,
   });
   const attemptLog = []; // 시도마다 { floor, cleared, wall, aliveMax, timeSec, farm } - 하위 10% 성벽·동시 적 최대·층 시간용
   const track = (f, r, farm = false) => {
@@ -195,6 +203,11 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     bucketOf(floor).tower += gold - reserve - spent.gold;
     towerLevels = spent.towerLevels;
     gold = spent.gold + reserve;
+    if (sp && env.spiritBuy > 0) {
+      const used = spiritLevelUp(sp, spent.gold, env.spiritBuy * goldEarned, floorReward(floor));
+      gold -= used;
+      bucketOf(floor).spirit += used;
+    }
   };
 
   let towerLevels = [1, 1, 1, 1, 1];
@@ -249,8 +262,11 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
       goldSpentItems += spent;
       bucketOf(floor).item += spent;
     }
-    const attemptFloor = (floorNumber, attemptSeed) =>
-      runFloorAttempt({
+    let spiritsNow; // 이번 층 시작의 정령 5칸(prog), off면 undefined = runFloorAttempt 기본값
+    const attemptFloor = (floorNumber, attemptSeed) => {
+      if (sp) spiritsNow = tutorial ? null : spiritEquipBest(sp, colors, env.spiritEquip);
+      tutorial = false;
+      const r = runFloorAttempt({
         balance,
         enemies,
         obstacles,
@@ -271,8 +287,13 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         battleEffects,
         shotFlight: !!env.flight,
         emptySpawn: env.emptySpawn,
+        spiritSlots: spiritsNow,
       });
+      spiritGoldTotal += r.spiritGold;
+      return r;
+    };
     const result = attemptFloor(floor, seed * 100000 + attempt);
+    const spiritsAtEntry = spiritsNow ?? null;
     cumulativeTimeSec += result.timeSec;
     floorTimeSec += result.timeSec;
     addResult(agg, result);
@@ -297,7 +318,8 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         }
         if (floor === itemsCfg.slots.unlock4BossFirstClear && !equipped.includes(SLOT4_ITEM)) equipped.push(SLOT4_ITEM);
       }
-      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry, skillLvAtEntry, continueUsed: result.continueUsed, goldAtEntry, unlockPending, clearSec: result.timeSec });
+      retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry, skillLvAtEntry, continueUsed: result.continueUsed, goldAtEntry, unlockPending, clearSec: result.timeSec, ...(sp ? { spiritsAtEntry } : {}) });
+      if (sp && tag === 'boss') spiritBossClear(sp, floor);
       const isWall = result.tag === 'boss' && bossWallMin != null ? floorTimeSec / 60 > bossWallMin : attempt - 1 >= wallFlagAt(result.tag);
       if (isWall) wallFloors.push(floor);
       floor += 1;
@@ -358,6 +380,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     unlockShareAt,
     itemsUsed: agg.itemsUsed,
     idle,
+    spirit: sp ? { goldSpent: sp.goldSpent, levels: sp.levels, stonesGot: sp.stonesGot, stonesSpent: sp.stonesSpent, stonesLeft: sp.inv.data.perm.spiritStones, wealthGold: spiritGoldTotal, owned: { ...sp.inv.data.perm.spirits } } : null,
   };
 }
 
@@ -404,6 +427,8 @@ export async function run(env) {
   const timeRows = []; // 층 시간(클리어한 판, 반복 사냥 제외): 구간별 평균·중앙값 + 전체
   const timeCsv = [];
   const idleCsv = []; // --idle > 0일 때만 t4idle csv + 표
+  const spiritCsv = []; // --spirits=prog일 때만 t4spirit csv + 표
+  const spiritEcon = [];
   const special = env.configs.shop.skills.special;
   const unlockIds = Object.keys(special).filter((id) => special[id].unlockBossFloor);
 
@@ -422,6 +447,11 @@ ${wasteTable(runs, sim.players[player].secondsPerMove)}
 ${wasteCauseTable(runs)}`);
         extraRows.push(extraRow(label, runs, unlockIds));
         if (env.idle > 0) idleCsv.push(idleRow(player, strategy, runs));
+        if (env.spiritsProg) {
+          const { rows, econ } = spiritRows(env.configs, player, strategy, runs);
+          spiritCsv.push(...rows);
+          spiritEcon.push(econ);
+        }
         if (combo.goldPct !== 'off') comboRows.push(comboRow(player, strategy, runs, unlockIds));
         causeRows.push(...causeCsvRows(player, strategy, runs));
         const clears = runs.flatMap((r) => r.retriesByFloor.filter((x) => x.clearSec != null));
@@ -575,7 +605,43 @@ ${wasteCauseTable(runs)}`);
   const idleMd = idleCsv.length
     ? `\n\n### T4 광산 골드 (--idle=${env.idle}, 하루 ${env.idleDayHours}시간 플레이, rMul ${env.configs.mine.gold.rMul}, 시드 평균. 비율 = 광산 골드 / 그 구간 전체 획득 골드, 구간 = 받은 시점의 층)\n${mdTable(Object.keys(idleCsv[0]), idleCsv.map((r) => Object.values(r)))}`
     : '';
-  return { csvRows, summaryMd: summaryMd + idleMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}) } };
+  const spiritMd = spiritCsv.length
+    ? `
+
+### T4 정령 (--spirits=prog, spiritbuy ${env.spiritBuy * 100}%. 구간 = 클리어한 층의 진입 장착, 시드 평균. 공격 환산 = spiritProg.js 선형 근사(g-table 빠듯), 재물 배율 = 장착 재물 정령 배율 합)
+${mdTable(['플레이어:전략', '구간', '장착 수', '평균 Lv', '평균 별', '공명 칸', '공격 환산 %', '재물 배율 합'], spiritCsv.map((r) => [`${r.player}:${r.strategy}`, r.bucket, r.n, r.lv, r.star, r.res, r.atkPct, r.wealthMul]))}` +
+      `
+
+### T4 정령 경제 (시드 평균, % = 전체 획득 골드 대비)
+${mdTable(Object.keys(spiritEcon[0]), spiritEcon.map((r) => Object.values(r)))}`
+    : '';
+  return { csvRows, summaryMd: summaryMd + idleMd + spiritMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}), ...(spiritCsv.length ? { t4spirit: spiritCsv, t4spiritecon: spiritEcon } : {}) } };
+}
+
+// --spirits=prog: 10층 구간별 장착 상태(클리어한 층의 진입 장착) + 경제 한 줄.
+function spiritRows(configs, player, strategy, runs) {
+  const colors = configs.balance.tower.towers.map((t) => t.color);
+  const recs = runs.flatMap((r) => r.retriesByFloor.filter((x) => x.spiritsAtEntry !== undefined && x.clearSec != null));
+  const mean = (a) => (a.length ? a.reduce((t, v) => t + v, 0) / a.length : 0);
+  const rows = [];
+  const buckets = [...new Set(recs.map((x) => Math.floor((x.floor - 1) / 10)))].sort((a, b) => a - b);
+  for (const [bucket, list] of [...buckets.map((i) => [`${i * 10 + 1}-${i * 10 + 10}`, recs.filter((x) => Math.floor((x.floor - 1) / 10) === i)]), ['전체', recs]]) {
+    const st = list.map((x) => spiritStats(configs.spirits, x.spiritsAtEntry ?? [], colors));
+    const m = (k) => mean((k === 'lv' || k === 'star' ? st.filter((v) => v.n > 0) : st).map((v) => v[k])); // 레벨·별은 장착이 있는 층만
+    rows.push({ player, strategy, bucket, n: m('n').toFixed(2), lv: m('lv').toFixed(2), star: m('star').toFixed(2), res: m('res').toFixed(2), atkPct: m('atk').toFixed(2), wealthMul: m('wealth').toFixed(2) });
+  }
+  const tot = (f) => runs.reduce((t, r) => t + f(r), 0);
+  const earned = Math.max(1, tot((r) => r.goldEarned));
+  const n = runs.length;
+  const p = (v) => `${((v / earned) * 100).toFixed(2)}%`;
+  const econ = {
+    player, strategy, goldEarned: Math.round(earned / n),
+    spiritLvGold: p(tot((r) => r.spirit.goldSpent)), spiritLevels: (tot((r) => r.spirit.levels) / n).toFixed(1),
+    stonesGot: (tot((r) => r.spirit.stonesGot) / n).toFixed(1), stonesSpent: (tot((r) => r.spirit.stonesSpent) / n).toFixed(1), stonesLeft: (tot((r) => r.spirit.stonesLeft) / n).toFixed(1),
+    wealthGold: p(tot((r) => r.spirit.wealthGold)), skillGold: p(tot((r) => r.goldSpentSkills)), unlockGold: p(tot((r) => r.goldSpentUnlock)),
+    ownedSeed1: Object.entries(runs[0].spirit.owned).map(([id, o]) => `${id}:${o.lv}:${o.star}`).join(' '),
+  };
+  return { rows, econ };
 }
 
 // --idle: 광산 골드 몫(전체·층 구간별). 구간 분모 = 그 구간 층에서 번 골드(flow 수입 칸) + 그 구간에서 받은 광산 골드.

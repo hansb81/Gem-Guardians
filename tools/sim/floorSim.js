@@ -51,6 +51,8 @@ export function runFloorAttempt({
   emptySpawn = null,
   // 경쟁 모드 무한 웨이브(T8): { cfg: ranking.json comp, seed }. 있으면 floorNumber 대신 웨이브를 이어 붙이고 성벽이 무너질 때까지.
   endless = null,
+  // 정령 5칸(null 또는 { id, lv, star }) - 이름이 spirits면 ...configs(config/spirits.json)와 겹친다. 기본 = simRules.spirits(--spirits 고정 목록). --spirits=prog는 진행 테스트가 층마다 넘긴다.
+  spiritSlots = simRules.spirits,
 }) {
   const ew = endless ? endlessFloor({ balance, enemies, obstacles }, endless.cfg, endless.seed) : null;
   const floor = ew ? ew.floor : getFloor(balance, enemies, obstacles, floorsData, floorNumber);
@@ -85,7 +87,7 @@ export function runFloorAttempt({
   const battleState = new BattleState({ towersData, resolvedFloor, battleConfig });
   // 정령(--spirits): 게임(BattleController.beginFloor)과 같은 주입. 경쟁 모드(endless)는 정령 없음.
   const spiritsConfig = simRules.spiritsConfig;
-  const spiritList = simRules.spirits && !endless ? battleSpirits(spiritsConfig, simRules.spirits.map((s) => s?.id ?? null), Object.fromEntries(simRules.spirits.filter(Boolean).map((s) => [s.id, s])), towersData.map((t) => t.color)) : null;
+  const spiritList = spiritSlots && !endless ? battleSpirits(spiritsConfig, spiritSlots.map((s) => s?.id ?? null), Object.fromEntries(spiritSlots.filter(Boolean).map((s) => [s.id, s])), towersData.map((t) => t.color)) : null;
   if (spiritList) battleState.setSpirits(spiritList, { roles: spiritsConfig.roles, rng: createRng(deriveSeed(seed, floorNumber, 3)) });
   const obstaclesConfigForBoard = obstaclesEnabled ? obstacles : undefined;
   const floorObstacles = obstaclesEnabled ? floor.obstacles : null;

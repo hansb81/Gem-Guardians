@@ -31,6 +31,7 @@ export async function run(env) {
     const prog = runOneProgression(env, player, 'even', 1);
     const levelsByFloor = new Map(prog.retriesByFloor.map((r) => [r.floor, r.levelsAtEntry]));
     const skillLvByFloor = new Map(prog.retriesByFloor.map((r) => [r.floor, r.skillLvAtEntry ?? undefined]));
+    const spiritsByFloor = new Map(prog.retriesByFloor.map((r) => [r.floor, r.spiritsAtEntry])); // --spirits=prog: 그 층 진입 장착(off면 undefined = 기본값)
     const perFloor = new Map(); // floor -> { firstGold, firstSec, replayNextGold, replayNextSec }
     // shortcut: 그 진행이 도달하지 못한 층은 마지막으로 알려진 레벨을 쓴다(worst처럼 중간에
     // 멈추는 경우 후반 구간 값이 과대평가된다), T4가 100층까지 안정적으로 가면 그때 제거.
@@ -52,15 +53,16 @@ export async function run(env) {
       perFloor.set(floor, pf);
       agg.floors ??= [];
       agg.floors.push(floor);
-      const attemptAt = (levels, skillLv, seed) => runFloorAttempt({
+      const attemptAt = (levels, skillLv, seed, spirits) => runFloorAttempt({
         balance, enemies, obstacles, obstaclesEnabled: true, floorsData, floorNumber: floor, towerLevels: levels, playerCfg, modifierHooks: null,
         ...env.skillArgsAt(floor, skillLv), seed, dt: sim.dt, maxFloorSeconds: sim.maxFloorSeconds, summon, battleEffects,
         shotFlight: !!env.flight, emptySpawn: env.emptySpawn, // T4·T7과 같은 조건(v12-7: 전에는 --flight=on이어도 비행 off로 쟀다)
+        spiritSlots: spirits,
       });
       // 재클리어(파밍) = 이 층을 깬 뒤의 레벨(다음 층 진입 레벨)로 다시 깸. 다음 층 첫 클리어와 분당 골드를 비교한다.
       const nextLevels = levelsByFloor.get(floor + 1);
       for (let s = 0; nextLevels && floor < env.floorsRange.to && s < env.seeds; s++) {
-        const r = attemptAt(nextLevels, skillLvByFloor.get(floor + 1), s + 1);
+        const r = attemptAt(nextLevels, skillLvByFloor.get(floor + 1), s + 1, spiritsByFloor.get(floor + 1));
         const rr = r.killGoldTotal + r.spiritGold + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
         pf.replayNextGold += rr + (r.status === 'cleared' ? comboGold(balance, rr, r.maxCombo) : 0); // 콤보 골드(기본 config, --combogold=off면 0)
         pf.replayNextSec += r.timeSec;
@@ -84,6 +86,7 @@ export async function run(env) {
           battleEffects,
           shotFlight: !!env.flight,
           emptySpawn: env.emptySpawn,
+          spiritSlots: spiritsByFloor.get(floor),
         });
 
         if (result.status === 'cleared') {
