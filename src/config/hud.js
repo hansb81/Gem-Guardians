@@ -25,9 +25,9 @@ export const HUD_CONFIG = {
     pauseColor: '#e8dcc0',
     upgradeColor: '#9cd872', // palette 녹 4단계(옛 #9fd98c는 팔레트 밖)
     disabled: '#5a6072',
-    // 정비 팝업(석상/토템/보관함, docs/upgrade-popup.md 1) - 540 폭 기준 여백. 긴 폰이면 본문만 길어진다.
+    // 정비 팝업(석상/정령/보관함, docs/upgrade-popup.md 1) - 540 폭 기준 여백. 긴 폰이면 본문만 길어진다.
     sheet: { marginX: 12, top: 96, bottom: 48 },
   },
-  // 토템 탭 - 잠겨 있으면 안내 화면만. false로 바꾸고 본문을 채우면 열린다.
-  totemTab: { locked: true },
+  // 정령 탭(src/render/ui/spiritTab.js) - true면 탭에 자물쇠가 붙고 마지막 탭으로 기억하지 않는다.
+  spiritTab: { locked: false },
 };

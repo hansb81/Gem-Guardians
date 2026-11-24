@@ -1,5 +1,5 @@
-// 서버 랭킹(docs/server.md §9, docs/ranking.md 13-3) - 일반 모드만 서버. 경쟁 모드·시즌 정산은 그대로 Local
-// (경쟁 탭은 config.compUnlocked로 잠김). 내 기록은 계속 save에도 남긴다(Local의 submit) - 오프라인일 때 보여 줄 값.
+// 서버 랭킹(docs/server.md §9, docs/ranking.md 13-3) - 일반 모드 + 경쟁 모드 순위표·내 기록(경쟁 판 제출은 main.js가
+// rank-comp-start/finish로 직접). 시즌 정산 표시는 그대로 Local. 내 기록은 계속 save에도 남긴다(Local의 submit) - 오프라인일 때 보여 줄 값.
 // 오프라인이면 마지막으로 받은 순위표 + offlineAt(그 시각) -> 화면에 "오프라인 · 마지막 갱신 N분 전".
 // 서버가 꺼져 있으면(config/server.json) 이 클래스를 안 쓴다 - rankingUi.init이 Local을 고른다.
 import { LocalRankingService } from './rankingService.js';
@@ -12,6 +12,8 @@ export class ServerRankingService extends LocalRankingService {
     this._last = null; // { entries, total, me, at } 마지막으로 받은 일반 모드
     this._profileSynced = false;
     this.nickResetReason = null; // 'taken' | 'badword' - 서버가 기기 닉네임을 거절해 비웠을 때(rankingUi가 이유를 보여 줌)
+    this.compLeft = null; // 오늘 남은 경쟁 입장(rank-me comp·rank-comp-start가 채움, 모르면 null)
+    this._lastComp = null; // { entries, total, me, at } 마지막으로 받은 경쟁 순위표
   }
 
   async submit(mode, run) {
@@ -24,6 +26,7 @@ export class ServerRankingService extends LocalRankingService {
   }
 
   async top(mode, opts = {}) {
+    if (mode === 'comp') return this._compTop(opts);
     if (mode !== 'normal') return super.top(mode, opts);
     await this._syncProfile();
     const res = await call('rank-top', { limit: opts.limit ?? this.config.topLimit ?? 100 });
@@ -34,7 +37,26 @@ export class ServerRankingService extends LocalRankingService {
     return { entries, total: res.total };
   }
 
+  async _compTop(opts) {
+    await this._syncProfile();
+    const res = await call('rank-top', { mode: 'comp', seasonId: opts.seasonId, limit: opts.limit ?? this.config.topLimit ?? 100 });
+    const last = this._lastComp;
+    if (!res.ok) return last ? { entries: last.entries, total: last.total, offlineAt: last.at } : { entries: [], total: null, unavailable: true };
+    const mine = this._base();
+    const entries = res.entries.map((e) => (e.me ? { ...e, playerId: mine.playerId } : e));
+    this._lastComp = { ...last, entries, total: res.total, at: Date.now() };
+    return { entries, total: res.total, settling: res.settling };
+  }
+
   async me(mode, opts = {}) {
+    if (mode === 'comp') {
+      const res = await call('rank-me', { mode: 'comp', seasonId: opts.seasonId });
+      if (!res.ok) return this._lastComp?.me ?? null;
+      this.compLeft = res.left ?? this.compLeft;
+      const me = res.me && { ...this._base(), ...res.me, frame: null, next: null };
+      this._lastComp = { ...this._lastComp, me };
+      return me;
+    }
     if (mode !== 'normal') return super.me(mode, opts);
     const local = this._myEntry('normal');
     let res = await call('rank-me');

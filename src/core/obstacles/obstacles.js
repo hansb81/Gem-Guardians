@@ -52,7 +52,8 @@ export function removeLowestHpOccupant(board) {
 // 캐스케이드 단계마다 새로 만드는 Set<"row,col">)로 "한 해결 단계에서 같은 방해요소는 최대
 // 1 피해"를 보장한다. hp가 0이 되면 occupant를 치우고 칸을 비운다(다음 settle에서 중력/리필이
 // 자연히 새 잼으로 채운다) - 부서져도 탑 사격은 없다(호출부가 애초에 점수/공격 경로를 타지 않음).
-export function damageOccupantsInCells(board, registry, cells, seenSet, cause) {
+// extra(해체 정령) = { chance, rng }: 매치 옆 피해(adjacentMatch)에 chance 확률로 1 추가 피해 - 자기 seed RNG만 쓴다(board.rng 순서 불변).
+export function damageOccupantsInCells(board, registry, cells, seenSet, cause, extra = null) {
   const effects = [];
   for (const cell of cells) {
     const idx = board.index(cell.row, cell.col);
@@ -65,12 +66,14 @@ export function damageOccupantsInCells(board, registry, cells, seenSet, cause) {
     seenSet.add(key);
 
     occ.hp -= 1;
+    const bonus = extra && cause === 'adjacentMatch' && extra.rng() < extra.chance;
+    if (bonus) occ.hp -= 1;
     if (occ.hp <= 0) {
       board.occupants[idx] = null;
       board.grid[idx] = EMPTY;
-      effects.push({ type: 'obstacleDestroyed', id: occ.type, cell: { row: cell.row, col: cell.col }, cause });
+      effects.push(bonus ? { type: 'obstacleDestroyed', id: occ.type, cell: { row: cell.row, col: cell.col }, cause, spiritBonus: true } : { type: 'obstacleDestroyed', id: occ.type, cell: { row: cell.row, col: cell.col }, cause });
     } else {
-      effects.push({ type: 'obstacleDamaged', id: occ.type, cell: { row: cell.row, col: cell.col }, hp: occ.hp, cause });
+      effects.push(bonus ? { type: 'obstacleDamaged', id: occ.type, cell: { row: cell.row, col: cell.col }, hp: occ.hp, cause, spiritBonus: true } : { type: 'obstacleDamaged', id: occ.type, cell: { row: cell.row, col: cell.col }, hp: occ.hp, cause });
     }
   }
   return effects;
@@ -156,7 +159,7 @@ export function placeInitialObstacles(board, registry, floorObstacles, rng) {
       const idx = nextIdx();
       if (idx === null) break;
       if (board.grid[idx] < 0 || board.attachments[idx]) continue;
-      board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer, wallDamagePct: cfg.wallDamagePct };
+      board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer + (board.bombTimerPlus ?? 0), wallDamagePct: cfg.wallDamagePct };
       placed++;
     }
   }
@@ -194,7 +197,7 @@ export function topUpInitialObstacles(board, registry, floorObstacles, rng) {
           board.occupants[idx] = { type, hp: typeDef.hp };
           board.grid[idx] = OBSTACLE;
         } else {
-          board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer, wallDamagePct: cfg.wallDamagePct };
+          board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer + (board.bombTimerPlus ?? 0), wallDamagePct: cfg.wallDamagePct };
         }
       }
     }
@@ -253,7 +256,7 @@ export function maybeSpawnOnMove(board, registry, floorObstacles, rng, counters)
     } else if (typeDef.layer === 'attachment') {
       const idx = pickRandomAttachableCell(board, rng);
       if (idx === null) continue;
-      board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer, wallDamagePct: cfg.wallDamagePct };
+      board.attachments[idx] = { type, hp: typeDef.hp, timer: cfg.timer + (board.bombTimerPlus ?? 0), wallDamagePct: cfg.wallDamagePct };
     }
   }
 }

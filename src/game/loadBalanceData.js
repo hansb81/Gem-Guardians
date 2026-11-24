@@ -9,7 +9,7 @@ async function fetchJson(path) {
 
 export async function loadBalanceData() {
   try {
-    const [balance, enemies, obstacles, floorsData, items, shopCfg, products, ranking, mine] = await Promise.all([
+    const [balance, enemies, obstacles, floorsData, items, shopCfg, products, ranking, mine, spirits] = await Promise.all([
       fetchJson('config/balance.json'),
       fetchJson('config/enemies.json'),
       fetchJson('config/obstacles.json'),
@@ -23,9 +23,11 @@ export async function loadBalanceData() {
       fetchJson('config/ranking.json').catch(() => null),
       // 광산(config/mine.json)도 없으면 광산만 안 열린다.
       fetchJson('config/mine.json').catch(() => null),
+      // 정령(config/spirits.json)도 없으면 정령만 없다.
+      fetchJson('config/spirits.json').catch(() => null),
     ]);
     const shop = shopCfg && products ? { ...shopCfg, products } : null;
-    return { balance, enemies, obstacles, floorsData, items, shop, ranking, mine };
+    return { balance, enemies, obstacles, floorsData, items, shop, ranking, mine, spirits };
   } catch {
     return null;
   }

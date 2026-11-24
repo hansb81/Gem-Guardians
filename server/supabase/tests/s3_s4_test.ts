@@ -3,7 +3,7 @@ import { PGlite } from "npm:@electric-sql/pglite@0.3";
 import { assert, assertEquals, assertThrows } from "jsr:@std/assert@1";
 import { onestorePayloadOk, tossStatus } from "../functions/_shared/stores.ts";
 import { derToRaw, importKeys, verifySsv } from "../functions/_shared/ads.ts";
-import { compScoreOk, pctOf, RANKING, tierOf } from "../functions/_shared/ranking.ts";
+import { compMaxPoints, compScoreOk, pctOf, RANKING, tierOf } from "../functions/_shared/ranking.ts";
 import FLOOR_GOLD from "../functions/_shared/floor_gold.json" with { type: "json" };
 
 const dir = new URL("../migrations/", import.meta.url);
@@ -93,8 +93,8 @@ Deno.test("시즌 id·끝 시각 = KST ISO 주차, 월 00:00 KST", async () => {
 
 Deno.test("경쟁: 시작 -> 끝, 최고 1판만, 끝난 판 다시 못 냄, 남의 판 못 냄", async () => {
   const db = await setup();
-  const s = await one(db, "select public.comp_start($1) r", [A]);
-  const s2 = await one(db, "select public.comp_start($1) r", [A]);
+  const s = await one(db, "select public.comp_start($1, 3) r", [A]);
+  const s2 = await one(db, "select public.comp_start($1, 3) r", [A]);
   assertEquals(s.seed, s2.seed); // 같은 주 = 같은 시드
   const fin = (who: string, run: unknown, pts: number, ok = true) =>
     one(db, "select public.comp_finish($1, $2, $3, 10, null, $4) r", [who, run, pts, ok]);
@@ -102,9 +102,15 @@ Deno.test("경쟁: 시작 -> 끝, 최고 1판만, 끝난 판 다시 못 냄, 남
   assertEquals((await fin(A, s.runId, 500)).updated, true);
   assertEquals((await fin(A, s.runId, 900)).reason, "already");
   assertEquals((await fin(A, s2.runId, 300)).updated, false); // 더 낮음
-  const s3 = await one(db, "select public.comp_start($1) r", [A]);
+  const s3 = await one(db, "select public.comp_start($1, 3) r", [A]);
   assertEquals((await fin(A, s3.runId, 99999, false)).reason, "held"); // 상한 넘음 -> 순위 X
   assertEquals((await db.query<R>("select points from public.comp_best")).rows, [{ points: 500 }]);
+  assertEquals(s3.left, 0);
+  const s4 = await one(db, "select public.comp_start($1, 3) r", [A]); // 하루 3회 다 씀
+  assertEquals([s4.ok, s4.reason, s4.left], [false, "dailyLimit", 0]);
+  assertEquals((await one(db, "select public.comp_start($1, 3) r", [B])).left, 2); // 사람마다 따로
+  await db.query("update public.comp_runs set started_at = now() - interval '1 day' where player_id = $1", [A]);
+  assertEquals((await one(db, "select public.comp_start($1, 3) r", [A])).left, 2); // KST 날짜가 바뀌면 다시 3회(이월 없음)
 });
 
 Deno.test("경쟁: 시즌 끝 30분 지난 판은 seasonClosed", async () => {
@@ -141,7 +147,9 @@ Deno.test("구간 계산: TS tierOf == SQL comp_tier, 참여 구간 골드 배�
     assertEquals(sql, tierOf(rank, total)?.id, `${rank}/${total}`);
   }
   assertEquals(pctOf(7, 100), 7);
-  assert(compScoreOk(5000, 10, 600) && !compScoreOk(5000, 10, 10) && !compScoreOk(10_000_000, 3, 600));
+  assert(compScoreOk(5000, 3, 600) && !compScoreOk(5000, 10, 10) && !compScoreOk(10_000_000, 3, 600));
+  assert(compScoreOk(compMaxPoints(17), 17, 600) && !compScoreOk(compMaxPoints(17) + 1, 17, 600));
+  assert(compMaxPoints(300) - compMaxPoints(299) === compMaxPoints(200) - compMaxPoints(199)); // 표 밖은 마지막 칸 차이로
 });
 
 Deno.test("정산 참여 보상 골드 = goldFloorMul x 층 기준가(그 판 층, 표보다 높으면 마지막 값)", async () => {
@@ -216,7 +224,7 @@ Deno.test("AdMob SSV 서명: 맞으면 파라미터, 바꾸면 null, 공개키 J
 
 Deno.test("me_delete: 경쟁 기록·광고 nonce 지움, ad_views는 연결만 끊음", async () => {
   const db = await setup();
-  await one(db, "select public.comp_start($1) r", [A]);
+  await one(db, "select public.comp_start($1, 3) r", [A]);
   await db.query("insert into public.ad_nonces (nonce, player_id, placement) values ('n9', $1, 'chest')", [A]);
   await db.query("insert into public.ad_views (transaction_id, player_id, nonce) values ('t9', $1, 'n9')", [A]);
   await db.query("select public.me_delete($1)", [A]);

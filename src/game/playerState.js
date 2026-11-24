@@ -124,6 +124,14 @@ class PlayerState {
     }
   }
 
+  // 정령(config/spirits.json, docs/spirits.md) - 설정을 꽂고 시작 정령을 한 번 지급(새 저장·정령이 없던 옛 저장).
+  // bossEvery = 보스 층 간격(balance floorShape.bossEvery) - bestFloor 아래 보스 층은 이미 깬 층이라 보스 정령을 소급 지급한다.
+  initSpirits(spiritsConfig, bossEvery = 0) {
+    const cleared = [];
+    if (bossEvery > 0) for (let f = bossEvery; f < this.bestFloor; f += bossEvery) cleared.push(f);
+    this.inventory.initSpirits(spiritsConfig, cleared);
+  }
+
   // 광산 저장을 config에 맞추고, 이미 넘긴 보스층의 광맥을 전부 연다(기존 저장 - docs/mine.md 4-2). now = ms.
   initMine(mineConfig, now) {
     this.mineConfig = mineConfig;

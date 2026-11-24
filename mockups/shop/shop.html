@@ -403,10 +403,10 @@ function secSkills() {
   }
   return out;
 }
-function secTotem() {
-  return [H('토템', '장착형 영구 효과 · 곧 열림'), ...[1, 2, 3].map(i => ({
-    id: 'totem.' + i, name: '???', icon: artIcon('totem_unknown'), sub: '장착 슬롯 0/2', desc: '장착하면 영구 효과<br>(기획 전)',
-    price: {}, state: 'locked', lockText: '준비 중', tag: ['준비 중', 'gray'], lockMsg: '토템은 준비 중이에요',
+function secSpirit() {
+  return [H('정령', '장착형 영구 효과 · 곧 열림'), ...[1, 2, 3].map(i => ({
+    id: 'spirit.' + i, name: '???', icon: artIcon('spirit_unknown'), sub: '장착 슬롯 0/2', desc: '장착하면 영구 효과<br>(기획 전)',
+    price: {}, state: 'locked', lockText: '준비 중', tag: ['준비 중', 'gray'], lockMsg: '정령은 준비 중이에요',
   }))];
 }
 function secGoldEx() {
@@ -494,11 +494,11 @@ const LEGAL = { legal: true };
 
 // 탭 구성
 const V1 = {
-  gold: { label: '골드 상점', icon: IMG.gold, tabs: [['items', '아이템', secItems], ['skills', '젬 스킬', secSkills], ['totem', '토템', secTotem, true], ['gold', '골드', () => [H('골드 교환', '다이아 → 골드'), ...secGoldEx()]]] },
+  gold: { label: '골드 상점', icon: IMG.gold, tabs: [['items', '아이템', secItems], ['skills', '젬 스킬', secSkills], ['spirit', '정령', secSpirit, true], ['gold', '골드', () => [H('골드 교환', '다이아 → 골드'), ...secGoldEx()]]] },
   cash: { label: '캐시 상점', icon: IMG.dia, tabs: [['rec', '추천', () => [...secRec(), LEGAL]], ['dia', '다이아', () => [...secDia(), LEGAL]], ['diagoods', '다이아 상품', () => [...secDiaGoods(), LEGAL]]] },
 };
 const V2 = [
-  ['items', '아이템', SHOP + 'rail_items.png', secItems], ['skills', '젬 스킬', SHOP + 'rail_skills.png', secSkills], ['totem', '토템', SHOP + 'rail_totem.png', secTotem],
+  ['items', '아이템', SHOP + 'rail_items.png', secItems], ['skills', '젬 스킬', SHOP + 'rail_skills.png', secSkills], ['spirit', '정령', SHOP + 'rail_spirit.png', secSpirit],
   ['packs', '패키지', SHOP + 'rail_packs.png', () => [...secRec(), LEGAL]],
   ['dia', '다이아', SHOP + 'rail_dia.png', () => [H('다이아 구매'), ...secDia(), ...secDiaGoods(), H('골드 교환', '다이아 → 골드', 'goldex'), ...secGoldEx(), LEGAL]],
 ];

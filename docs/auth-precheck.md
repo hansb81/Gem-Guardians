@@ -62,10 +62,10 @@
 | `loadout.hotbar` | (id\|null)[4] | 고정 4 |
 | `loadout.pendingHotbar` | 배열[4] \| null | |
 | `loadout.preFloor` | `{id: bool}` | preFloor 아이템 수(3) |
-| `loadout.totems` | 배열 | 정령 장착(아직 기능 없음, 자리만) |
+| `loadout.spirits` | 배열(5칸) | 정령 장착(수호자 순서, null 가능). `loadout.pendingSpirits` = 층 중 변경(null 또는 5칸) - docs/spirits.md |
 | `perm.skills` | `{key: 0~5}` | 젬 스킬 9개 |
 | `perm.flags` | 문자열[] | `slot4`, `adFree` |
-| `perm.totems` | 객체 | 정령 보유(자리만) |
+| `perm.spirits` | 객체 | 정령 보유 `{ id: { lv, star } }`. `perm.spiritStones` = 정령석(숫자) |
 | **`grantedTx`** | 문자열[] | **상한 없음. 계속 쌓인다** |
 | `log` | `{t, src, d, tx?}`[] | `LOG_MAX` = **50**(normalizeInv·_commit 둘 다 자름) |
 | `seenItems` | 문자열[] | 아이템 종류 수 |
@@ -75,7 +75,7 @@
 **ranking** (src/ranking/rankingSave.js): `profile{playerId, nickname, statue}`, `normal{bestFloor, reachedAt}`, `comp{seasonId, best{points, floor, at}, runs, pending|null, history[]}`, `lastTab`. `history`는 normalizeRanking에서 `slice(0, 8)`로 **최대 8**이다(config/ranking.json historyMax 8과 같음).
 
 **save 밖에 진행 데이터가 있나**: 없다.
-- 정령 = `inv.loadout.totems`·`inv.perm.totems`(save 안, 아직 빈 값)
+- 정령 = `inv.loadout.spirits`·`inv.loadout.pendingSpirits`·`inv.perm.spirits`·`inv.perm.spiritStones`(save 안, saveVersion 4)
 - 수호자(석상) 레벨 = `towerLevels`(save 안)
 - 레벨 FX는 `guardianFx` 켜기/끄기 설정뿐이라 기기 취향이다(§1-C)
 - save 밖 진행 데이터는 `adContinue` 하나이고, 기획대로 save 안으로 옮기면 된다.

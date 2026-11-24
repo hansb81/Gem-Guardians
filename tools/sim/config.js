@@ -24,6 +24,7 @@ export function loadConfigs() {
   const shop = loadJson(join(CFG, 'shop.json'));
   const attendance = loadJson(join(CFG, 'attendance.json'));
   const mine = loadJson(join(CFG, 'mine.json'));
+  const spirits = loadJson(join(CFG, 'spirits.json'));
   let summon = null;
   try {
     const manifest = loadJson(join(ROOT, 'assets', 'summon', 'manifest.json'));
@@ -33,7 +34,7 @@ export function loadConfigs() {
   } catch {
     summon = null;
   }
-  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance, mine };
+  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance, mine, spirits };
 }
 
 function parseList(str) {
@@ -62,6 +63,21 @@ export const ITEM_POLICIES = ['none', 'boss', 'always'];
 const ALL_PLAYERS = ['fast', 'normal', 'slow', 'worst'];
 
 // --key=value 형태만 지원한다(이 도구 전용 CLI라 그 이상은 필요 없음).
+// --spirits="fire_wisp:1:1,none,none,none,none" (수호자 순서, id:레벨:별, none = 빈 칸) -> [{ id, lv, star } | null] x 5. 없으면 null(정령 없음).
+export function parseSpirits(arg, spiritsConfig) {
+  if (!arg) return null;
+  const slots = parseList(arg).map((part) => {
+    if (part === 'none') return null;
+    const [id, lv = '1', star = '1'] = part.split(':');
+    if (!spiritsConfig.spirits[id]) throw new Error(`--spirits: 모르는 정령 ${id}`);
+    const own = { id, lv: Number(lv), star: Number(star) };
+    if (!(own.lv >= 1 && own.lv <= spiritsConfig.levelMax && own.star >= 1 && own.star <= spiritsConfig.starMax)) throw new Error(`--spirits: 레벨 1~${spiritsConfig.levelMax}, 별 1~${spiritsConfig.starMax}: ${part}`);
+    return own;
+  });
+  if (slots.length !== 5) throw new Error('--spirits는 수호자 순서로 5칸(빈 칸은 none)');
+  return slots;
+}
+
 export function parseArgs(argv, sim) {
   const args = {};
   for (const raw of argv) {
@@ -106,7 +122,7 @@ export function parseArgs(argv, sim) {
   const idleDayHours = Number(args.idleDayHours ?? 1);
   const idleRMul = args.idleRMul == null ? null : Number(args.idleRMul);
   if (!(Number.isInteger(idle) && idle >= 0) || !(idleDayHours > 0) || (idleRMul != null && !(idleRMul >= 0))) throw new Error('--idle=0|2|3, --idleDayHours=1|2, --idleRMul=숫자');
-  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef };
+  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).

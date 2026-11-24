@@ -1,4 +1,4 @@
-// 정비 팝업(docs/upgrade-popup.md): 상황 4종 x 탭 3종 레이아웃(팝업 안·안 겹침·터치 크기), 석상 버튼 상태, 토템 잠김, 처음 탭.
+// 정비 팝업(docs/upgrade-popup.md): 상황 4종 x 탭 3종 레이아웃(팝업 안·안 겹침·터치 크기), 석상 버튼 상태, 정령 잠김, 처음 탭.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -45,10 +45,10 @@ for (const [w, h] of SCREENS) {
             assert.ok(r.upgrade.height >= 44, '강화 = 주 버튼 44');
             assert.ok(r.max.height >= 36, 'MAX 36');
           });
-        } else if (tab === 'totem') {
-          checkGroup([...L.totem.rows.map((r) => r.card), L.totem.notice], L.content, 'totem');
-          L.totem.rows.forEach((r, i) => checkGroup([r.statue, r.name, ...r.slots], r.card, `totem${i}`));
-          assert.ok(L.totem.notice.height >= 120, '안내판 자리');
+        } else if (tab === 'spirit') {
+          // 본문은 그릴 때 정해진다(spiritTab.js) - 수호자 5줄 + 필터 + 목록 6줄이 들어갈 높이인지만.
+          assert.equal(L.spirit.content, L.content);
+          assert.ok(L.content.height >= 28 + 6 + 5 * 48 + 34 + 6 * 34, `정령 탭 본문 높이 ${L.content.height}`);
         } else {
           const v = L.vault;
           checkGroup([v.equip, v.reserve, v.own, v.detail], L.content, 'vault');
@@ -106,15 +106,15 @@ test('처음 탭: 마을 = 보관함, 층 클리어/패배 = 같은 판 마지�
   assert.equal(openPrepState('towerTap', null, 3).selectedTower, 3);
 });
 
-test('토템 잠김: 탭은 눌려도(본문 안내만) 기억 탭·저장값은 안 바뀐다', () => {
-  assert.equal(rememberTab('vault', 'totem', true), 'vault');
-  assert.equal(rememberTab(null, 'totem', true), null);
-  assert.equal(rememberTab('vault', 'totem', false), 'totem');
+test('정령 탭: 잠가 두면 기억 탭이 안 바뀐다, 그리기 전 본문에는 누를 것이 없다', () => {
+  assert.equal(rememberTab('vault', 'spirit', true), 'vault');
+  assert.equal(rememberTab(null, 'spirit', true), null);
+  assert.equal(rememberTab('vault', 'spirit', false), 'spirit');
   assert.equal(rememberTab('statue', 'vault', true), 'vault');
-  // 잠긴 토템 본문에는 누를 수 있는 것이 없다(탭·아래 버튼만).
-  const L = layoutPrepPopup(540, 960, 'floorClear', 'totem');
-  const s = L.totem.rows[0].slots[0];
-  assert.equal(hitPrepPopup(L, s.x + 4, s.y + 4), null);
+  const L = layoutPrepPopup(540, 960, 'floorClear', 'spirit');
+  assert.equal(hitPrepPopup(L, L.content.x + 4, L.content.y + 40), null);
+  L.spiritHits = [{ r: { x: L.content.x, y: L.content.y + 34, width: 100, height: 44 }, hit: { type: 'spiritSlot', index: 0 } }];
+  assert.deepEqual(hitPrepPopup(L, L.content.x + 4, L.content.y + 40), { type: 'spiritSlot', index: 0 });
   assert.equal(L.statue, undefined);
   assert.equal(L.vault, undefined);
 });

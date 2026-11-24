@@ -3,7 +3,8 @@ import { TOWER_LAYOUT_CONFIG } from '../config/towerLayout.js';
 import { FRAME_NATIVE_W, snapPx, drawImageSnapped } from './screenFit.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { pickBackgroundSheetName } from '../config/backgroundSheet.js';
-import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady } from './uiKit.js';
+import { drawNine, drawDamage, drawFixedImage, drawText, getUi, getUiFont, getUiMeta, snap, uiReady, brightCopy } from './uiKit.js';
+import { drawSpirit, SPIRIT_SIZE } from './spiritSprite.js';
 import { t, tOr } from '../config/i18n.js';
 import { getFontString } from '../config/fonts.js';
 import { pickSummonFrame } from '../battle/summon.js';
@@ -35,18 +36,12 @@ const RANK_OUTLINE = {
 const ENEMY_LANE_COUNT = 3;
 // 지속 피해 틱(enemyHit.source) - 밀림 없이 번쩍임만. 화상 같은 새 지속 피해가 생기면 여기에 추가.
 const DOT_SOURCES = new Set(['poison']);
-// assets/gems/palette.hex의 색 단계 - 분노의 북 중 투사체를 "한 단계 밝은 색"으로 그릴 때 각 픽셀을 다음 단계로 바꾼다
-// (마지막 단계는 그대로). 회색 5단계 + 파랑/보라/빨강/금/초록 4단계씩.
-const PALETTE_RAMPS = [
-  ['0d0a10', '221c2b', '3b3347', '655a74', 'e8dcc0'],
-  ['0c1838', '1c3a76', '386cbc', '8cc4ee'],
-  ['220e38', '48206e', '7a3cae', 'c48ce6'],
-  ['3a0814', '741426', 'b82a3c', 'ec6a6a'],
-  ['3a2808', '7a5212', 'c28a20', 'f2d264'],
-  ['0c2814', '1c5228', '3a8a3c', '9cd872'],
-];
-const PALETTE_LIGHTER = new Map();
-for (const ramp of PALETTE_RAMPS) ramp.forEach((hex, i) => PALETTE_LIGHTER.set(parseInt(hex, 16), parseInt(ramp[Math.min(i + 1, ramp.length - 1)], 16)));
+// 정령(docs/spirits.md 7장): 수호자 발에서 SPIRIT_FLOAT_PX(원본 px) 위에 띄우고 ±1px 둥실(SPIRIT_BOB_MS 주기, 수호자마다 위상 다르게).
+// 발동하면 SPIRIT_FLASH_FRAMES 프레임 동안 한 단계 밝은 색. 추가 사격 투사체는 수호자 것보다 SPIRIT_SHOT_SHRINK만큼 작은 배율.
+const SPIRIT_FLOAT_PX = 6;
+const SPIRIT_BOB_MS = 800;
+const SPIRIT_FLASH_FRAMES = 2;
+const SPIRIT_SHOT_SHRINK = 0.5;
 const SHIELD_BLINK_FRAMES = 2; // 결계 테두리 색 교대 주기(프레임)
 const DAMAGE_FLOAT_PX = 26;
 
@@ -162,29 +157,14 @@ export class BattleRenderer {
     this._atkFx = new GuardianAttackFx(); // 수호자 일반 공격 시전·명중·잔상(attack_manifest.json)
     this._hud = null; // 투사체를 쏜 순간의 레벨·이펙트 설정(_spawnTowerProjectile)
     this._fxBattle = null; // 새 전투면 남은 사망 연출을 버린다
+    this._spiritFlash = [0, 0, 0, 0, 0]; // 수호자 칸별 남은 번쩍 프레임
+    this._seenSpiritEvents = new WeakSet();
   }
 
   // 투사체 시트를 팔레트 한 단계 밝은 색으로 바꾼 캔버스(처음 한 번만 만들어 캐시).
   _brightSheet(color, img) {
     let c = this._brightProjectiles.get(color);
-    if (c) return c;
-    c = document.createElement('canvas');
-    c.width = img.width;
-    c.height = img.height;
-    const cctx = c.getContext('2d');
-    cctx.drawImage(img, 0, 0);
-    const data = cctx.getImageData(0, 0, c.width, c.height);
-    const px = data.data;
-    for (let i = 0; i < px.length; i += 4) {
-      if (px[i + 3] === 0) continue;
-      const to = PALETTE_LIGHTER.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
-      if (to == null) continue;
-      px[i] = to >> 16;
-      px[i + 1] = (to >> 8) & 255;
-      px[i + 2] = to & 255;
-    }
-    cctx.putImageData(data, 0, 0);
-    this._brightProjectiles.set(color, c);
+    if (!c) this._brightProjectiles.set(color, (c = brightCopy(img)));
     return c;
   }
 
@@ -251,8 +231,10 @@ export class BattleRenderer {
     }
     this._updateTowerAnimations(battleState, layout, towers, assets, now);
     this._drawTowers(ctx, layout.towerArea, towers, assets, now, hud, bg, battleState.summon, rect, bgNow);
+    this._drawSpirits(ctx, layout.towerArea, towers, assets, now, battleState);
     this._atkFx.drawCasts(ctx, assets, now); // 수호자 스프라이트 앞
     this._drawTowerProjectiles(ctx, assets, now, battleState);
+    this._drawSpiritFx(ctx, layout.track, battleState);
     this._monsterFx.drawSprites(ctx, assets, now, assets?.enemySpriteRules?.displayScale ?? 2);
     this._atkFx.drawHits(ctx, assets, now); // 몬스터 앞
     this._drawEdgeFog(ctx, layout.bgRect); // 몬스터·이펙트 위 - 어둠 속에서 걸어 나온다
@@ -329,7 +311,7 @@ export class BattleRenderer {
   _spawnReviveParticles(track, events) {
     if (!this.particles) return;
     for (const e of events) {
-      if (e.type !== 'wallRevived' || this._seenRevives.has(e)) continue;
+      if ((e.type !== 'wallRevived' && !e.phoenix) || this._seenRevives.has(e)) continue; // 부활 아이템 / 불사조 정령 회복(같은 금색 파편)
       this._seenRevives.add(e);
       const n = 36;
       for (let i = 0; i < n; i++) {
@@ -531,12 +513,12 @@ export class BattleRenderer {
 
     const tag = hud?.tag;
     const marker = tag === 'boss' ? '☠' : tag === 'elite' ? '✦' : '';
-    const floorText = `${t('battle.floor', { floor: hud?.floor ?? 1 })}${marker}`;
+    const floorText = hud?.label ?? `${t('battle.floor', { floor: hud?.floor ?? 1 })}${marker}`; // label = 경쟁 판 "웨이브 N"
 
     ctx.fillStyle = tag === 'boss' ? '#ff6b6b' : tag === 'elite' ? '#c58cff' : HUD_CONFIG.text.primary;
     // 테두리(5px x2)를 넘지 않게 - 3자리 층 + 마커나 더 긴 번역 문구에서 글자가 박스를 덮었다.
     const maxTextWidth = rect.width - 14;
-    const fontPx = Math.max(9, rect.height * 0.42);
+    const fontPx = Math.max(9, rect.height * 0.42 * (hud?.label ? 0.8 : 1)); // 경쟁 판 "웨이브 N"은 80%
     ctx.font = getFontString(fontPx, true);
     const textWidth = ctx.measureText(floorText).width;
     if (textWidth > maxTextWidth) {
@@ -678,6 +660,67 @@ export class BattleRenderer {
       x: foot.x - frameW / 2 + muzzle.x * scale,
       y: foot.y - frameH + muzzle.y * scale,
     };
+  }
+
+  // 정령 자리(왼쪽 위 + 한 변 + 배율) - 그 수호자 줄의 바깥쪽(왼쪽 줄 = 왼쪽 바깥, 오른쪽 줄 = 성벽 쪽), 수호자와 같은 배율.
+  // 왼쪽 줄은 화면 테두리에서 1px 안쪽이 되게 수호자에 붙이고, 오른쪽 줄은 1px(원본) 띄운다(art/spirits/compose_ingame.py와 같은 자리).
+  _spiritRect(towerArea, index, assets, color, now) {
+    const own = assets?.towerAnims?.get(`tower_idle_${color}`);
+    const { frameW, frameH, scale } = this._towerFrameSize(assets, towerArea);
+    const foot = this._computeTowerFootPositions(towerArea, frameH)[index];
+    if (!foot) return null;
+    const s = own?.drawScale ?? scale;
+    const half = (own?.drawScale ? own.frameW * s : frameW) / 2;
+    const size = SPIRIT_SIZE * s;
+    const left = TOWER_SLOTS[index] === 'left';
+    const bob = Math.round(Math.sin((now / SPIRIT_BOB_MS + index / 5) * Math.PI * 2)) * s;
+    return { x: snapPx(left ? foot.x - half - size : foot.x + half + s), y: snapPx(foot.y - SPIRIT_FLOAT_PX * s - size + bob), size, scale: s };
+  }
+
+  // 장착한 정령 5마리(battleState.spirits). 소환 연출 중에는 안 그린다. 발동(속성 spiritProc, 수호 회복, 재물 처치)이면 그 정령만 번쩍.
+  _drawSpirits(ctx, towerArea, towers, assets, now, battleState) {
+    const spirits = battleState.spirits;
+    if (!spirits || battleState.summon?.active) return;
+    for (const e of battleState.events || []) {
+      const at = e.type === 'spiritProc' ? e.towerIndex : e.type === 'wallHealed' ? e.spiritTower : e.type === 'enemyDie' && spirits[e.killerTower]?.role === 'wealth' ? e.killerTower : null;
+      if (at == null || this._seenSpiritEvents.has(e)) continue;
+      this._seenSpiritEvents.add(e);
+      this._spiritFlash[at] = SPIRIT_FLASH_FRAMES;
+    }
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    for (let i = 0; i < towers.length; i++) {
+      const sp = spirits[i];
+      const r = sp && this._spiritRect(towerArea, i, assets, towers[i].color, now);
+      if (!r) continue;
+      const flash = this._spiritFlash[i] > 0;
+      if (flash) this._spiritFlash[i] -= 1;
+      drawSpirit(ctx, assets, sp.id, sp.element, r.x, r.y, r.scale, now + i * 130, flash ? 'bright' : null);
+    }
+    ctx.restore();
+  }
+
+  // 뇌신 기린 연쇄 번개: 맞은 적들 사이에만 금색 번개 조각(수호자·정령에서 이어지는 선 없음). 한 마리면 그 적 위로 한 줄.
+  _drawSpiritFx(ctx, track, battleState) {
+    for (const e of battleState.events || []) {
+      if (e.type !== 'spiritProc' || e.key !== 'storm_kirin') continue;
+      const pts = [];
+      for (const id of e.enemyIds) {
+        const enemy = battleState.enemies.find((x) => x.id === id);
+        if (enemy) pts.push(this._enemyPixelPos(track, enemy));
+      }
+      if (pts.length === 1) pts.push({ x: pts[0].x, y: pts[0].y - 24 });
+      const blink = Math.floor(e.elapsedMs / 60) % 2;
+      const STEPS = 6;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        for (let s = 0; s <= STEPS; s++) {
+          const k = s / STEPS;
+          const off = s === 0 || s === STEPS ? 0 : s % 2 === blink ? 4 : -4; // 지그재그, 60ms마다 뒤집힘
+          ctx.fillStyle = s % 2 ? '#f2d264' : '#c28a20';
+          ctx.fillRect(snapPx(pts[i].x + (pts[i + 1].x - pts[i].x) * k - 2), snapPx(pts[i].y + (pts[i + 1].y - pts[i].y) * k + off - 2), 4, 4);
+        }
+      }
+    }
   }
 
   // 투사체(탑 공격)의 출발점. towerId로 찾은 탑의 muzzle 좌표를 돌려준다 - 전투 이벤트
@@ -973,6 +1016,13 @@ export class BattleRenderer {
       const tower = towers[towerIndex];
       const anim = this._ensureTowerAnim(tower.id);
       const enemy = enemies.find((e) => e.id === event.targetEnemyId);
+      // 정령 추가 사격 - 수호자 공격 동작 없이 정령 자리에서 바로 출발(한 단계 작은 투사체).
+      if (event.spirit) {
+        const r = this._spiritRect(towerArea, towerIndex, assets, tower.color, now);
+        if (r && enemy) this._spawnTowerProjectile(tower, { x: r.x + r.size / 2, y: r.y + r.size / 2 }, this._enemyPixelPos(track, enemy), now, event, towerIndex, 0, 0, true);
+        else battleState.resolveTowerAttack(event); // 그릴 수 없으면 피해만(예약 피해가 남지 않게)
+        continue;
+      }
       const shot = { event, fallbackPos: enemy ? this._enemyPixelPos(track, enemy) : null };
       // 아직 fireFrame 전인 공격 동작이 있으면(같은 순간의 여러 발, 연쇄로 이어진 발) 그 동작에 합쳐 연사한다.
       if (anim.mode === 'attack' && !anim.firedProjectile) {
@@ -1034,7 +1084,8 @@ export class BattleRenderer {
 
   // delayMs: 연사의 뒤쪽 발 - 그 시간만큼 늦게 출발한다(그 전엔 안 그림).
   // bend: 거리 대비 휨(0 = 직선). 2차 베지어 조절점을 출발-도착 중점에서 수직으로 dist*bend만큼 민다.
-  _spawnTowerProjectile(tower, from, to, now, hitEvent, index, delayMs = 0, bend = 0) {
+  // small = 정령 추가 사격(시전 연출 없음, 한 단계 작은 배율).
+  _spawnTowerProjectile(tower, from, to, now, hitEvent, index, delayMs = 0, bend = 0, small = false) {
     const speed = tower.stats?.projectileSpeed ?? DEFAULT_PROJECTILE_SPEED;
     const dist = Math.hypot(to.x - from.x, to.y - from.y);
     const nx = dist > 0 ? -(to.y - from.y) / dist : 0;
@@ -1044,9 +1095,10 @@ export class BattleRenderer {
     const hud = this._hud;
     const atkTier = hud?.guardianFx && hud.towerFxTiers ? fxTier(hud.towerLevels?.[index] ?? 0, hud.towerFxTiers) : 0;
     const assets = this._assets;
-    const atkScale = assets?.towerAnims?.get(`tower_attack_${tower.color}`)?.drawScale ?? assets?.towerAnims?.get(`tower_idle_${tower.color}`)?.drawScale ?? 0;
+    const fullScale = assets?.towerAnims?.get(`tower_attack_${tower.color}`)?.drawScale ?? assets?.towerAnims?.get(`tower_idle_${tower.color}`)?.drawScale ?? 0;
+    const atkScale = small && fullScale ? Math.max(SPIRIT_SHOT_SHRINK, fullScale - SPIRIT_SHOT_SHRINK) : fullScale;
     const atkFlip = to.x < from.x; // 시트는 오른쪽으로 쏘는 방향
-    if (delayMs === 0 && atkScale && atkCfg(assets.guardianAtkManifest, 'cast', atkTier, tower.color)) this._atkFx.cast(atkTier, tower.color, from.x, from.y, atkScale, atkFlip, now);
+    if (!small && delayMs === 0 && atkScale && atkCfg(assets.guardianAtkManifest, 'cast', atkTier, tower.color)) this._atkFx.cast(atkTier, tower.color, from.x, from.y, atkScale, atkFlip, now);
     this._towerProjectiles.push({
       color: tower.color,
       atkTier,
@@ -1054,6 +1106,7 @@ export class BattleRenderer {
       atkFlip,
       atkRot: quantizeAngle(to.x - from.x, to.y - from.y), // 직선 비행이라 쏠 때 한 번
       buffed: !!hitEvent?.buffed, // 분노의 북 - 한 단계 밝은 시트
+      small,
       fromX: from.x,
       fromY: from.y,
       toX: to.x,
@@ -1117,8 +1170,9 @@ export class BattleRenderer {
       if (atk && drawAtkSprite(ctx, assets, 'proj', p.atkTier, p.color, atkFrame(atk, now - p.startMs), x, y, p.atkScale, p.atkFlip, p.buffed ? this._brightSheetFn : null, rot)) {
         // 수호자 레벨 구간 투사체(그렸음). 새 에셋 로드 실패면 아래 예전 projectile_{색}.
       } else if (projData && projData.state.loaded && !projData.state.failed) {
-        const w = projData.frameW * scale;
-        const h = projData.frameH * scale;
+        const ps = p.small ? Math.max(1, scale - 1) : scale;
+        const w = projData.frameW * ps;
+        const h = projData.frameH * ps;
         const frame = Math.floor((now - p.startMs) / projData.frameMs) % projData.frames;
         const sheet = p.buffed ? this._brightSheet(p.color, projData.state.img) : projData.state.img;
         drawImageSnapped(ctx, sheet, frame * projData.frameW, 0, projData.frameW, projData.frameH, x - w / 2, y - h / 2, w, h);
@@ -1265,6 +1319,12 @@ export class BattleRenderer {
           // 맞은 직후 flashMs 동안 번쩍 버전(flashMap, 프레임별 캐시).
           const img = hitEvent && hitEvent.elapsedMs < flashMs ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
           drawImageSnapped(ctx, img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
+          // 서리 고래 빙결 - 이 적 한 마리에만 모래시계와 같은 회색 체커 디더(빙결 시간 동안).
+          if (enemy.spiritFreeze > 0) {
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = ditherPattern(ctx, '#6a6672');
+            ctx.fillRect(Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
+          }
         }
       } else {
         const shapeSize = baseShapeSize * this._rankScale(enemy.rank, null, rules);
@@ -1330,7 +1390,7 @@ export class BattleRenderer {
       const t = clamp(e.elapsedMs / e.durationMs, 0, 1);
       const poison = e.source === 'poison';
       const tower = towers.find((t2) => t2.id === e.towerId);
-      this._drawFloatingNumber(ctx, p.x, p.y, `-${e.damage}`, t, '#ff6b6b', assets, e.buffed ? 'crit' : poison ? 'purple' : tower?.color ?? 'white', poison ? 1 : 2);
+      this._drawFloatingNumber(ctx, p.x, p.y, `-${e.damage}`, t, '#ff6b6b', assets, e.spirit ? 'white' : e.buffed ? 'crit' : poison ? 'purple' : tower?.color ?? 'white', poison ? 1 : 2); // 정령 추가 사격 = 보통(흰) 폰트
     }
   }
 

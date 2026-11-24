@@ -175,7 +175,7 @@ const V1 = {
 
 test('마이그레이션: v1 -> v2, 옛 필드 삭제, 두 번 돌려도 같음, 모르는 id 보존', () => {
   const v2 = migrateSave(structuredClone(V1));
-  assert.equal(v2.saveVersion, 3);
+  assert.equal(v2.saveVersion, 4);
   for (const k of ['items', 'equipped', 'preFloor']) assert.equal(k in v2, false, k);
   assert.equal('skillLv' in v2.shop, false);
   assert.deepEqual(v2.shop.purchasedOnce, ['pack.adfree']);

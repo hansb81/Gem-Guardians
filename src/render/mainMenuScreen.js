@@ -268,6 +268,7 @@ export class MainMenuScreen {
     this._toast = null; // { text, until, game } 메뉴 한 줄 알림 - until은 처음 그려질 때 정한다. game = 전투 scene 위에도 그린다
     this.mine = () => null; // main.js: 광산 입구 { locked, badge, floor } | null(설정 없음 - 버튼 안 그림)
     this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
+    this.compStatus = null; // main.js compStatus() - 경쟁 모드 버튼(열림·남은 입장·잠김 이유)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
       this.manifest = m;
@@ -1407,14 +1408,25 @@ export class MainMenuScreen {
     this._sprite(ctx, 'menu/icon_mode_normal.png', nRect[0] + 12, nRect[1] + nRect[3] / 2 - 20);
     this._text(ctx, t('menu.mode.normal'), nRect[0] + 70, nRect[1] + nRect[3] / 2, { size: 22 });
 
+    // 경쟁 모드(main.js compStatus): 열렸으면 일반 모드와 같은 버튼 + 오늘 남은 입장, 아니면 잠김 모양 + 눌렀을 때 이유.
+    const st = this.compStatus?.() ?? { open: false, hint: t('menu.mode.locked') };
     const cRect = [cx + comp[0], cy + comp[1], comp[2], comp[3]];
-    if (!this._nine(ctx, 'menu/mode_locked.png', cRect)) this._panel(ctx, cRect, COLORS.bg2, COLORS.bg3);
-    this._sprite(ctx, 'menu/icon_mode_competitive.png', cRect[0] + 12, cRect[1] + cRect[3] / 2 - 20, 0.45);
-    this._text(ctx, t('menu.mode.competitive'), cRect[0] + 70, cRect[1] + cRect[3] / 2, { size: 22, color: COLORS.bg3 });
-    this._sprite(ctx, 'icons/lock.png', cRect[0] + cRect[2] - 40, cRect[1] + cRect[3] / 2 - 12);
+    if (st.open) {
+      const cDown = this._pressed === 'modeComp';
+      if (!this._nine(ctx, `menu/mode_normal${cDown ? '_pressed' : ''}.png`, cRect)) this._panel(ctx, cRect, COLORS.purple, HUD_CONFIG.text.title);
+      this._sprite(ctx, 'menu/icon_mode_competitive.png', cRect[0] + 12, cRect[1] + cRect[3] / 2 - 20);
+      this._text(ctx, t('menu.mode.competitive'), cRect[0] + 70, cRect[1] + cRect[3] / 2 - 8, { size: 22 });
+      const left = st.left == null ? '-' : st.left;
+      this._text(ctx, t('comp.entries', { left, daily: st.daily }), cRect[0] + 70, cRect[1] + cRect[3] / 2 + 16, { size: 13, color: HUD_CONFIG.text.title });
+    } else {
+      if (!this._nine(ctx, 'menu/mode_locked.png', cRect)) this._panel(ctx, cRect, COLORS.bg2, COLORS.bg3);
+      this._sprite(ctx, 'menu/icon_mode_competitive.png', cRect[0] + 12, cRect[1] + cRect[3] / 2 - 20, 0.45);
+      this._text(ctx, t('menu.mode.competitive'), cRect[0] + 70, cRect[1] + cRect[3] / 2, { size: 22, color: COLORS.bg3 });
+      this._sprite(ctx, 'icons/lock.png', cRect[0] + cRect[2] - 40, cRect[1] + cRect[3] / 2 - 12);
+    }
 
-    if (this._modeLockHint) {
-      this._text(ctx, t('menu.mode.locked'), cx + card[2] / 2, cy + MODE.hintY, { size: 13, color: COLORS.redLight, align: 'center' });
+    if (this._modeLockHint && !st.open) {
+      this._text(ctx, st.hint ?? t('menu.mode.locked'), cx + card[2] / 2, cy + MODE.hintY, { size: 13, color: COLORS.redLight, align: 'center' });
     }
   }
 
@@ -1647,6 +1659,11 @@ export class MainMenuScreen {
         return 'startNormalGame';
       }
       const cRect = [card[0] + MODE.competitive[0], card[1] + MODE.competitive[1], MODE.competitive[2], MODE.competitive[3]];
+      if (this.compStatus?.().open && pressButton(x, y, this._toScreen(cRect), 'none')) {
+        this._pressed = 'modeComp';
+        this.popup = null;
+        return 'startCompGame'; // main.js가 서버에 판 시작을 묻고 들어간다
+      }
       if (pressButton(x, y, this._toScreen(cRect))) {
         this._modeLockHint = true;
         return null;

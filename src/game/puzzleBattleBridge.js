@@ -104,6 +104,8 @@ export class PuzzleBattleBridge {
         this._castSpecialActivate(effect);
       } else if (effect.type === 'comboActivate') {
         this._castCombo(effect);
+      } else if (effect.spiritBonus) {
+        this.battleState.noteSupportProc?.('breaker'); // 해체 정령 추가 피해 - 정령 번쩍
       }
     }
 

@@ -12,7 +12,7 @@
 import { itemPrice, normalFloorReward } from '../economy/economy.js';
 import { defaultSkillLevels } from '../inventory/inventory.js';
 
-export const RAILS = ['items', 'skills', 'totem', 'packs', 'dia'];
+export const RAILS = ['items', 'skills', 'spirit', 'packs', 'dia'];
 const HOUR_MS = 3600 * 1000;
 
 function passIds(cfg) {
@@ -151,9 +151,14 @@ function railSkills(ctx) {
   return out;
 }
 
-function railTotem(ctx) {
-  const out = [hdr('totem')];
-  for (let i = 1; i <= ctx.cfg.totemSlots; i++) out.push({ id: `totem.${i}`, kind: 'totem', cur: null, state: 'locked' });
+// 정령 도감(판매·뽑기 없음, docs/spirits.md 7장): config/spirits.json 30종 전부. 가진 것 = 'sold', 없는 것 = 'locked'(실루엣) -
+// 어느 쪽이든 buyProduct는 거절한다. ctx.spiritsConfig가 없으면(시뮬레이터·옛 호출부) 머리글만.
+function railSpirit(ctx) {
+  const ids = Object.keys(ctx.spiritsConfig?.spirits ?? {});
+  const owned = ctx.player.inventory?.data.perm.spirits ?? {};
+  const out = [hdr('spirit', { n: ids.filter((id) => owned[id]).length, max: ids.length })];
+  for (const id of ids) out.push({ id: `spirit.${id}`, kind: 'spirit', spirit: id, cur: null, state: owned[id] ? 'sold' : 'locked' });
+  if (ids.length) out.push({ spiritInfo: true });
   return out;
 }
 
@@ -214,7 +219,7 @@ function railDia(ctx) {
   return out;
 }
 
-const RAIL_BUILDERS = { items: railItems, skills: railSkills, totem: railTotem, packs: railPacks, dia: railDia };
+const RAIL_BUILDERS = { items: railItems, skills: railSkills, spirit: railSpirit, packs: railPacks, dia: railDia };
 
 // 레일 하나의 목록(머리글 { hdr }, 법적 고지 { legal }, 상품). 상품 state: '' | 'locked' | 'sold'.
 export function buildRail(ctx, rail) {

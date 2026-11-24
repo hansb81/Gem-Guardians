@@ -55,6 +55,14 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
   itemsBtn.textContent = '아이템 전부 +5';
   itemsBtn.onclick = () => controller.devAddAllItems(5);
 
+  // 정령(docs/spirits.md) - 화면이 생기기 전 확인용.
+  const spiritBtns = [['정령 전부 지급', () => controller.devGrantAllSpirits()], ['정령석 +50', () => controller.devAddSpiritStones(50)], ['정령 전부 레벨 최대', () => controller.devMaxAllSpirits()]].map(([label, fn]) => {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.onclick = fn;
+    return b;
+  });
+
   const levelInput = document.createElement('input');
   levelInput.type = 'number';
   levelInput.min = '1';
@@ -121,7 +129,7 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
     playerState.tutorial = { ...playerState.tutorial, done: false };
     playerState.save();
   };
-  panel.append(floorInput, floorGo, goldBtn, itemsBtn, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn, tutorialBtn);
+  panel.append(floorInput, floorGo, goldBtn, itemsBtn, ...spiritBtns, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn, tutorialBtn);
 
   // assets/effects 스프라이트 확인용 - 보드 가운데 칸에서 line/bomb/box/color 발동을
   // 하나씩 강제로 재생해본다(core 매치 규칙 없이, CanvasRenderer._spawnSpecialFx만 확인).

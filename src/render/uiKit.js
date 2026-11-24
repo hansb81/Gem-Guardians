@@ -133,3 +133,37 @@ export function drawGoogleButton(ctx, r, k, { g = null, label, down = false, fon
   ctx.fillText(label, r.x + (r.width + r.height) / 2, r.y + r.height / 2);
   ctx.restore();
 }
+
+// assets/gems/palette.hex의 색 단계 - "한 단계 밝은 색"(분노의 북 투사체, 정령 발동 번쩍)으로 그릴 때 각 픽셀을 다음 단계로 바꾼다
+// (마지막 단계·팔레트 밖 색은 그대로). 회색 5단계 + 파랑/보라/빨강/금/초록 4단계씩.
+const PALETTE_RAMPS = [
+  ['0d0a10', '221c2b', '3b3347', '655a74', 'e8dcc0'],
+  ['0c1838', '1c3a76', '386cbc', '8cc4ee'],
+  ['220e38', '48206e', '7a3cae', 'c48ce6'],
+  ['3a0814', '741426', 'b82a3c', 'ec6a6a'],
+  ['3a2808', '7a5212', 'c28a20', 'f2d264'],
+  ['0c2814', '1c5228', '3a8a3c', '9cd872'],
+];
+const PALETTE_LIGHTER = new Map();
+for (const ramp of PALETTE_RAMPS) ramp.forEach((hex, i) => PALETTE_LIGHTER.set(parseInt(hex, 16), parseInt(ramp[Math.min(i + 1, ramp.length - 1)], 16)));
+
+// img(이미지·캔버스)를 한 단계 밝은 색으로 바꾼 새 캔버스. 호출부가 캐시한다.
+export function brightCopy(img) {
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const cctx = c.getContext('2d');
+  cctx.drawImage(img, 0, 0);
+  const data = cctx.getImageData(0, 0, c.width, c.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue;
+    const to = PALETTE_LIGHTER.get((px[i] << 16) | (px[i + 1] << 8) | px[i + 2]);
+    if (to == null) continue;
+    px[i] = to >> 16;
+    px[i + 1] = (to >> 8) & 255;
+    px[i + 2] = to & 255;
+  }
+  cctx.putImageData(data, 0, 0);
+  return c;
+}

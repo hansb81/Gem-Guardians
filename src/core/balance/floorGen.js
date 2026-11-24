@@ -85,8 +85,9 @@ function firstSeen(E) {
 // (spawnInterval초마다 1마리, 전부 처치하면 클리어). 1~100층은 game/loadBalanceData가 읽은
 // config/floors.json 결과를 그대로 쓰므로, 보통은 getFloor()를 통해서만 호출된다(101층부터는
 // 매번 이 함수로 즉석 생성).
-export function genFloor(B, E, O, f) {
-  const rng = createRng(f * 7919);
+// seed = 경쟁 모드 주간 시드(없으면 층 번호만 - 일반 모드·floors.json과 같은 결과).
+export function genFloor(B, E, O, f, seed = 0) {
+  const rng = createRng(seed ? (Math.imul(f, 7919) ^ seed) >>> 0 : f * 7919);
   const fs = B.floorShape;
   const types = monsters(E);
   const chap = chapterOf(E, f);

@@ -177,6 +177,11 @@ export class ItemController {
     return true;
   }
 
+  // 망치 정령(sup_tinker): 쿨다운 중인 하단 아이템 전부 -n 스왑. 북은 버프가 끝난 뒤부터 쿨다운이라 버프 중엔 그대로.
+  reduceCooldowns(n = 1) {
+    for (const id of Object.keys(this._lastUseAt)) if (this.cooldownLeft(id) > 0) this._lastUseAt[id] -= n;
+  }
+
   _consume(id) {
     this.inv.spend(id, 1);
     this._lastUseAt[id] = this.gameState?.validSwapCount ?? 0;

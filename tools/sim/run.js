@@ -3,7 +3,7 @@
 // --player=fast|normal|slow|worst|all --seeds=N --floors=1-100 --mod=<sim.json modifiers 키>
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { loadConfigs, parseArgs, applySets } from './config.js';
+import { loadConfigs, parseArgs, parseSpirits, applySets } from './config.js';
 import { skillsFor, skillArgsAtFor } from './skills.js';
 import { writeCsv, todayTag } from './report.js';
 import { setupCombo, combo } from './combo.js';
@@ -22,6 +22,7 @@ const TEST_MODULES = {
   t5: () => import('./tests/t5.js'),
   t6: () => import('./tests/t6.js'),
   t7: () => import('./tests/t7.js'),
+  t8: () => import('./tests/t8.js'), // 경쟁 모드 무한 웨이브 - all에는 안 넣음
 };
 
 async function main() {
@@ -31,6 +32,9 @@ async function main() {
   // --rainbowdef=sum|pershot|split: 무지개 1발의 방어력 처리(없으면 게임 기본값 battleState RAINBOW_DEF_DEFAULT).
   if (args.rainbowdef != null && !['sum', 'pershot', 'split'].includes(args.rainbowdef)) throw new Error(`--rainbowdef는 sum|pershot|split: ${args.rainbowdef}`);
   simRules.rainbowDef = args.rainbowdef ?? null;
+  // --spirits: 정령 장착(기본 없음 - docs/spirits.md 9장). 효과 없는 역할(support·unique)은 장착만 되고 결과는 그대로.
+  simRules.spiritsConfig = configs.spirits;
+  simRules.spirits = parseSpirits(args.spirits, configs.spirits);
   if (args.idleRMul != null) configs.mine.gold.rMul = args.idleRMul; // 메모리에서만(파일은 그대로)
   const comboTag = setupCombo(args, configs.balance); // tools/sim/combo.js. 콤보 골드 기본 = config(게임 그대로), 데미지 배율 기본 off
   // skillArgs = runFloorAttempt에 그대로 펼쳐 넣는 { skills, bossRules } (T2s는 모드별로 따로 만든다).
@@ -64,7 +68,7 @@ async function main() {
   // --out=<dir>: 단계별 비교 실행 결과를 reports/sim/summary.md와 섞지 않으려고 따로 저장.
   const REPORT_DIR = args.out ?? DEFAULT_REPORT_DIR;
 
-  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode} skillbuy=${env.skillBuy} towerbuy=${env.towerBuy} gate=${env.skillGate} dia=${env.dia} ads=${env.ads} flight=${env.flight ? 'on' : 'off'} emptySpawn=${env.emptySpawn} rainbowdef=${simRules.rainbowDef ?? `${RAINBOW_DEF_DEFAULT}(기본)`}`);
+  console.log(`tests=${args.tests.join(',')} players=${env.players.join(',')} seeds=${env.seeds} floors=${env.floorsRange.from}-${env.floorsRange.to} skills=${env.skillsMode} skillbuy=${env.skillBuy} towerbuy=${env.towerBuy} gate=${env.skillGate} dia=${env.dia} ads=${env.ads} flight=${env.flight ? 'on' : 'off'} emptySpawn=${env.emptySpawn} rainbowdef=${simRules.rainbowDef ?? `${RAINBOW_DEF_DEFAULT}(기본)`} spirits=${args.spirits ?? '없음'}`);
 
   const { execSync } = await import('node:child_process');
   let commit = 'unknown';

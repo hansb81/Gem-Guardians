@@ -76,7 +76,7 @@ test('save 마이그레이션 v2 -> v3: 랭킹 블록, 일반 기록 = 최고 �
   const v2 = { saveVersion: 2, gold: 5, bestFloor: 13, inv: { items: { hammer: 2 }, grantedTx: ['start:hammer'] } };
   const out = migrateSave(structuredClone(v2), 1000);
   assert.equal(out.saveVersion, SAVE_VERSION);
-  assert.equal(SAVE_VERSION, 3);
+  assert.equal(SAVE_VERSION, 4);
   assert.deepEqual(out.ranking.normal, { bestFloor: 12, reachedAt: 1000 * 1000 });
   assert.equal(out.ranking.lastTab, 'normal');
   assert.equal(out.inv.items.hammer, 2);

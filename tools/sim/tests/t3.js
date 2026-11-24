@@ -61,7 +61,7 @@ export async function run(env) {
       const nextLevels = levelsByFloor.get(floor + 1);
       for (let s = 0; nextLevels && floor < env.floorsRange.to && s < env.seeds; s++) {
         const r = attemptAt(nextLevels, skillLvByFloor.get(floor + 1), s + 1);
-        const rr = r.killGoldTotal + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
+        const rr = r.killGoldTotal + r.spiritGold + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
         pf.replayNextGold += rr + (r.status === 'cleared' ? comboGold(balance, rr, r.maxCombo) : 0); // 콤보 골드(기본 config, --combogold=off면 0)
         pf.replayNextSec += r.timeSec;
       }
@@ -87,8 +87,8 @@ export async function run(env) {
         });
 
         if (result.status === 'cleared') {
-          const fg = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
-          const rg0 = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, false);
+          const fg = result.killGoldTotal + result.spiritGold + clearBonus(balance, result.killGoldTotal, true);
+          const rg0 = result.killGoldTotal + result.spiritGold + clearBonus(balance, result.killGoldTotal, false);
           const firstGold = fg + comboGold(balance, fg, result.maxCombo);
           const replayGold = rg0 + comboGold(balance, rg0, result.maxCombo);
           agg.firstClearGold.push(firstGold);
@@ -98,7 +98,7 @@ export async function run(env) {
           pf.firstGold += firstGold;
           pf.firstSec += result.timeSec;
         } else {
-          agg.failGold.push(result.killGoldTotal);
+          agg.failGold.push(result.killGoldTotal + result.spiritGold);
         }
       }
     }

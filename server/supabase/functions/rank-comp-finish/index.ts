@@ -1,5 +1,6 @@
-// POST /rank-comp-finish {runId, points, floor, log?} -> { ok, updated, seasonId } | reason 'seasonClosed'|'held'|'already'|'notFound'.
-// 점수 상한(_shared/ranking.ts, 임시)을 넘으면 기록만 남기고 순위에 안 넣는다(verified=false, server_log warn).
+// POST /rank-comp-finish {runId, points, floor(= 도달 웨이브), log?} -> { ok, updated, seasonId } | reason 'seasonClosed'|'held'|'already'|'notFound'.
+// 점수 상한(_shared/ranking.ts compScoreOk - 웨이브별 표)을 넘으면 기록만 남기고 순위에 안 넣는다(verified=false, server_log warn).
+// log = { seed, v, swaps, items } 입력 기록 - 지금은 저장만(서버 재계산 검증은 TODO, ranking.ts).
 import { fail, handle, must } from "../_shared/http.ts";
 import { compScoreOk } from "../_shared/ranking.ts";
 

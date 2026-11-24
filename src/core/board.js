@@ -93,8 +93,16 @@ export class Board {
     return true;
   }
 
+  // paint(물감 정령, GameState.setSpiritMods) = { type, bonus }: 그 색 확률 1/n + bonus, 나머지는 같은 비율로 줄인다.
+  // 어느 경로든 rng는 한 번만 뽑아 난수 순서가 같고, paint가 없으면 기존 식 그대로다.
   randomType() {
-    return Math.floor(this.rng() * this.typeCount);
+    if (!this.paint) return Math.floor(this.rng() * this.typeCount);
+    const { type, bonus } = this.paint;
+    const p = 1 / this.typeCount + bonus;
+    const r = this.rng();
+    if (r < p) return type;
+    const k = Math.min(this.typeCount - 2, Math.floor(((r - p) / (1 - p)) * (this.typeCount - 1)));
+    return k >= type ? k + 1 : k;
   }
 
   // 그 열의 어떤 행이든 cellStates가 null이 아니면 잠긴 것으로 본다. 별도 플래그를

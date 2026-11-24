@@ -4,6 +4,7 @@
 import {
   ITEM_CAP, HOTBAR_LEN, LOG_MAX, normalizeInv, addCapped, nextSkillLevel, equipInto, swapInto,
 } from '../core/inventory/inventory.js';
+import { grantSpirit, levelUpCost, equipSpiritInto, ensureStartSpirit, bossSpiritBundle, bossSpiritTx, START_SPIRIT_TX } from '../core/spirits/spirits.js';
 
 const OK = Object.freeze({ ok: true, reason: null });
 const fail = (reason) => ({ ok: false, reason });
@@ -16,6 +17,7 @@ export class Inventory {
     this._save = save;
     this._clock = clock;
     this.config = config; // config/items.json
+    this.spiritsConfig = null; // config/spirits.json - 없으면 정령 지급·레벨업·장착은 실패한다
     this.inFloor = false; // 층 진행 중이면 장착 변경은 pendingHotbar로(4장 4). 저장 안 함.
     this._listeners = [];
     this._hotbarView = [];
@@ -27,7 +29,53 @@ export class Inventory {
     this._refreshView();
   }
 
+  // 정령 설정을 꽂고, 정령이 없던 저장(새 저장 포함)에 시작 정령을 한 번 지급·장착한다(docs/spirits.md 6장).
+  // clearedBossFloors = 이미 깬 보스 층 번호들 - 보스 정령(txId boss-spirit:{층})을 안 받은 층은 같은 규칙으로 소급 지급하고
+  // 받은 목록을 pendingSpiritNotice에 쌓는다(화면이 한 번 보여 주고 비운다). txId가 남으므로 층마다 한 번만.
+  initSpirits(spiritsConfig, clearedBossFloors = []) {
+    this.spiritsConfig = spiritsConfig;
+    if (!this.data.grantedTx.includes(START_SPIRIT_TX)) {
+      const res = ensureStartSpirit(spiritsConfig, this.data);
+      this._commit('start', res ? { spirits: [res] } : null, START_SPIRIT_TX);
+    }
+    const notice = [];
+    for (const floor of clearedBossFloors) {
+      if (this.data.grantedTx.includes(bossSpiritTx(floor))) continue;
+      const bundle = bossSpiritBundle(spiritsConfig, floor);
+      const res = this.grant(bundle, { src: 'bossSpirit', txId: bossSpiritTx(floor) });
+      if (res.ok) notice.push({ floor, ...res.delta.spirits[0], stoneReward: bundle.spiritStones });
+    }
+    if (notice.length === 0) return;
+    this.data.pendingSpiritNotice.push(...notice);
+    this._commit(null, null);
+  }
+
+  // 소급 지급 알림을 화면이 보여 준 뒤 비운다.
+  clearSpiritNotice() {
+    if (this.data.pendingSpiritNotice.length === 0) return;
+    this.data.pendingSpiritNotice = [];
+    this._commit(null, null);
+  }
+
   // ---------- 읽기 ----------
+  spirit(id) {
+    return this.data.perm.spirits[id] ?? null;
+  }
+
+  get spiritStones() {
+    return this.data.perm.spiritStones;
+  }
+
+  // 지금 전투에 적용되는 정령 장착(수호자 순서 5칸). 고치지 말 것.
+  spiritSlots() {
+    return this.data.loadout.spirits;
+  }
+
+  // 층 진행 중 바꾼 정령 장착(다음 층부터 적용) - 없으면 null.
+  pendingSpirits() {
+    return this.data.loadout.pendingSpirits;
+  }
+
   count(id) {
     return this.data.items[id] ?? 0;
   }
@@ -109,7 +157,8 @@ export class Inventory {
   }
 
   // ---------- 쓰기 ----------
-  // bundle = { gold?, diamonds?, items?: {id:n}, skills?: {key: 레벨|'+1'}, flags?: [] }
+  // bundle = { gold?, diamonds?, items?: {id:n}, skills?: {key: 레벨|'+1'}, flags?: [], spirits?: [id], spiritStones?: n }
+  // 정령 지급 결과(new/star/stones)는 delta.spirits = [{ id, kind, stones }]로 돌아온다.
   // txId는 문자열 또는 배열(여러 지급을 한 번에 - 하나라도 이미 받았으면 duplicate).
   grant(bundle, { src, txId = null } = {}) {
     const txs = txId == null ? [] : [].concat(txId);
@@ -163,6 +212,34 @@ export class Inventory {
     if (txId != null) this.data.grantedTx.push(txId);
     this._commit(src, d, txId);
     return { ...OK, delta: d };
+  }
+
+  // 정령 레벨업(docs/spirits.md 6장): 골드와 정령석을 한 번에. 하나라도 모자라면 아무것도 안 바뀐다.
+  // floorReward = economy.normalFloorReward(data, bestFloor).
+  levelUpSpirit(id, floorReward) {
+    const cfg = this.spiritsConfig;
+    const owned = this.spirit(id);
+    if (!cfg || !owned) return fail('notOwned');
+    if (owned.lv >= cfg.levelMax) return fail('maxLevel');
+    const cost = levelUpCost(cfg, owned.lv, floorReward);
+    if (this.wallet.gold < cost.gold || this.spiritStones < cost.stones) return fail('noMoney');
+    this.wallet.gold -= cost.gold;
+    this.data.perm.spiritStones -= cost.stones;
+    owned.lv += 1;
+    const d = { gold: -cost.gold, spiritStones: -cost.stones, spiritLv: { [id]: owned.lv } };
+    this._commit('spiritLevelUp', d);
+    return { ...OK, delta: d };
+  }
+
+  // 정령 장착(slot = 수호자 순서 0~4, id null = 해제). 같은 정령이 다른 칸에 있으면 자리 맞바꿈. 층 진행 중이면 다음 층부터.
+  equipSpirit(slot, id) {
+    const lo = this.data.loadout;
+    const slots = this.inFloor ? (lo.pendingSpirits ?? lo.spirits).slice() : lo.spirits;
+    const res = equipSpiritInto(slots, slot, id, this.data.perm.spirits);
+    if (!res.ok) return res;
+    if (this.inFloor) lo.pendingSpirits = slots;
+    this._commit(null, null);
+    return this.inFloor ? { ...res, pending: true } : res;
   }
 
   equip(slot, id) {
@@ -221,9 +298,11 @@ export class Inventory {
   // ---------- 내부 ----------
   _applyPending() {
     const lo = this.data.loadout;
-    if (!lo.pendingHotbar) return;
-    lo.hotbar = lo.pendingHotbar;
+    if (!lo.pendingHotbar && !lo.pendingSpirits) return;
+    if (lo.pendingHotbar) lo.hotbar = lo.pendingHotbar;
+    if (lo.pendingSpirits) lo.spirits = lo.pendingSpirits;
     lo.pendingHotbar = null;
+    lo.pendingSpirits = null;
     this._commit(null, null);
   }
 
@@ -266,6 +345,11 @@ export class Inventory {
       (d.flags ??= []).push(flag);
     }
     if (d.flags) this._refreshView();
+    if (bundle.spirits?.length && this.spiritsConfig) d.spirits = bundle.spirits.map((id) => grantSpirit(this.spiritsConfig, this.data, id));
+    if (bundle.spiritStones) {
+      this.data.perm.spiritStones = Math.max(0, this.data.perm.spiritStones + bundle.spiritStones);
+      d.spiritStones = bundle.spiritStones;
+    }
     // 4장 5: 처음 얻은 hotbar 아이템은 빈 칸이 있으면 자동 장착(층 중이면 다음 층부터).
     for (const id of firstTime) {
       if (this.config?.items[id]?.group !== 'hotbar' || this.count(id) < 1) continue;

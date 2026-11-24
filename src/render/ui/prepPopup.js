@@ -1,20 +1,21 @@
-// 정비 팝업(docs/upgrade-popup.md) - 석상 강화 / 토템(잠김) / 보관함 3탭. 층 클리어·패배·마을(받침대)·전투 중 석상 탭이
+// 정비 팝업(docs/upgrade-popup.md) - 석상 강화 / 정령(spiritTab.js) / 보관함 3탭. 층 클리어·패배·마을(받침대)·전투 중 석상 탭이
 // 모두 이 팝업 하나를 쓰고 상황(context)에 따라 제목·상황 줄·아래 버튼·X·처음 탭만 바뀐다.
 // 좌표는 전부 540 폭 기준(basis, 기획서의 "화면 px")이고 실제 캔버스엔 scale(= 화면 폭 / 540)을 곱해 그린다
 // (메인 메뉴와 같은 방식). 그림은 basis에서 원본 x2(보유 칸만 x3) 정수 배율, imageSmoothingEnabled=false.
 //   layoutPrepPopup = 사각형만 계산하는 순수 함수(tests/prepPopup.test.js)
 //   drawPrepPopup   = 그리기만(보관함 본문 터치 사각형은 layout.vaultHits에 담아 둔다)
 //   hitPrepPopup    = 화면 좌표 -> { type, ... }
-import { drawNine, drawText, drawDamage, drawFixedImage, getUi, getUiMeta, getUiFont, uiReady } from '../uiKit.js';
+import { drawNine, drawText, drawDamage, drawFixedImage, getUiMeta, getUi, getUiFont, uiReady } from '../uiKit.js';
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
 import { HUD_CONFIG } from '../../config/hud.js';
 import { towerLevelCost, maxTowerLevelUps, evenTowerLevelUps } from '../../core/economy/economy.js';
 import { vaultSections } from '../inventoryTab.js';
+import { drawSpiritTab, hitSpiritTab, newSpiritSel } from './spiritTab.js';
 import { fmt as fmtGold } from '../shopText.js'; // 골드 1,000 형식(메뉴 재화 바·상점과 같음)
 
-export const PREP_TABS = ['statue', 'totem', 'vault'];
-import { drawImageSnapped, screen } from '../screenFit.js';
+export const PREP_TABS = ['statue', 'spirit', 'vault'];
+import { screen } from '../screenFit.js';
 const BASIS_W = 540;
 const K = 2;
 const SIDE = 26; // popup_menu 테두리 안쪽
@@ -29,13 +30,11 @@ const ALL_H = 40; // 일괄 강화 버튼
 const UPGRADE_W = 116;
 const UPGRADE_H = 44; // 주 버튼
 const MAX_H = 36;
-const TOTEM_ROW_H = 56;
 const FX_PLUS_MS = 600;
 const C = {
   title: HUD_CONFIG.text.title,
   text: HUD_CONFIG.text.primary,
   sub: HUD_CONFIG.text.dim,
-  silhouette: '#3b3347',
   outline: '#0d0a10',
   red: HUD_CONFIG.popup.loseColor,
   white: '#ffffff',
@@ -47,12 +46,12 @@ const NAME_OUTLINE = { outlineColor: C.outline, outlineWidth: 3 };
 // 처음 열 때 상태. 층 클리어/패배는 같은 판에서 마지막에 본 탭(remembered), 마을은 항상 보관함.
 export function openPrepState(context, remembered = null, selectedTower = null) {
   const tab = context === 'village' ? 'vault' : context === 'towerTap' ? 'statue' : remembered ?? 'statue';
-  return { context, tab, selectedTower, flash: null };
+  return { context, tab, selectedTower, flash: null, spirit: newSpiritSel() };
 }
 
-// 잠긴 토템 탭은 본문 안내만 보여 주고 "마지막 탭" 기억에는 남기지 않는다.
-export function rememberTab(prev, tab, totemLocked = HUD_CONFIG.totemTab.locked) {
-  return tab === 'totem' && totemLocked ? prev : tab;
+// 정령 탭을 잠가 두면(HUD_CONFIG.spiritTab.locked) "마지막 탭" 기억에는 남기지 않는다.
+export function rememberTab(prev, tab, spiritLocked = HUD_CONFIG.spiritTab.locked) {
+  return tab === 'spirit' && spiritLocked ? prev : tab;
 }
 
 // 석상 한 줄의 버튼 상태 - 최대 레벨 / 골드 부족 / MAX +N(지금 골드로 오를 레벨 수).
@@ -107,7 +106,7 @@ export function layoutPrepPopup(screenW, screenH, context, tab) {
 
   const c = out.content;
   if (tab === 'statue') out.statue = layoutStatueTab(c);
-  else if (tab === 'totem') out.totem = layoutTotemTab(c);
+  else if (tab === 'spirit') out.spirit = { content: c }; // 본문 터치 사각형은 그릴 때 layout.spiritHits에(보유 수에 따라 달라진다)
   else out.vault = vaultSections(c);
   return out;
 }
@@ -139,18 +138,6 @@ function layoutStatueTab(c) {
   return { rows, hint: rect(c.x, fy, half, FOOTER_H), total: rect(c.x + half, fy, c.width - half, FOOTER_H), all: rect(c.x, fy + FOOTER_H + ROW_GAP, c.width, ALL_H) };
 }
 
-function layoutTotemTab(c) {
-  const rows = [];
-  for (let i = 0; i < 5; i++) {
-    const card = rect(c.x, c.y + i * (TOTEM_ROW_H + ROW_GAP), c.width, TOTEM_ROW_H);
-    const s1 = rect(card.x + card.width - 8 - 44, card.y + 6, 44, 44);
-    const s0 = rect(s1.x - 8 - 44, s1.y, 44, 44);
-    rows.push({ card, statue: rect(card.x + 12, card.y + 8, 32, 40), name: rect(card.x + 56, card.y + 17, s0.x - 8 - card.x - 56, 22), slots: [s0, s1] });
-  }
-  const ny = rows[4].card.y + TOTEM_ROW_H + 10;
-  return { rows, notice: rect(c.x, ny, c.width, Math.max(0, c.y + c.height - ny)) };
-}
-
 const inside = (x, y, r) => r && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
 
 // x, y = 캔버스 화면 좌표. 보관함 본문은 drawPrepPopup이 채운 layout.vaultHits(basis)로 판정한다.
@@ -167,6 +154,10 @@ export function hitPrepPopup(layout, x, y) {
       if (inside(bx, by, row.max)) return { type: 'max', index: i };
     }
     if (inside(bx, by, layout.statue.all)) return { type: 'all' };
+  }
+  if (layout.spirit && layout.spiritHits) {
+    const hit = hitSpiritTab(layout.spiritHits, bx, by);
+    if (hit) return hit;
   }
   const v = layout.vaultHits;
   if (v) {
@@ -186,7 +177,8 @@ export function hitPrepPopup(layout, x, y) {
 
 // state = openPrepState + flash { index, atMs, white } + view(그릴 값):
 // view = { floor, best, gold, totalAttack, towers: [{ color, name, level, atk, nextAtk, info: statueRowInfo }],
-//          nowMs, drawStatue(ctx, color, cx, cy, size, grade), drawVault(rect) -> 터치 사각형 }
+//          nowMs, drawStatue(ctx, color, cx, cy, size, grade), drawVault(rect) -> 터치 사각형,
+//          spirit: { cfg, owned, slots, pending, stones, gold, floorReward } (spiritTab.js, 정령 설정이 없으면 null) }
 export function drawPrepPopup(ctx, assets, state, layout) {
   const { sheet, view } = { sheet: layout.sheet, view: state.view };
   ctx.save();
@@ -215,7 +207,7 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   drawTab(ctx, assets, layout.tabs[state.tab], state.tab, true);
 
   if (layout.statue) drawStatueTab(ctx, assets, state, layout.statue, view);
-  else if (layout.totem) drawTotemTab(ctx, assets, layout.totem, view);
+  else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStatue, view.nowMs) : null;
   else layout.vaultHits = view.drawVault ? view.drawVault(layout.content) : null;
 
   for (const a of layout.actions) {
@@ -295,73 +287,8 @@ function drawStatueTab(ctx, assets, state, tab, view) {
   label(ctx, allText, tab.all, can ? allMeta?.textColor ?? C.text : C.sub, 14, true, 'center');
 }
 
-function drawTotemTab(ctx, assets, tab, view) {
-  tab.rows.forEach((row, i) => {
-    const tower = view.towers[i];
-    nine(ctx, assets, 'upgrade/card.png', row.card, '#1f1b2b');
-    if (tower) drawSilhouette(ctx, assets, tower.color, row.statue);
-    label(ctx, tower?.name ?? '', row.name, C.sub, 14, false, 'left', NAME_OUTLINE);
-    for (const s of row.slots) {
-      const st = getUi(assets, 'items/slot_locked.png');
-      if (uiReady(st)) drawImageSnapped(ctx, st.img, s.x, s.y, s.width, s.height);
-      else {
-        ctx.fillStyle = C.silhouette;
-        ctx.fillRect(s.x, s.y, s.width, s.height);
-      }
-      drawFixedImage(ctx, assets, 'icons/lock.png', s.x + s.width / 2, s.y + s.height / 2, K);
-    }
-  });
-  const nb = tab.notice;
-  if (nb.height < 120) return;
-  nine(ctx, assets, 'menu/inset.png', nb, C.outline);
-  const cx = nb.x + nb.width / 2;
-  let y = nb.y + Math.max(24, Math.round((nb.height - 132) / 2) + 12);
-  drawFixedImage(ctx, assets, 'icons/lock.png', cx, y, K * 2);
-  y += 30;
-  const line = (key, color, size, bold, dy) => {
-    label(ctx, t(key), rect(nb.x, y, nb.width, 20), color, size, bold, 'center');
-    y += dy;
-  };
-  line('popup.prep.totem.title', C.title, 16, true, 26);
-  line('popup.prep.totem.desc1', C.text, 13, false, 20);
-  line('popup.prep.totem.desc2', C.text, 13, false, 28);
-  line('popup.prep.totem.cond', C.sub, 12, false, 0);
-}
-
-// 석상 idle 0프레임을 단색(#3b3347)으로 - 색별 1번만 만들어 둔다(32x40 = 원본 x2).
-const silhouettes = new Map();
-function drawSilhouette(ctx, assets, color, r) {
-  const anim = assets?.towerAnims?.get(`tower_idle_${color}`);
-  if (!anim || !uiReady(anim.state)) {
-    ctx.fillStyle = C.silhouette;
-    ctx.fillRect(r.x + 6, r.y + 4, r.width - 12, r.height - 4);
-    return;
-  }
-  let c = silhouettes.get(color);
-  if (!c) {
-    c = document.createElement('canvas');
-    c.width = anim.frameW;
-    c.height = anim.frameH;
-    const g = c.getContext('2d');
-    g.drawImage(anim.state.img, 0, 0, anim.frameW, anim.frameH, 0, 0, anim.frameW, anim.frameH);
-    g.globalCompositeOperation = 'source-in';
-    g.fillStyle = C.silhouette;
-    g.fillRect(0, 0, c.width, c.height);
-    silhouettes.set(color, c);
-  }
-  // 석상 원본은 왼쪽을 본다 - 강화 줄과 같이 오른쪽 보기.
-  const k = anim.drawScale ?? K; // 수호자(20x26)는 전투와 같은 1.5배 = 30x39라 석상 칸에 그대로 들어간다
-  const w = anim.frameW * k;
-  const h = anim.frameH * k;
-  ctx.save();
-  ctx.translate(Math.round(r.x + r.width / 2), 0);
-  ctx.scale(-1, 1);
-  drawImageSnapped(ctx, c, -w / 2, Math.round(r.y + r.height / 2 - h / 2), w, h);
-  ctx.restore();
-}
-
 function drawTab(ctx, assets, r, key, on) {
-  const locked = key === 'totem' && HUD_CONFIG.totemTab.locked;
+  const locked = key === 'spirit' && HUD_CONFIG.spiritTab.locked;
   const draw = rect(r.x, r.y, r.width, r.height + TAB_OVERLAP);
   nine(ctx, assets, on ? 'upgrade/tab_on.png' : 'upgrade/tab_off.png', draw, on ? HUD_CONFIG.popup.ghost : C.outline);
   ctx.font = getFontString(15, true);
@@ -386,7 +313,7 @@ function drawGoldChip(ctx, assets, r, gold) {
 }
 
 // 9-slice(원본 x2). 그림이 없으면 단색 사각형. 반환 = manifest 메타(textColor 등).
-function nine(ctx, assets, path, r, fallback) {
+export function nine(ctx, assets, path, r, fallback) {
   const st = getUi(assets, path);
   const meta = getUiMeta(assets, path);
   if (uiReady(st) && meta?.slice) drawNine(ctx, st.img, meta.slice, Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height), K);
@@ -398,7 +325,7 @@ function nine(ctx, assets, path, r, fallback) {
 }
 
 // 한 줄 글자(넘치면 …). align = 'left'|'center'|'right', 세로는 r 가운데.
-function label(ctx, text, r, color, size, bold, align, opts) {
+export function label(ctx, text, r, color, size, bold, align, opts) {
   ctx.font = getFontString(size, bold);
   ctx.textAlign = align;
   ctx.fillStyle = color;

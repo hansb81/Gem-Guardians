@@ -57,6 +57,12 @@
   - 같은 레벨 클리어 시간 P90/P10 ≤ 1.8
 - 운이 너무 크게 갈리면 줄이는 장치를 따로 정한다: 특수 잼 보정 확률, 매치 적은 보드 재배치 등.
 
+### T8. 경쟁 모드 무한 웨이브 (2026-11-23)
+- `node tools/sim/run.js --test=t8 --player=fast,normal,slow,worst --seeds=30 --out=reports/sim/t8` (all에는 안 들어감).
+- 게임과 같은 경로: `src/core/comp/endless.js`(웨이브·점수) + `battleState.nextWave`(이어 붙이기). 석상 전부 `comp.towerLevel`, 특수 기술 전부 해금 Lv1, 키트(`comp.kit`)를 아이템 봇이 쓴다. 상한 60분.
+- 후보 비교: 환경 변수 `T8_GRID`에 `comp.endless` 덮어쓰기 배열(JSON). 예: `T8_GRID='[{"startFloor":10},{"bossHpMul":0.6}]'`. 없으면 config 값 하나.
+- 보는 값: 판 길이(분), 도달 웨이브, 그때 난이도 층, 점수(중앙·P10·P90). 결정 기록은 docs/ranking.md §5-2.
+
 ### 기술 해금 일정 옵션 (2026-11-07)
 - `--skills=shop | shop-free | none | color | special | all | all+boss`, **기본값 `shop`**.
   - `shop`: 해금 A안 + 해금 골드 차감(실제 게임과 같음). 가시는 처음부터 Lv 1, 용암탄·영혼 불꽃·궁극기(+대폭발)는 10·20·30층 보스를 처음 잡은 뒤(최고 층 > 그 보스층) 해금할 수 있다.

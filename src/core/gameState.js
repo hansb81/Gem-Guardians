@@ -29,6 +29,8 @@ import { DETONATION_CONFIG } from '../config/detonation.js';
 import { COMBO_CONFIG } from '../config/combo.js';
 import { HINT_CONFIG } from '../config/hint.js';
 import { createObstacleRegistry } from './obstacles/registry.js';
+import { GEM_TYPES } from '../config/gems.js';
+import { createRng } from './rng.js';
 import {
   isSwappable,
   occupantIndices,
@@ -1516,7 +1518,7 @@ export class GameState {
       seen = new Set();
       resolution.obstacleDamagedKeys.set(cascadeIndex, seen);
     }
-    const effects = damageOccupantsInCells(this.board, this.obstaclesRegistry, cells, seen, cause);
+    const effects = damageOccupantsInCells(this.board, this.obstaclesRegistry, cells, seen, cause, this._breaker ?? null);
     // 파괴된 occupant 칸은 watchCells 없이 바로 빈 칸이 된다 - 낙하 대상 열에 넣는다.
     for (const c of cells) if (this.board.inBounds(c.row, c.col) && this.board.get(c.row, c.col) === EMPTY) resolution.columns.add(c.col);
     for (const effect of effects) this._pushEffect({ ...effect, cascadeIndex, durationMs: 1 });
@@ -1639,6 +1641,22 @@ export class GameState {
     const durationMs = this.reduceEffects ? ANIMATION_DURATIONS_MS.shuffleReduced : ANIMATION_DURATIONS_MS.shuffle;
     const seed = Math.floor(board.rng() * 2147483647);
     this._pushEffect({ type: 'shuffle', moves, durationMs, seed, skipClear });
+  }
+
+  // 정령 보조 효과(docs/spirits.md 3장, src/core/spirits supportMods)를 이 보드에 건다 - 층 시작에 한 번. mods null = 전부 끔.
+  //   clock   새로 생기는 시한폭탄 타이머 +n. 이미 보드에 있는 폭탄(층 시작 배치)도 달라진 만큼 맞춘다(최소 1).
+  //   breaker 매치 옆 방해요소 피해에 그 확률로 1 추가 피해(seed = 자기 RNG).
+  //   paint   새로 떨어지는 잼이 { color } 색일 확률 +bonus(Board.randomType).
+  // 한 번도 안 부르면 기존 동작과 완전히 같다.
+  setSpiritMods(mods, seed = 1) {
+    const { board } = this;
+    const clock = mods?.clock ?? 0;
+    const diff = clock - (board.bombTimerPlus ?? 0);
+    if (diff !== 0) for (const att of board.attachments) if (att?.timer != null) att.timer = Math.max(1, att.timer + diff);
+    board.bombTimerPlus = clock;
+    this._breaker = mods?.breaker > 0 ? { chance: mods.breaker, rng: createRng(seed) } : null;
+    const type = mods?.paint ? GEM_TYPES.findIndex((g) => g.id === mods.paint.color) : -1;
+    board.paint = type >= 0 && type < board.typeCount ? { type, bonus: mods.paint.bonus } : null;
   }
 
   // "다음 층" - 보드를 유지한 채 새 층 방해요소 규칙으로 바꾼다(docs/balance.md 7장).

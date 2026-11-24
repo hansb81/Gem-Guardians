@@ -78,3 +78,42 @@ test('층 클리어 -> 다음 층: 웨이브를 모두 전멸시키면 status가
   assert.deepEqual(controller.currentFloor, getFloor(balance, enemies, obstacles, floorsData, startFloor + 1));
   assert.equal(controller.battleState.status, 'active');
 });
+
+test('경쟁 모드 startComp: 무한 웨이브, 석상 comp.towerLevel 고정·강화 불가, 키트 아이템, 골드 안 늘고 점수만, retryFloor로 본편 복귀', async () => {
+  const { towerAttack } = await import('../src/core/economy/economy.js');
+  const comp = JSON.parse(readFileSync(join(CFG, 'ranking.json'), 'utf8')).comp;
+  const items = load('items.json');
+  const controller = new BattleController({
+    balance, enemies, obstacles, floorsData, towersBaseData: balance.tower.towers, itemsConfig: items,
+    battleConfig: { cascadeBonusPerStep: 0.5, minDamage: 1, attackIntervalSec: 1, effectDurationsMs: JSON.parse(readFileSync(join(__dirname, '..', 'src', 'config', 'battle.json'), 'utf8')).effectDurationsMs },
+  });
+  const mainItems = controller.items;
+  const normalAtk = controller.towersData[0].stats.attack;
+  const run = { runId: 'r', seasonId: '2026-W48', seed: 1234, cfg: comp };
+  controller.startComp(run);
+  assert.equal(controller.comp, run);
+  assert.equal(controller.floorTag, 'comp');
+  assert.ok(controller.battleState.nextWave);
+  assert.equal(controller.battleState.towers[0].stats.attack, towerAttack(balance, comp.towerLevel));
+  assert.equal(controller.towersData[0].stats.attack, normalAtk); // 본편 석상은 그대로
+  assert.equal(controller.tryLevelUpTower(0), false);
+  assert.deepEqual(run.towerLevels, controller.towersData.map(() => comp.towerLevel)); // 화면 표시용 레벨
+  assert.notEqual(controller.items, mainItems);
+  assert.deepEqual(controller.items.inv.hotbar(), Object.keys(comp.kit));
+  const gold = playerState.gold;
+  for (let i = 0; i < 400; i++) {
+    for (const shot of controller.battleState.applyGemClear('red', 50, 1)) controller.battleState.resolveTowerAttack(shot);
+    controller.update(0.1);
+  }
+  assert.equal(playerState.gold, gold);
+  assert.ok(run.score.s.kills > 0 && run.score.total > 2000);
+  assert.equal(controller.battleState.status, 'active');
+  assert.ok(controller.battleState.wave > 1);
+  assert.equal(controller.floor, controller.battleState.wave);
+  controller.logSwap(0, 0, 0, 1);
+  assert.equal(run.input.log.s.length, 1);
+  controller.retryFloor();
+  assert.equal(controller.comp, null);
+  assert.equal(controller.items, mainItems);
+  assert.equal(controller.battleState.nextWave, null);
+});

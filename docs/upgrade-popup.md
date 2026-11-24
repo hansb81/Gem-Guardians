@@ -1,4 +1,4 @@
-# 강화 팝업 v2 기획: 석상 / 토템 / 보관함 3탭 통합
+# 강화 팝업 v2 기획: 석상 / 정령 / 보관함 3탭 통합
 
 작성 2026-11-07 · 상태: **쑹 확인 대기** (확인 후 `prompt-claude-code-upgrade-popup-v2.md` 실행)
 시안: `art/popup/mockups/` (overview.png + 01~05) · 생성기 `art/popup/upgrade_popup_v2_mock.py`
@@ -8,7 +8,7 @@
 ## 0. 한 줄 요약
 
 지금 따로 있는 **탑 강화 팝업(340x480)** 과 **보관함 팝업(거의 전체 화면)** 을 하나로 합친다.
-크기는 보관함 기준, 탭은 `석상 / 토템(잠김) / 보관함` 3개. 층 클리어 후, 패배 후, 마을(메뉴 받침대)에서
+크기는 보관함 기준, 탭은 `석상 / 정령(잠김) / 보관함` 3개. 층 클리어 후, 패배 후, 마을(메뉴 받침대)에서
 모두 **같은 팝업 한 개**를 열고, 상황(context)에 따라 제목·아래 버튼·기본 탭만 바뀐다.
 
 ---
@@ -31,7 +31,7 @@
         [엠블럼]
    ┌──── 제목 (상황별) ────────── [X]* ┐
    │ 상황 글자(회색)        [● 520 골드] │  ← 골드는 모든 탭에서 보임
-   │ [ 석상 ][ 🔒토템 ][ 보관함 ]        │  ← 탭 3개 (upgrade/tab_on·off)
+   │ [ 석상 ][ 🔒정령 ][ 보관함 ]        │  ← 탭 3개 (upgrade/tab_on·off)
    │ ┌ 탭 본문 (upgrade/tab_body) ─────┐ │
    │ │                                │ │
    │ └────────────────────────────────┘ │
@@ -80,13 +80,13 @@
 조작은 그대로: 강화 탭 = 1레벨, 누르고 있으면 연속(가속), MAX = 살 수 있는 만큼.
 석상 레벨은 저장값(`playerState.towerLevels`)이라 **마을에서도 강화 가능**, 다음 판부터 적용.
 
-## 4. 토템 탭 (잠김)
+## 4. 정령 탭 (잠김)
 
-- 탭 버튼: 자물쇠 아이콘 + 흐린 글자 `토템`. **누를 수는 있고**, 누르면 잠긴 안내 화면을 보여 준다(토스트만 띄우는 것보다 "무엇이 생길지" 보임).
-- 본문: 석상 5줄(실루엣 #3b3347 + 흐린 이름) × 토템 칸 2개(`slot_locked`) + 아래 안내판(자물쇠 2배, `토템 · 준비 중`, 설명 2줄, `열리는 조건: 추후 공개`).
-- 데이터: 인벤토리 기획 6장 그대로 `perm.totems {}`, `loadout.totems` 빈 값. 로직 없음.
-- 잠금은 `config/hud.js`(또는 features 설정) `totemTab.locked = true` 하나로. 나중에 false로 바꾸고 본문만 채우면 된다.
-- 토템 그림·이름은 아직 없음. 시안의 줄/칸 배치는 자리 표시용.
+- 탭 버튼: 자물쇠 아이콘 + 흐린 글자 `정령`. **누를 수는 있고**, 누르면 잠긴 안내 화면을 보여 준다(토스트만 띄우는 것보다 "무엇이 생길지" 보임).
+- 본문: 석상 5줄(실루엣 #3b3347 + 흐린 이름) × 정령 칸 2개(`slot_locked`) + 아래 안내판(자물쇠 2배, `정령 · 준비 중`, 설명 2줄, `열리는 조건: 추후 공개`).
+- 데이터: 인벤토리 기획 6장 그대로 `perm.spirits {}`, `loadout.spirits` 빈 값. 로직 없음.
+- 잠금은 `config/hud.js`(또는 features 설정) `spiritTab.locked = true` 하나로. 나중에 false로 바꾸고 본문만 채우면 된다.
+- 정령 그림·이름은 아직 없음. 시안의 줄/칸 배치는 자리 표시용.
 
 ## 5. 보관함 탭
 
@@ -123,17 +123,17 @@
   - `layoutPrepPopup(screenW, screenH, context, tab)` → 모든 사각형(틀, 탭, 본문, 줄, 버튼, 칸)을 돌려주는 **순수 함수** (테스트 가능)
   - `drawPrepPopup(ctx, assets, state, layout)` → 그리기만
   - `hitPrepPopup(layout, x, y)` → `{ type: 'tab'|'upgrade'|'max'|'slot'|'item'|'filter'|'reserve'|'action'|'close', ... }`
-- 상태: `{ context: 'floorClear'|'defeat'|'village'|'towerTap', tab: 'statue'|'totem'|'vault', selectedTower, vault: { filter, selectedItem, scrollY } }`
+- 상태: `{ context: 'floorClear'|'defeat'|'village'|'towerTap', tab: 'statue'|'spirit'|'vault', selectedTower, vault: { filter, selectedItem, scrollY } }`
 - 전투 화면(canvasRenderer)과 메인 메뉴(mainMenuScreen) **둘 다** 이 모듈만 부른다. 기존 `_drawTowerUpgradePopup` / `_drawTowerUpgradeLevelTab` / `_drawTowerUpgradeInventoryTab` 와 메뉴 쪽 보관함 팝업 그리기는 지운다.
 - 강화 로직은 그대로 `playerState.tryLevelUpTower / levelUpTowerMax`, 연속 강화도 기존 `upgradeHold` 재사용. 인벤토리는 기존 inventory 모듈 API만.
-- 탭 키 이름 변경: `levelUp → statue`, `inventory → vault`, `totem` 추가. 문구 키 `popup.prep.*` (ko/en).
+- 탭 키 이름 변경: `levelUp → statue`, `inventory → vault`, `spirit` 추가. 문구 키 `popup.prep.*` (ko/en).
 
 ## 8. 정한 것 / 바꾸고 싶으면 말해 주세요
 
 | # | 항목 | 정한 값 | 다른 선택지 |
 |---|---|---|---|
 | 1 | 팝업 크기 | 보관함 크기(12/96/48 여백) | — (쑹 지정) |
-| 2 | 토템 탭 누르면 | 잠긴 안내 화면 | 못 누르고 토스트만 |
+| 2 | 정령 탭 누르면 | 잠긴 안내 화면 | 못 누르고 토스트만 |
 | 3 | 층 클리어/패배에서 X | 없음 (아래 버튼만) | X = 아래 버튼과 같은 동작 |
 | 4 | 패배 아래 버튼 | `마을로` + `재도전` | 재도전만 |
 | 5 | 처음 탭 | 클리어/패배 = 석상(같은 판에선 마지막 탭 기억), 마을 = 보관함 | 항상 석상 |

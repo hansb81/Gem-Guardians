@@ -10,6 +10,25 @@
   "topLimit": 100,
   "nextTierStep": 10,
   "historyMax": 8,
+  "comp": {
+    "_doc": "경쟁 모드 판 규칙(docs/ranking.md 5장). 서버 사본 server/supabase/functions/_shared/ranking.json. 무한 웨이브: src/core/comp/endless.js. endless 수치는 tools/sim T8로 정한다.",
+    "unlockBestFloor": 20,
+    "dailyEntries": 3,
+    "towerLevel": 20,
+    "skillLevel": 1,
+    "kit": { "hammer": 2, "scythe_h": 1 },
+    "modifier": null,
+    "endless": {
+      "_doc": "웨이브 n의 난이도 층 = startFloor + (n-1)xfloorsPerWave, rampFrom 웨이브부터는 x rampMul 빠르게. 보스 HP x bossHpMul. 웨이브 사이 waveGapSec초, 성벽은 초기화 없이 wallHealPct 회복(0 = 회복 없음). T8(2026-11-23, 회복 0, 시드 30): normal 중앙 9.8분·17웨이브, fast 12.4분·27, slow 9.2분·14, worst 5.4분·7.",
+      "startFloor": 15, "floorsPerWave": 1, "rampFrom": 10, "rampMul": 2, "bossHpMul": 0.4, "waveGapSec": 3, "wallHealPct": 0
+    },
+    "score": {
+      "perWave": 1000,
+      "wallBonus": 100,
+      "eliteMul": 5,
+      "killPoints": { "swarm": 10, "grunt": 20, "runner": 20, "brute": 50, "caster": 70, "armored": 80, "heavy": 140, "boss": 300 }
+    }
+  },
   "tiers": [
     { "id": "r1", "rank": 1, "rewards": { "diamonds": 500, "items": { "rainbow": 5 } }, "frame": "crown_gold" },
     { "id": "r2", "rank": 2, "rewards": { "diamonds": 400, "items": { "rainbow": 3 } }, "frame": "crown_silver" },

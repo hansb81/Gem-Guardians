@@ -280,7 +280,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     for (const [color, count] of Object.entries(result.stats.colorCounts)) colorUsage[color] += count;
 
     if (result.status === 'cleared') {
-      const reward = result.killGoldTotal + clearBonus(balance, result.killGoldTotal, true);
+      const reward = result.killGoldTotal + result.spiritGold + clearBonus(balance, result.killGoldTotal, true);
       const cg = comboGold(balance, reward, result.maxCombo); // 콤보 골드(기본 config, --combogold=off면 0)
       gold += reward + cg;
       goldEarned += reward + cg;
@@ -306,9 +306,9 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
       if (always && floor <= env.floorsRange.to) levelUp();
       else buySkills();
     } else {
-      gold += result.killGoldTotal;
-      goldEarned += result.killGoldTotal;
-      bucketOf(floor).fail += result.killGoldTotal;
+      gold += result.killGoldTotal + result.spiritGold;
+      goldEarned += result.killGoldTotal + result.spiritGold;
+      bucketOf(floor).fail += result.killGoldTotal + result.spiritGold;
       if (attempt >= HARD_STOP_RETRIES) {
         retriesByFloor.push({ floor, tag: result.tag, retries: attempt, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
         wallFloors.push(floor);
@@ -323,7 +323,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         cumulativeTimeSec += farm.timeSec;
         floorTimeSec += farm.timeSec;
         track(floor, farm, true);
-        const farmReward = farm.killGoldTotal + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
+        const farmReward = farm.killGoldTotal + farm.spiritGold + (farm.status === 'cleared' ? clearBonus(balance, farm.killGoldTotal, false) : 0);
         const cg = farm.status === 'cleared' ? comboGold(balance, farmReward, farm.maxCombo) : 0;
         gold += farmReward + cg;
         goldEarned += farmReward + cg;

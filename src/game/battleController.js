@@ -5,6 +5,9 @@ import { playerState } from './playerState.js';
 import { ItemController } from './itemController.js';
 import { applySkillLevels, offerBossPack } from '../core/shop/shop.js';
 import { createRng } from '../core/rng.js';
+import { endlessFloor, createScore, createInputLog } from '../core/comp/endless.js';
+import { battleSpirits, supportMods, bossSpiritBundle, bossSpiritTx } from '../core/spirits/spirits.js';
+import { shouldStartTutorial } from '../tutorial/tutorial.js';
 
 // 층 진행 + 골드/탑 레벨을 BattleState(순수 전투 로직)와 연결하는 글루. main.js는 이 하나만
 // 들고 있으면 된다(퍼즐에서 잼이 터질 때 applyGemClear를 부르는 건 여전히 PuzzleBattleBridge).
@@ -13,7 +16,7 @@ import { createRng } from '../core/rng.js';
 // 그 자리를 바로 고친다 - BattleState.applyGemClear는 towersData를 그대로 읽으므로 전투
 // 중에도 즉시 반영된다(src/battle/battleState.js 쪽 설명 참고).
 export class BattleController {
-  constructor({ balance, enemies, obstacles, floorsData, towersBaseData, battleConfig, itemsConfig, shopConfig = null, mineConfig = null, onBattleStateChanged }) {
+  constructor({ balance, enemies, obstacles, floorsData, towersBaseData, battleConfig, itemsConfig, shopConfig = null, mineConfig = null, spiritsConfig = null, onBattleStateChanged }) {
     this.balance = balance;
     this.enemies = enemies;
     this.obstacles = obstacles;
@@ -38,10 +41,15 @@ export class BattleController {
     if (itemsConfig) {
       playerState.initItems(itemsConfig);
       this.items = new ItemController({ config: itemsConfig, player: playerState });
+      this._mainItems = this.items; // 경쟁 판이 끝나면 되돌릴 본편 아이템
     }
     if (shopConfig) playerState.initShop(shopConfig);
     // 광산(config/mine.json) - 패스 여부를 읽으므로 initShop 뒤. 없으면(테스트·시뮬레이터) 광산 없음.
     if (mineConfig) playerState.initMine(mineConfig, Date.now());
+    // 정령(config/spirits.json, docs/spirits.md) - 없으면(테스트·옛 호출부) 정령 기능 없음. 시작 정령 지급은 initSpirits가 한 번만.
+    this.spiritsConfig = spiritsConfig;
+    if (spiritsConfig) playerState.initSpirits(spiritsConfig, balance.floorShape.bossEvery);
+    this._spirits = null; // 이번 층 전투에 넘긴 정령 5칸(재물 정령 골드 계산용) - beginFloor가 채운다.
 
     this._seenDeaths = new WeakSet();
     this.lastClearReward = null; // { killGold, bonusGold, comboGold, maxCombo, total } - 클리어 팝업용.
@@ -55,24 +63,40 @@ export class BattleController {
   // floor.obstacles로 퍼즐 보드를 다시 만드는 데 쓴다.
   // practice = 튜토리얼 다시 보기(연습 모드) 전용 전투 - 층 번호와 상관없이 그 층 데이터만 쓰고, 예약 아이템
   // 소모(beginFloor)·층 표시·클리어 보상은 하지 않는다. 진행 중 층/세이브는 그대로(나가면 retryFloor로 원래 층).
-  _resetBattleState(floorNumber, { practice = false } = {}) {
+  // comp = 경쟁 모드 판(startComp) - 무한 웨이브, 석상·스킬 고정 레벨, 키트만, 골드·저장·보상 없음. 다른 경로(retryFloor 등)는 판을 끝낸다.
+  _resetBattleState(floorNumber, { practice = false, comp = null } = {}) {
     this.practice = practice;
-    const floor = getFloor(this.balance, this.enemies, this.obstacles, this.floorsData, floorNumber);
+    this.comp = comp;
+    const base = { emptySpawn: this.balance.floorShape.emptySpawn, emptySpawnCooldown: this.balance.floorShape.emptySpawnCooldown, packGap: this.balance.floorShape.pack?.gap };
+    let floor, resolvedFloor;
+    if (comp) {
+      ({ floor, resolved: resolvedFloor } = endlessFloor({ balance: this.balance, enemies: this.enemies, obstacles: this.obstacles }, comp.cfg, comp.seed, base));
+    } else {
+      floor = getFloor(this.balance, this.enemies, this.obstacles, this.floorsData, floorNumber);
+      resolvedFloor = { ...base, wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns: resolveFloorSpawns(this.balance, this.enemies, floor) };
+    }
     this.currentFloor = floor;
-    const resolvedFloor = { wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns: resolveFloorSpawns(this.balance, this.enemies, floor), emptySpawn: this.balance.floorShape.emptySpawn, emptySpawnCooldown: this.balance.floorShape.emptySpawnCooldown, packGap: this.balance.floorShape.pack?.gap };
-    this.floorTag = floor.tag;
+    this.floorTag = comp ? 'comp' : floor.tag;
     this.killGoldThisFloor = 0; // 실제로 지급된 처치 골드(황금 주화 배율 포함).
     this._killGoldBase = 0; // 배율 전 처치 골드 - 클리어 보너스는 이걸로 계산해 층 골드가 정확히 x배가 되게.
     this.lastClearReward = null;
+    this._spirits = null;
+    this._wealthCarry = 0; // 재물 정령 추가 골드의 소수 이월(층마다 0부터)
     // 젬 스킬 레벨은 inventory.skillLevel()만 읽는다(Lv 1 = skills.json 그대로).
-    const skills = this.shopConfig ? applySkillLevels(this.battleConfig.skills, this.shopConfig.skills, (key) => playerState.inventory.skillLevel(key)) : this.battleConfig.skills;
-    this.battleState = new BattleState({ towersData: this.towersData, resolvedFloor, battleConfig: { ...this.battleConfig, skills } });
-    if (this.items) {
+    // 경쟁 모드는 모든 스킬(특수 기술 포함)을 comp.skillLevel로 고정.
+    const skillLv = comp ? () => comp.cfg.skillLevel : (key) => playerState.inventory.skillLevel(key);
+    const skills = this.shopConfig ? applySkillLevels(this.battleConfig.skills, this.shopConfig.skills, skillLv) : this.battleConfig.skills;
+    const towersData = comp ? this.towersData.map((tw) => ({ ...tw, stats: { ...tw.stats, attack: towerAttack(this.balance, comp.cfg.towerLevel) } })) : this.towersData;
+    this.battleState = new BattleState({ towersData, resolvedFloor, battleConfig: { ...this.battleConfig, skills } });
+    // 아이템: 경쟁 모드는 가방 대신 이번 판 키트(comp.kit, 판이 끝나면 버림) - ItemController의 단순 보관함 모드.
+    if (this.itemsConfig) {
+      this.items = comp ? new ItemController({ config: this.itemsConfig, player: { bestFloor: playerState.bestFloor, equipped: Object.keys(comp.kit), items: comp.kit, save() {} } }) : this._mainItems;
       this.items.resetFloor();
       this.items.battleState = this.battleState;
     }
-    this._floorStarted = practice; // 예약 아이템은 beginFloor()(첫 update = 소환 연출 시작)에서 소모한다. 연습 모드는 소모 안 함.
-    playerState.inventory.endFloor(); // 층 밖(메뉴·재도전 대기) - 장착 변경 즉시 적용.
+    this._floorStarted = practice || !!comp; // 예약 아이템은 beginFloor()(첫 update = 소환 연출 시작)에서 소모한다. 연습·경쟁 모드는 소모 안 함.
+    if (comp) comp.score = createScore(comp.cfg, this.enemies);
+    else playerState.inventory.endFloor(); // 층 밖(메뉴·재도전 대기) - 장착 변경 즉시 적용.
     this.onBattleStateChanged?.(this.battleState, floor);
   }
 
@@ -81,10 +105,26 @@ export class BattleController {
   beginFloor() {
     if (this._floorStarted) return;
     this._floorStarted = true;
-    playerState.inventory.beginFloor(); // 층 중에 바꾼 장착(pendingHotbar)을 여기서 적용, 이후 변경은 다음 층으로.
+    playerState.inventory.beginFloor(); // 층 중에 바꾼 장착(pendingHotbar·pendingSpirits)을 여기서 적용, 이후 변경은 다음 층으로.
+    this._applySpirits();
     if (!this.items) return;
     this.items.consumePreFloor();
     this.items.applyStarterSpecials();
+  }
+
+  // 이번 층에 적용할 정령을 장착에서 계산해 전투에 넘긴다. 연습·경쟁 모드는 beginFloor가 여기까지 오지 않아 정령이 없다.
+  // 최초 튜토리얼이 도는 층(1층 + 튜토리얼 미완료)도 정령 없음 - 튜토리얼이 끝난 다음 층(또는 재도전)부터 적용.
+  // 속성 정령 확률은 층 번호 seed RNG(같은 층이면 같은 난수열).
+  _applySpirits() {
+    const cfg = this.spiritsConfig;
+    if (!cfg || shouldStartTutorial(playerState.tutorial, this.floor)) return;
+    const inv = playerState.inventory;
+    this._spirits = battleSpirits(cfg, inv.spiritSlots(), inv.data.perm.spirits, this.towersData.map((t) => t.color));
+    this.battleState.setSpirits(this._spirits, { roles: cfg.roles, rng: createRng(this.floor * 7919 + 13) });
+    // 퍼즐 쪽 보조(시계태엽·해체·물감) - 이 층의 보드에 건다. 정령이 하나도 없으면 부르지 않는다(보드는 기존과 같다).
+    if (this.battleState.spirits || this.gameState?.board.bombTimerPlus || this.gameState?.board.paint) {
+      this.gameState?.setSpiritMods(supportMods(this.battleState.spirits, this.towersData.map((t) => t.color)), this.floor * 7919 + 31);
+    }
   }
 
   get goldMul() {
@@ -114,6 +154,7 @@ export class BattleController {
   }
 
   get floor() {
+    if (this.comp) return this.battleState.wave;
     return this.practice ? this.currentFloor.floor : playerState.floor;
   }
 
@@ -122,7 +163,31 @@ export class BattleController {
     this._resetBattleState(1, { practice: true });
   }
 
+  // 경쟁 모드 판 시작 - run = { runId, seasonId, seed, cfg(ranking.json comp) }. 판 상태(점수·키트·입력 기록)는 run에 둔다.
+  startComp(run) {
+    run.kit = { ...run.cfg.kit };
+    run.towerLevels = this.towersData.map(() => run.cfg.towerLevel); // 화면 표시용(전투는 _resetBattleState가 같은 값으로)
+    run.startedAt = Date.now();
+    run.t = 0; // 판 시계(초) - 입력 기록 시각
+    run.input = createInputLog(run.seed);
+    this._resetBattleState(1, { comp: run });
+    const items = this.items;
+    if (!items) return;
+    const use = items.use.bind(items);
+    items.use = (id, target) => {
+      const r = use(id, target);
+      if (r.ok) run.input.add('i', run.t, [id, target ?? null]);
+      return r;
+    };
+  }
+
+  // 경쟁 판 스왑 기록(main.js onSwap이 trySwap 성공 뒤 부른다).
+  logSwap(r1, c1, r2, c2) {
+    this.comp?.input.add('s', this.comp.t, [r1, c1, r2, c2]);
+  }
+
   update(dtSec) {
+    if (this.comp && this.battleState.status === 'active') this.comp.t += dtSec;
     this.beginFloor();
     this.battleState.update(dtSec);
     this._collectKillGold();
@@ -147,6 +212,7 @@ export class BattleController {
     const comboGold = comboGoldBonus(this.balance, this._killGoldBase + baseBonus, maxCombo);
     playerState.addGold(bonusGold + comboGold);
     const items = isFirstClear ? this._grantFirstClearItems() : [];
+    const spirit = isFirstClear ? this._grantBossSpirit() : null;
     // 보스 첫 클리어로 열린 광산 광맥 id(없으면 빈 배열) - 연습 모드는 여기까지 오지 않는다.
     const mineOpened = isFirstClear ? playerState.unlockMineVeins(this.floor, Date.now()) : [];
     playerState.save();
@@ -155,7 +221,7 @@ export class BattleController {
     // 경쟁 모드(아직 없음): 판을 시작할 때 seasonId = rankingService.currentSeason().id를 판 상태에 저장해 두고,
     // 판이 끝날 때 rankingService.submit('comp', { value: 판 점수, floor, at, seasonId })로 그 시즌에 넣는다(docs/ranking.md 5-1).
     // grant = 보스 첫 처치 보상 delta(획득 팝업용, 없으면 null).
-    this.lastClearReward = { floor: this.floor, firstClearMul: isFirstClear ? 1 + this.balance.economy.clearBonusMul : null, killGold: this.killGoldThisFloor, bonusGold, comboGold, maxCombo, comboFull: maxCombo >= (this.balance.economy.comboGold?.comboCap ?? Infinity), total: this.killGoldThisFloor + bonusGold + comboGold, items, mineOpened, grant: isFirstClear ? this._lastBossGrant : null };
+    this.lastClearReward = { floor: this.floor, firstClearMul: isFirstClear ? 1 + this.balance.economy.clearBonusMul : null, killGold: this.killGoldThisFloor, bonusGold, comboGold, maxCombo, comboFull: maxCombo >= (this.balance.economy.comboGold?.comboCap ?? Infinity), total: this.killGoldThisFloor + bonusGold + comboGold, items, mineOpened, grant: isFirstClear ? this._lastBossGrant : null, spirit };
   }
 
   // 보스층 첫 클리어 = 서로 다른 무작위 아이템(층 번호 seed - 같은 층이면 같은 보상). 20층(설정값) 첫 클리어 = 4번째 슬롯.
@@ -175,6 +241,16 @@ export class BattleController {
     return res.ok ? granted : [];
   }
 
+  // 보스층 첫 클리어 = 정령 1마리 + 정령석(docs/spirits.md 6장). 층 번호 seed라 같은 층이면 같은 정령. txId 'boss-spirit:{층}'.
+  // 반환(클리어 결과 lastClearReward.spirit) = { id, kind: 'new'|'star'|'stones', stones(중복 변환분), stoneReward } 또는 null.
+  _grantBossSpirit() {
+    const cfg = this.spiritsConfig;
+    if (!cfg || this.floorTag !== 'boss') return null;
+    const bundle = bossSpiritBundle(cfg, this.floor);
+    const res = playerState.inventory.grant(bundle, { src: 'bossSpirit', txId: bossSpiritTx(this.floor) });
+    return res.ok ? { ...res.delta.spirits[0], stoneReward: bundle.spiritStones } : null;
+  }
+
   _pickBossReward(cfg) {
     const ids = Object.keys(cfg.items).filter((id) => cfg.items[id].group === 'hotbar' && cfg.items[id].goldBase != null && this.items.isUnlocked(id));
     const rng = createRng(this.floor);
@@ -192,10 +268,32 @@ export class BattleController {
   // 클리어/층 이동 시점에 같이 저장되므로 그 사이에 탭을 닫으면 그 구간 킬 골드만 날아갈 수
   // 있다. 체감상 문제되면 그때 쓰로틀 저장을 추가.
   _collectKillGold() {
+    const score = this.comp?.score;
     for (const event of this.battleState.events) {
-      if (event.type !== 'enemyDie' || this._seenDeaths.has(event)) continue;
+      // 망치 정령: N발마다 쿨다운 중인 하단 아이템 전부 -1 스왑.
+      if (event.type === 'spiritProc' && event.key === 'tinker' && !this._seenDeaths.has(event)) {
+        this._seenDeaths.add(event);
+        this.items?.reduceCooldowns(1);
+      }
+      if ((event.type !== 'enemyDie' && event.type !== 'waveStart') || this._seenDeaths.has(event)) continue;
       this._seenDeaths.add(event);
-      const gold = event.gold * this.goldMul;
+      // 경쟁 모드: 골드 대신 점수(처치 점수 + 웨이브마다 남은 성벽 보너스).
+      if (score) {
+        if (event.type === 'waveStart') score.onWave(event.wave, event.wallRatio);
+        else score.onKill(event.enemyType, event.rank);
+        continue;
+      }
+      if (event.type !== 'enemyDie') continue;
+      // 재물 정령: 그 수호자가 처치한 골드만 x (1 + killGold x 배율), 황금 주화와는 곱. _killGoldBase(클리어·콤보 보너스 기준)는 원래 값.
+      const wealth = this._spirits?.[event.killerTower];
+      // 처치 1건의 추가분은 소수라(골드 1짜리 적의 +10% = 0.1) 나머지를 층 안에서 이월해 정수만 지급한다.
+      let gold = event.gold * this.goldMul;
+      if (wealth?.role === 'wealth') {
+        const extra = gold * this.spiritsConfig.roles.wealth.killGold * wealth.mul + this._wealthCarry;
+        const whole = Math.floor(extra + 1e-9);
+        this._wealthCarry = extra - whole;
+        gold += whole;
+      }
       this._killGoldBase += event.gold;
       this.killGoldThisFloor += gold;
       playerState.addGold(gold);
@@ -218,6 +316,7 @@ export class BattleController {
   // 전투 영역 안에서 탑을 탭했을 때 - 성공하면 true(렌더가 반짝임+레벨 텍스트), 골드가
   // 모자라면 false(렌더가 흔들림 연출).
   tryLevelUpTower(index) {
+    if (this.comp) return false; // 경쟁 모드는 레벨 고정
     const ok = playerState.tryLevelUpTower(this.balance, index);
     if (ok) this.towersData[index].stats.attack = towerAttack(this.balance, playerState.towerLevel(index));
     return ok;
@@ -225,6 +324,7 @@ export class BattleController {
 
   // MAX 버튼 - tryLevelUpTower와 같은 패턴으로 레벨업 직후 towersData.stats.attack을 갱신한다.
   maxLevelUpTower(index) {
+    if (this.comp) return false; // 경쟁 모드는 레벨 고정
     const ok = playerState.levelUpTowerMax(this.balance, index);
     if (ok) this.towersData[index].stats.attack = towerAttack(this.balance, playerState.towerLevel(index));
     return ok;
@@ -232,6 +332,7 @@ export class BattleController {
 
   // 일괄 강화 - 다섯 석상을 골고루 올리고 공격력을 다시 계산한다.
   levelUpAllEven() {
+    if (this.comp) return false; // 경쟁 모드는 레벨 고정
     const ok = playerState.levelUpAllEven(this.balance);
     if (ok) for (let i = 0; i < this.towersData.length; i++) this.towersData[i].stats.attack = towerAttack(this.balance, playerState.towerLevel(i));
     return ok;
@@ -255,6 +356,21 @@ export class BattleController {
     if (!this.itemsConfig) return;
     const items = Object.fromEntries(Object.keys(this.itemsConfig.items).map((id) => [id, count]));
     playerState.inventory.grant({ items }, { src: 'dev' });
+  }
+
+  // 개발용 정령: 전부 지급(이미 있으면 별 +1), 정령석 +n, 가진 정령 전부 최대 레벨.
+  devGrantAllSpirits() {
+    if (this.spiritsConfig) playerState.inventory.grant({ spirits: Object.keys(this.spiritsConfig.spirits) }, { src: 'dev' });
+  }
+
+  devAddSpiritStones(n) {
+    playerState.inventory.grant({ spiritStones: n }, { src: 'dev' });
+  }
+
+  devMaxAllSpirits() {
+    if (!this.spiritsConfig) return;
+    for (const own of Object.values(playerState.inventory.data.perm.spirits)) own.lv = this.spiritsConfig.levelMax;
+    playerState.save();
   }
 
   devSetAllTowerLevels(level) {

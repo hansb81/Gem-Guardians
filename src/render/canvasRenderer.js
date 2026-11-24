@@ -349,7 +349,7 @@ export class CanvasRenderer {
     ctx.save();
     ctx.translate(snapPx(this._shakeX), snapPx(this._shakeY));
 
-    this._drawCurrencyBar(layout.currencyBar, playerState, itemUi?.goldMul ?? 1);
+    this._drawCurrencyBar(layout.currencyBar, playerState, itemUi?.goldMul ?? 1, battleState);
     this._drawBattlePanel(layout.battle);
     if (battleState) {
       this._battleRenderer.draw(ctx, layout.battle, battleState, now, this.assets, battleHud, paused, this.itemAssets?.icons);
@@ -375,7 +375,7 @@ export class CanvasRenderer {
       hintCell,
       gameState.effects.find((e) => e.type === 'shuffle')
     );
-    this._drawScoreBar(layout.scoreBar, gameState);
+    this._drawScoreBar(layout.scoreBar, gameState, battleHud?.compScore ?? null);
     this._advanceAndDrawItemFx(layout.board, gameState.board, dtMs);
     if (itemUi?.items) this.itemBar.drawBoardOverlay(ctx, layout.board, layout.scoreBar, itemUi, itemUi.config.items, now);
     this._advanceAndDrawBoardFloats(layout.board, dtMs);
@@ -2510,7 +2510,7 @@ export class CanvasRenderer {
 
   // 최상단 재화 바 - 골드/다이아(아이콘+숫자) + 우측 일시정지 버튼. playerState는 main.js가
   // 넘겨주는 단일 소스 - 저장/상점이 생기면 이 객체 값만 바뀌면 된다.
-  _drawCurrencyBar(rect, playerState, goldMul = 1) {
+  _drawCurrencyBar(rect, playerState, goldMul = 1, battleState = null) {
     const { ctx } = this;
     this._drawPanelIron(rect);
     ctx.save();
@@ -2541,6 +2541,14 @@ export class CanvasRenderer {
         drawText(ctx, text, x + 4, midY);
         x += ctx.measureText(text).width + 8;
       }
+    }
+    // 재물 정령이 붙은 수호자가 처치한 순간(enemyDie 이벤트 길이) - 골드 숫자 뒤에 "+" 한 글자. 자리를 밀지 않는다.
+    const spirits = battleState?.spirits;
+    if (spirits && battleState.events.some((e) => e.type === 'enemyDie' && spirits[e.killerTower]?.role === 'wealth')) {
+      ctx.fillStyle = '#f2d264';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      drawText(ctx, '+', x + 2, midY);
     }
     x += 14;
     this._drawCurrencyPill(x, midY, iconSize, fontSize, 'icons/diamond.png', HUD_CONFIG.currency.diamond, playerState?.diamonds ?? 0, 'diamond');
@@ -2643,7 +2651,8 @@ export class CanvasRenderer {
 
   // 보드 영역 상단 띠 - 점수/연쇄/콤보. 예전엔 캔버스 맨 위(전투 패널과 겹치는 위치)에
   // 그려졌던 것을 퍼즐 영역 안으로 옮긴 것.
-  _drawScoreBar(rect, gameState) {
+  // compScore = 경쟁 판 점수(있으면 퍼즐 점수 대신 이 값 - 랭킹에 들어가는 점수).
+  _drawScoreBar(rect, gameState, compScore = null) {
     const { ctx } = this;
     ctx.save();
     ctx.fillStyle = '#15181f';
@@ -2664,7 +2673,7 @@ export class CanvasRenderer {
     // 넘어가 패널을 덮었다.
     const numberFont = scoreFont * 0.78;
     ctx.font = getFontString(numberFont, true);
-    const scoreText = `${gameState.score}`;
+    const scoreText = compScore != null ? compScore.toLocaleString() : `${gameState.score}`;
     const scoreTextWidth = ctx.measureText(scoreText).width;
     const insetPath = 'panels/panel_inset.png';
     const insetState = getUi(this.assets, insetPath);
@@ -2780,7 +2789,9 @@ export class CanvasRenderer {
     const btnGap = 8;
     const btnHeight = Math.max(32, headH * 0.22);
     const loseButtons = [];
-    if (kind === 'lose') {
+    if (kind === 'lose' && itemUi?.comp) {
+      loseButtons.push(['compEnd', t('comp.resultButton')]); // 경쟁 판: 이어하기·재도전 없음 - 점수 제출 후 메뉴로
+    } else if (kind === 'lose') {
       if (itemUi?.canRevive) loseButtons.push(['revive', t('popup.button.revive')]);
       if (itemUi?.adContinue) loseButtons.push(['adContinue', t(itemUi.adBusy ? 'popup.button.adLoading' : itemUi.adContinue === 'free' ? 'popup.button.freeContinue' : 'popup.button.adContinue')]);
       loseButtons.push(['restart', t('popup.button.restart')]);
@@ -2797,12 +2808,13 @@ export class CanvasRenderer {
     const TITLES = {
       pause: { text: t('popup.pause.title'), color: cfg.pauseColor, desc: t('popup.pause.desc') },
       win: { text: clearReward ? t('popup.prep.title.floorClear', { n: clearReward.floor }) : t('popup.win.title'), color: cfg.winColor, desc: winDesc },
-      lose: { text: t('popup.lose.title'), color: cfg.loseColor, desc: performance.now() < (itemUi?.adFailUntil ?? 0) ? t('popup.lose.adFail') : t('popup.lose.desc') },
+      lose: { text: t('popup.lose.title'), color: cfg.loseColor, desc: itemUi?.comp ? t('comp.loseDesc', { score: itemUi.comp.score.total.toLocaleString() }) : performance.now() < (itemUi?.adFailUntil ?? 0) ? t('popup.lose.adFail') : t('popup.lose.desc') },
     };
     // 액션 순서의 첫 항목이 강조(primary) 버튼. 클리어는 "다음 층"을 눌러 진행한다(실패는
     // "다시 하기"로 같은 층을 재도전 - docs/balance.md §1·§3).
     const BUTTONS = {
-      pause: [['resume', t('popup.button.resume')], ['restart', t('popup.button.restart')], ['exit', t('popup.button.exit')]],
+      // 경쟁 판은 다시 하기 없음(새 판 = 입장 1회) - 나가기 = 지금 점수로 제출.
+      pause: itemUi?.comp ? [['resume', t('popup.button.resume')], ['exit', t('comp.giveUp')]] : [['resume', t('popup.button.resume')], ['restart', t('popup.button.restart')], ['exit', t('popup.button.exit')]],
       win: [['next', t('popup.button.next')]],
       // 부활(docs/items.md C3)·광고 이어하기는 main.js continueState 판정대로.
       lose: loseButtons,

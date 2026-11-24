@@ -34,8 +34,10 @@ export class RankingUi {
   }
 
   // server = 서버 랭킹(일반 모드) 사용 - config/server.json enabled이고 마켓 리더보드(토스)가 없을 때(main.js).
-  init(config, { floorGold, server = false }) {
+  // compOpen() = 경쟁 모드가 열렸는지(main.js compStatus = core/comp compLock: config.compUnlocked + 본편 comp.unlockBestFloor층 + 서버 랭킹) - 없으면 config.compUnlocked.
+  init(config, { floorGold, server = false, compOpen = null }) {
     this.config = config;
+    this.compOpen = compOpen ?? (() => !!config.compUnlocked);
     const opts = { player: this.player, config, floorGold };
     this.service = server ? new ServerRankingService(opts) : createRankingService(opts);
   }
@@ -122,7 +124,7 @@ export class RankingUi {
     st.nowMs = nowMs;
     st.season = season;
     st.compState = this.compState(now, season);
-    st.compLocked = !this.config.compUnlocked || this.devCompState === 3;
+    st.compLocked = !this.compOpen() || this.devCompState === 3;
     st.entries = d.entries ?? [];
     st.total = d.total ?? 0;
     st.unavailable = !!d.unavailable;
@@ -147,7 +149,7 @@ export class RankingUi {
   // 경쟁 탭 상태: 잠김 > 정산 대기 > 기록 없음 > 평소. 개발 패널 1~4가 있으면 그것.
   compState(now, season) {
     if (DEV_STATES[this.devCompState]) return DEV_STATES[this.devCompState];
-    if (!this.config.compUnlocked) return 'locked';
+    if (!this.compOpen()) return 'locked';
     if (isSettling(now, season, this.config.settleWarnMin)) return 'settle';
     if (!this.state?.data.comp?.me) return 'none';
     return 'normal';

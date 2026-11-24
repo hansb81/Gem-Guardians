@@ -1,5 +1,6 @@
 // 상점 상품(src/core/shop/shop.js의 데이터) -> 화면 글자. 카드: name/sub/desc(줄 배열)/tag,
 // 가격 버튼: lockText/soldText/label, 팝업: long/info([[라벨, 값]]). 글자는 모두 locales의 shop.* 키.
+import { effectInfo } from '../core/spirits/spirits.js';
 import { t } from '../config/i18n.js';
 import { platform } from '../platform/index.js';
 
@@ -92,8 +93,6 @@ export function productText(p, env) {
         ...(p.capLock ? { lockText: t('shop.lock.skillLv', { floor: p.lockFloor, lv: p.lockLv }), lockMsg: t('shop.lockMsg.skillLv', { name, floor: p.lockFloor, lv: p.lockLv }) } : null),
       };
     }
-    case 'totem':
-      return { name: t('shop.totem.name'), sub: t('shop.totem.sub'), desc: [t('shop.totem.desc'), t('shop.totem.desc2')], tag: ['shop.tag.soon', 'gray'], lockText: t('shop.lock.soon'), lockMsg: t('shop.lockMsg.totem') };
     case 'pack': {
       const pk = cfg.packs[p.pack];
       const name = t(`shop.pack.${p.pack}.name`, { ch: p.chapter });
@@ -144,4 +143,11 @@ export function productText(p, env) {
     default:
       return { name: p.id, desc: [] };
   }
+}
+
+// 정령 효과 한 줄(정령 탭·상점 도감) - 역할별(전설·보조는 종류별) 문구 틀 하나에 숫자만 끼운다.
+// guardianColor = 장착한 수호자 색(공명 반영), 모르면 null.
+export function spiritEffectText(cfg, id, owned, guardianColor = null) {
+  const info = effectInfo(cfg, id, owned, guardianColor);
+  return t(`spirit.effect.${info.key ?? info.role}`, { ...info, element: t(`spirit.element.${info.element}`) });
 }

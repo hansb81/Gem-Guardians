@@ -8,11 +8,12 @@ import { getFontString } from '../config/fonts.js';
 import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton } from './uiKit.js';
 import { t } from '../config/i18n.js';
 import { audio } from '../audio/AudioManager.js';
+import { drawSpiritPortrait, SPIRIT_GRADE_COLOR } from './spiritSprite.js';
 import { RAILS, buildRail, buyProduct, grantPaidProduct, revokePaidProduct, hasNewPack, refreshOffers, rolloverDay, walletOf } from '../core/shop/shop.js';
 import { purchase, restore } from '../shop/iap.js';
 import { platform } from '../platform/index.js';
 import { ITEM_CAP } from '../core/inventory/inventory.js';
-import { productText, gotText, fmt } from './shopText.js';
+import { productText, gotText, fmt, spiritEffectText } from './shopText.js';
 import { rewardFromDelta } from './rewardPopup.js';
 import { drawImageSnapped, screen } from './screenFit.js';
 
@@ -52,6 +53,7 @@ const PANEL = [118, 96, 410, 852];
 const LIST = { x: 126, y: 104, w: 394, h: 836, padTop: 10, padBottom: 16, gap: 8 };
 const CARD = { x: 127, w: 392, h: 96, bannerH: 220 };
 const HDR_H = 38;
+const DEX = { cols: 5, w: 72, h: 72, gap: 8, infoH: 104 }; // 정령 도감 격자(5 x 72 + 4 x 8 = CARD.w)와 아래 설명 칸
 const LEGAL_H = 44;
 const POP = { x: 40, w: 460, border: 32 };
 const TOAST = [40, 764, 460, 76];
@@ -128,7 +130,7 @@ export class ShopScreen {
     const { cfg, itemsConfig, data, player } = this.env;
     // 현금 상품: 결제가 되는 마켓이고 그 마켓 상품 id가 등록된 것만. dev 가짜 결제 중엔 전부.
     const canSell = (key) => platform.caps.iap && (platform.dev || !!cfg.products[key]?.ids?.[platform.id]);
-    return { cfg, itemsConfig, data, player, now, today: localDay(now), canSell };
+    return { cfg, itemsConfig, data, player, now, today: localDay(now), canSell, spiritsConfig: this.env.spiritsConfig ?? null };
   }
 
   _rebuild() {
@@ -138,7 +140,20 @@ export class ShopScreen {
     this.newPack = this.rail === 'packs' ? list.some((e) => e.banner) : hasNewPack(ctx);
     this._nextExpiry = Infinity;
     let y = LIST.padTop;
+    let col = 0; // 정령 도감 격자의 다음 칸
     this.entries = list.map((e) => {
+      if (e.kind === 'spirit') {
+        const row = { e, x: CARD.x + col * (DEX.w + DEX.gap), w: DEX.w, y, h: DEX.h, tx: null };
+        col = (col + 1) % DEX.cols;
+        if (col === 0) y += DEX.h + DEX.gap;
+        return row;
+      }
+      if (e.spiritInfo) {
+        if (col !== 0) y += DEX.h + DEX.gap;
+        const row = { e, y, h: DEX.infoH, tx: null };
+        y += DEX.infoH + LIST.gap;
+        return row;
+      }
       const h = e.hdr ? HDR_H : e.legal ? LEGAL_H : e.banner ? CARD.bannerH : CARD.h;
       const tx = e.id ? productText(e, this.env) : null;
       if (e.expiresAt) this._nextExpiry = Math.min(this._nextExpiry, e.expiresAt);
@@ -328,6 +343,8 @@ export class ShopScreen {
       if (row.e.hdr) this._drawHeader(ctx, row, y);
       else if (row.e.legal) this._drawLegal(ctx, y);
       else if (row.e.banner) this._drawBanner(ctx, row, y, now);
+      else if (row.e.kind === 'spirit') this._drawSpiritCell(ctx, row, y, now);
+      else if (row.e.spiritInfo) this._drawSpiritInfo(ctx, y, now);
       else this._drawCard(ctx, row, y);
     }
     ctx.restore();
@@ -340,6 +357,42 @@ export class ShopScreen {
     const note = t(`${key}.note`, row.e.params ?? undefined);
     if (note) this._text(ctx, note, x + CARD.w - 2, y + 27, 11, C.bg3, 'right');
     this._fill(ctx, C.bg2, x, y + HDR_H - 2, CARD.w, 2);
+  }
+
+  // ---- 정령 도감(판매 없음): 가진 것은 등급 테두리 + 초상, 없는 것은 #221c2b 실루엣. 누르면 아래 칸에 이름·등급·효과 ----
+  _drawSpiritCell(ctx, row, y, now) {
+    const { offsetX, offsetY, k } = this._transform;
+    const id = row.e.spirit;
+    const sp = this.env.spiritsConfig.spirits[id];
+    const owned = row.e.state === 'sold';
+    this._nine(ctx, 'menu/inset.png', row.x, y, row.w, row.h);
+    const edge = this.sel === row.e.id ? C.bone : owned ? SPIRIT_GRADE_COLOR[sp.grade] : null;
+    if (edge) {
+      this._fill(ctx, edge, row.x, y, row.w, 2);
+      this._fill(ctx, edge, row.x, y + row.h - 2, row.w, 2);
+      this._fill(ctx, edge, row.x, y, 2, row.h);
+      this._fill(ctx, edge, row.x + row.w - 2, y, 2, row.h);
+    }
+    drawSpiritPortrait(ctx, this._assets, id, sp.element, offsetX + (row.x + 4) * k, offsetY + (y + 4) * k, (row.w - 8) * k, now, owned ? null : 'silhouette');
+  }
+
+  _drawSpiritInfo(ctx, y, now) {
+    const { offsetX, offsetY, k } = this._transform;
+    const x = CARD.x;
+    this._nine(ctx, 'upgrade/card.png', x, y, CARD.w, DEX.infoH);
+    const id = this.sel?.startsWith('spirit.') ? this.sel.slice(7) : null;
+    const cfg = this.env.spiritsConfig;
+    const sp = id && cfg.spirits[id];
+    if (!sp) return this._text(ctx, t('spirit.dexHint'), x + CARD.w / 2, y + DEX.infoH / 2, 11, C.bg3, 'center');
+    const own = this.env.player.inventory.spirit(id);
+    this._nine(ctx, 'menu/inset.png', x + 12, y + 12, 80, 80);
+    drawSpiritPortrait(ctx, this._assets, id, sp.element, offsetX + (x + 16) * k, offsetY + (y + 16) * k, 72 * k, now, own ? null : 'silhouette');
+    const left = x + 104;
+    this._text(ctx, t(`spirit.name.${id}`), left, y + 24, 22, C.bone, 'left', true);
+    this._text(ctx, `${t(`spirit.grade.${sp.grade}`)} · ${t(`spirit.element.${sp.element}`)} · ${t(`spirit.role.${sp.role}`)}`, left, y + 46, 11, sp.grade === 'common' ? C.bg3 : SPIRIT_GRADE_COLOR[sp.grade]);
+    // 효과 = 가진 정령은 지금 레벨·별, 없는 정령은 1레벨 1별 기준(공명 제외).
+    this._text(ctx, spiritEffectText(cfg, id, own ?? { lv: 1, star: 1 }), left, y + 66, 11, C.bone);
+    this._text(ctx, own ? t('spirit.ownedLv', own) : t('spirit.notOwned'), left, y + 86, 11, own ? C.blueL : C.bg3);
   }
 
   // 구매 내역 복원은 복원이 있는 마켓(iOS)에서만.
@@ -406,7 +459,6 @@ export class ShopScreen {
     }
     let path = null;
     if (p.kind === 'skill' || p.kind === 'skillUnlock') path = `shop/skill_${p.skill}.png`;
-    else if (p.kind === 'totem') path = 'shop/totem_unknown.png';
     else if (p.kind === 'pack' || p.kind === 'passClaim') path = `shop/${this.env.cfg.packs[p.pack].icon}.png`;
     if (path) this._img(ctx, path, x + 8, y + 8, 28, 28);
     if (p.special) {
@@ -950,8 +1002,13 @@ export class ShopScreen {
     this._pressed = null;
     if (!drag || drag.moved) return;
     const ly = drag.by - LIST.y + this.scroll;
-    const row = this.entries.find((r) => ly >= r.y && ly < r.y + r.h);
-    if (!row || row.e.hdr) return;
+    const row = this.entries.find((r) => ly >= r.y && ly < r.y + r.h && (r.x == null || (drag.bx >= r.x && drag.bx < r.x + r.w)));
+    if (!row || row.e.hdr || row.e.spiritInfo) return;
+    if (row.e.kind === 'spirit') {
+      audio.play('ui_click');
+      this.sel = row.e.id; // 도감: 고르기만(아래 설명 칸)
+      return;
+    }
     if (row.e.legal) {
       const parts = this._legalParts();
       const i = Math.max(0, Math.min(parts.length - 1, Math.floor(((drag.bx - CARD.x) / CARD.w) * parts.length)));

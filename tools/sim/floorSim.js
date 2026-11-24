@@ -13,9 +13,12 @@ import { chooseMove, DANGER_PROGRESS } from './bot.js';
 import { pickItemUse } from './itemBot.js';
 import { deriveSeed } from './util.js';
 import { attachCombo } from './combo.js';
+import { endlessFloor, createScore } from '../../src/core/comp/endless.js';
+import { battleSpirits, supportMods } from '../../src/core/spirits/spirits.js';
 
 // --rainbowdef=sum|pershot|split(run.js가 채운다, v13-1): 무지개 1발의 방어력 처리(battleState applyGemClear). null = 게임 기본값.
-export const simRules = { rainbowDef: null };
+// spirits = --spirits 옵션(수호자 순서 5칸: null 또는 { id, lv, star }). 기본 null = 정령 없음(docs/spirits.md 0-5).
+export const simRules = { rainbowDef: null, spirits: null, spiritsConfig: null }; // spiritsConfig = config/spirits.json
 
 export function runFloorAttempt({
   balance,
@@ -46,8 +49,11 @@ export function runFloorAttempt({
   // 빈 전장 즉시 등장(게임 규칙 - src/core/balance/emptySpawn.js, battleState._pullSpawn) 덮어쓰기: 'off'|'on'|'predict'.
   // null이면 balance.json floorShape.emptySpawn(게임 그대로). 쿨다운은 balance.floorShape.emptySpawnCooldown.
   emptySpawn = null,
+  // 경쟁 모드 무한 웨이브(T8): { cfg: ranking.json comp, seed }. 있으면 floorNumber 대신 웨이브를 이어 붙이고 성벽이 무너질 때까지.
+  endless = null,
 }) {
-  const floor = getFloor(balance, enemies, obstacles, floorsData, floorNumber);
+  const ew = endless ? endlessFloor({ balance, enemies, obstacles }, endless.cfg, endless.seed) : null;
+  const floor = ew ? ew.floor : getFloor(balance, enemies, obstacles, floorsData, floorNumber);
   // 게임(main.js -> BattleController)과 같은 데이터를 그대로 쓴다 - 자리 채움을 두지 않는
   // 이유는, 비면 시뮬레이션이 게임과 다른 탑으로 조용히 돌아 결과가 어긋나기 때문이다.
   const towersData = balance.tower.towers.map((tower, i) => ({
@@ -55,13 +61,15 @@ export function runFloorAttempt({
     stats: { ...tower.stats, attack: towerAttack(balance, towerLevels[i]) * attackMul },
   }));
 
-  let spawns = resolveFloorSpawns(balance, enemies, floor);
+  let spawns = ew ? ew.resolved.spawns : resolveFloorSpawns(balance, enemies, floor);
   if (!bossRules) spawns = spawns.map((s) => ({ ...s, immune: [], weak: [], knockbackImmune: false }));
   // 게임(BattleController._resetBattleState)과 같은 필드. emptySpawn만 옵션으로 덮어쓸 수 있다.
   const resolvedFloor = {
-    wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: floor.spawnAt, spawns,
+    ...(ew ? ew.resolved : {}),
+    wallHp: floor.wallHp, interval: floor.spawnInterval, spawnAt: ew ? ew.resolved.spawnAt : floor.spawnAt, spawns,
     emptySpawn: emptySpawn ?? balance.floorShape.emptySpawn, emptySpawnCooldown: balance.floorShape.emptySpawnCooldown, packGap: balance.floorShape.pack?.gap,
   };
+  const score = endless ? createScore(endless.cfg, enemies) : null;
 
   const battleConfig = {
     cascadeBonusPerStep: balance.tower.puzzleShot.cascadeBonus,
@@ -75,6 +83,10 @@ export function runFloorAttempt({
   };
 
   const battleState = new BattleState({ towersData, resolvedFloor, battleConfig });
+  // 정령(--spirits): 게임(BattleController.beginFloor)과 같은 주입. 경쟁 모드(endless)는 정령 없음.
+  const spiritsConfig = simRules.spiritsConfig;
+  const spiritList = simRules.spirits && !endless ? battleSpirits(spiritsConfig, simRules.spirits.map((s) => s?.id ?? null), Object.fromEntries(simRules.spirits.filter(Boolean).map((s) => [s.id, s])), towersData.map((t) => t.color)) : null;
+  if (spiritList) battleState.setSpirits(spiritList, { roles: spiritsConfig.roles, rng: createRng(deriveSeed(seed, floorNumber, 3)) });
   const obstaclesConfigForBoard = obstaclesEnabled ? obstacles : undefined;
   const floorObstacles = obstaclesEnabled ? floor.obstacles : null;
   const gameState = new GameState({
@@ -83,6 +95,8 @@ export function runFloorAttempt({
     floorObstacles,
   });
   gameState.shuffleBoard();
+  // 퍼즐 쪽 보조 정령(시계태엽·해체·물감) - 게임(BattleController._applySpirits)과 같은 주입.
+  if (spiritList) gameState.setSpiritMods(supportMods(spiritList, towersData.map((t) => t.color)), deriveSeed(seed, floorNumber, 4));
   const inFlight = []; // shotFlight: { event, left(초) }
   const bridge = new SimBridge(battleState, shotFlight ? (event) => {
     // 쏠 때 이미 "예약 피해로 죽을 적"이었는지(_pickTarget 폴백 = 모두 죽을 예정이라 맨 앞 적).
@@ -97,12 +111,12 @@ export function runFloorAttempt({
   let immuneCount = 0;
   if (skills) {
     const orig = battleState._applyColorEffect.bind(battleState);
-    battleState._applyColorEffect = (target, color, damage, ultimate) => {
+    battleState._applyColorEffect = (target, color, damage, ultimate, sourceTower) => {
       if (skills.unlocked.colorEffects[color]) {
         if (target.immune.includes(color)) immuneCount++;
         else effectCounts[color]++;
       }
-      return orig(target, color, damage, ultimate);
+      return orig(target, color, damage, ultimate, sourceTower);
     };
   }
 
@@ -114,13 +128,13 @@ export function runFloorAttempt({
   const waste = { basic: 0, skill: 0, summon: 0, flight: 0, flightDoomed: 0, overkill: { basic: 0, skill: 0, splash: 0, poison: 0 } };
   {
     const origDamage = battleState._damageEnemy.bind(battleState);
-    battleState._damageEnemy = (target, damage, fields) => {
+    battleState._damageEnemy = (target, damage, fields, sourceTower) => {
       const over = damage - Math.max(0, target.currentHealth);
       if (over > 0) {
         const k = fields?.source ?? 'basic';
         waste.overkill[k] = (waste.overkill[k] ?? 0) + over;
       }
-      return origDamage(target, damage, fields);
+      return origDamage(target, damage, fields, sourceTower);
     };
   }
   const hasAlive = () => battleState.enemies.some((e) => e.state === 'alive');
@@ -186,6 +200,7 @@ export function runFloorAttempt({
   let moveTimer = 0;
   let swapCount = 0;
   let killGoldTotal = 0;
+  let spiritGold = 0; // 재물 정령이 더 준 처치 골드(killGoldTotal과 따로)
   const wallDamageByRole = {};
   const wallDamageByRank = {}; // normal/elite/boss - T1 실패 원인 분류용(역할별과는 다른 축).
   let bombWallDamageTotal = 0; // 시한폭탄(obstacleExpire)이 성벽에 준 피해 총합.
@@ -285,8 +300,15 @@ export function runFloorAttempt({
     for (const event of battleState.events) {
       if (seenEvents.has(event)) continue;
       seenEvents.add(event);
-      if (event.type === 'enemyDie') {
+      if (event.type === 'spiritProc' && event.key === 'tinker') itemCtl?.reduceCooldowns(1); // 망치 정령(게임 _collectKillGold와 같은 처리)
+      if (event.type === 'waveStart') {
+        score?.onWave(event.wave, event.wallRatio);
+      } else if (event.type === 'enemyDie') {
+        // 재물 정령: 그 수호자가 처치한 골드만 늘어난다(게임 BattleController._collectKillGold와 같은 식). 클리어 보너스 기준(killGoldTotal)에는 안 넣는다.
+        const wealth = spiritList?.[event.killerTower]?.role === 'wealth' ? spiritList[event.killerTower] : null;
+        if (wealth) spiritGold += event.gold * spiritsConfig.roles.wealth.killGold * wealth.mul; // 소수는 층 끝에서 내림(게임의 이월과 같은 합)
         killGoldTotal += event.gold;
+        score?.onKill(event.enemyType, event.rank);
         if (event.rank === 'boss') {
           bossKilled = true;
           bossKilledBeforeWall = !bossSeen;
@@ -342,6 +364,7 @@ export function runFloorAttempt({
     timeSec,
     wallHealthPct: battleState.wallHealth / battleState.wallMaxHealth,
     killGoldTotal,
+    spiritGold: Math.floor(spiritGold + 1e-9),
     swapCount,
     killedCount: battleState._killedCount,
     totalEnemies: battleState.totalEnemies,
@@ -369,6 +392,9 @@ export function runFloorAttempt({
     continueUsed,
     maxCombo,
     stats: bridge.stats,
+    wave: battleState.wave,
+    score: score ? score.total : null,
+    scoreParts: score ? { ...score.s } : null,
   };
 }
 

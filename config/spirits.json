@@ -1,0 +1,69 @@
+{
+  "resonanceMul": 1.25,
+  "gradeMul": { "common": 1.0, "rare": 1.2, "epic": 1.4, "legend": 1.6 },
+  "levelMax": 30,
+  "levelStep": 0.01,
+  "starMax": 5,
+  "starStep": 0.05,
+  "everyStepStars": [3, 5],
+  "levelCost": { "goldFloors": 0.25, "goldGrowth": 1.06, "stonesPer": 3 },
+  "dupeStones": { "common": 5, "rare": 10, "epic": 20, "legend": 50 },
+  "roles": {
+    "attack": { "every": 3, "mul": 1.2 },
+    "element": { "chance": 0.30, "chanceCap": 0.75, "procDmg": 0.5 },
+    "amplify": { "skillDmg": 0.25, "allColors": true },
+    "guard": { "healPct": 0.02, "floorCapPct": 0.25 },
+    "wealth": { "killGold": 0.20 }
+  },
+  "uniques": {
+    "phoenix": { "wallPct": 0.30, "healPct": 0.25, "healCap": 0.60 },
+    "frost_whale": { "every": 6, "sec": 2.0, "bossMul": 0.5 },
+    "elder_treant": { "perShot": 0.01, "cap": 0.04 },
+    "wraith_queen": { "keepStacks": true, "shotPoison": true, "shotPoisonMul": 0.35 },
+    "storm_kirin": { "every": 4, "targets": 3, "mul": 0.8 }
+  },
+  "spirits": {
+    "fire_wisp": { "element": "red", "grade": "common", "role": "attack" },
+    "ember_rat": { "element": "red", "grade": "common", "role": "wealth" },
+    "flame_fox": { "element": "red", "grade": "rare", "role": "element" },
+    "lava_turtle": { "element": "red", "grade": "epic", "role": "guard" },
+    "phoenix": { "element": "red", "grade": "legend", "role": "unique", "unique": "phoenix" },
+    "sup_cascade": { "element": "red", "grade": "rare", "role": "support", "support": "cascade", "value": 0.015 },
+
+    "snow_fairy": { "element": "blue", "grade": "common", "role": "element" },
+    "frost_bat": { "element": "blue", "grade": "common", "role": "attack" },
+    "ice_owl": { "element": "blue", "grade": "rare", "role": "amplify" },
+    "glacier_wolf": { "element": "blue", "grade": "epic", "role": "attack" },
+    "frost_whale": { "element": "blue", "grade": "legend", "role": "unique", "unique": "frost_whale" },
+    "sup_clock": { "element": "blue", "grade": "rare", "role": "support", "support": "clock", "value": 1 },
+
+    "seedling": { "element": "green", "grade": "common", "role": "guard" },
+    "moss_snail": { "element": "green", "grade": "common", "role": "wealth" },
+    "vine_snake": { "element": "green", "grade": "rare", "role": "element" },
+    "stag": { "element": "green", "grade": "epic", "role": "amplify" },
+    "elder_treant": { "element": "green", "grade": "legend", "role": "unique", "unique": "elder_treant" },
+    "sup_breaker": { "element": "green", "grade": "rare", "role": "support", "support": "breaker", "value": 0.12 },
+
+    "venom_moth": { "element": "purple", "grade": "common", "role": "element" },
+    "bone_crow": { "element": "purple", "grade": "common", "role": "attack" },
+    "shade_cat": { "element": "purple", "grade": "rare", "role": "wealth" },
+    "toxic_toad": { "element": "purple", "grade": "epic", "role": "guard" },
+    "wraith_queen": { "element": "purple", "grade": "legend", "role": "unique", "unique": "wraith_queen" },
+    "sup_paint": { "element": "purple", "grade": "rare", "role": "support", "support": "paint", "value": 0.03, "cap": 0.08 },
+
+    "spark_fly": { "element": "yellow", "grade": "common", "role": "attack" },
+    "copper_squirrel": { "element": "yellow", "grade": "common", "role": "wealth" },
+    "thunder_hawk": { "element": "yellow", "grade": "rare", "role": "element" },
+    "storm_cat": { "element": "yellow", "grade": "epic", "role": "amplify" },
+    "storm_kirin": { "element": "yellow", "grade": "legend", "role": "unique", "unique": "storm_kirin" },
+    "sup_tinker": { "element": "yellow", "grade": "rare", "role": "support", "support": "tinker", "value": 12 }
+  },
+  "bossReward": {
+    "fixed": { "10": "common", "20": "common", "30": "rare", "40": "rare", "50": "epic" },
+    "weights": { "common": 55, "rare": 30, "epic": 13, "legend": 2 },
+    "stones": 5,
+    "stonesFrom50": 10
+  },
+  "startSpirit": "fire_wisp",
+  "gacha": { "enabled": false, "rates": { "common": 0.70, "rare": 0.22, "epic": 0.07, "legend": 0.01 }, "pityEpic": 60, "pityLegend": 120 }
+}

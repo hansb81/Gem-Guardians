@@ -166,14 +166,23 @@ test('오늘의 무료 1개는 하루 한 번', () => {
   assert.ok(buyProduct(ctxOf(player, { today: '2026-11-08' }), 'free').ok);
 });
 
-test('골드 교환·토템', () => {
+test('골드 교환·정령', () => {
   const player = makePlayer({ diamonds: 1000 });
   const r = buyProduct(ctxOf(player), 'goldex.small');
   assert.ok(r.ok);
   const small = SHOP.goldExchange.find((e) => e.id === 'small'); // 수치는 shop.json에서 읽는다
   assert.equal(player.gold, Math.round(small.floors * normalFloorReward(DATA, 12)));
   assert.equal(player.diamonds, 1000 - small.dia);
-  assert.equal(buyProduct(ctxOf(player), 'totem.1').reason, 'locked');
+  // 정령 줄 = 도감(판매 없음): 30종 전부 나오고, 없는 정령·가진 정령 모두 살 수 없다. 설정이 없으면 머리글만.
+  const SPIRITS = JSON.parse(readFileSync(new URL('../config/spirits.json', import.meta.url), 'utf-8'));
+  const sctx = ctxOf(player, { spiritsConfig: SPIRITS });
+  const dex = buildRail(sctx, 'spirit');
+  assert.equal(dex.filter((e) => e.kind === 'spirit').length, 30);
+  assert.equal(buyProduct(sctx, 'spirit.phoenix').reason, 'locked');
+  player.inventory.data.perm.spirits.phoenix = { lv: 1, star: 1 };
+  assert.equal(buyProduct(sctx, 'spirit.phoenix').reason, 'sold');
+  assert.deepEqual(dex[0].params, { n: 0, max: 30 });
+  assert.equal(buildRail(ctxOf(player), 'spirit').length, 1);
 });
 
 test('applySkillLevels: Lv 1이면 skills.json 그대로(특수 기술 잠금만), 레벨은 배율만 곱한다', () => {

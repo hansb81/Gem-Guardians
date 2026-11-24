@@ -17,6 +17,7 @@
     "atkBuffOn": 300,
     "atkBuffOff": 300,
     "wallRevived": 400,
-    "wallBlocked": 100
+    "wallBlocked": 100,
+    "spiritProc": 300
   }
 }

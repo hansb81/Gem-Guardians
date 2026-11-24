@@ -50,6 +50,10 @@ export class BattleState {
     // 분노의 북(B5) - 모든 탑 피해(기본 사격 + 특수 잼 기술)의 공격력 배율. 스왑 횟수 추적은
     // ItemController가 맡고 여기는 배율만 켜고 끈다.
     this.atkMul = 1;
+    // 정령(docs/spirits.md) - setSpirits로 주입. null이면 정령 없음(아래 정령 분기를 전부 건너뛴다).
+    this._spirits = null;
+    this._spiritRoles = null;
+    this._spiritRng = null;
 
     this.spawns = resolvedFloor.spawns;
     this.spawnInterval = resolvedFloor.interval;
@@ -60,6 +64,10 @@ export class BattleState {
     this.emptySpawn = resolvedFloor.emptySpawn ?? 'off';
     this.emptySpawnCooldown = resolvedFloor.emptySpawnCooldown ?? 0;
     this.packGap = resolvedFloor.packGap ?? 0;
+    // 무한 웨이브(경쟁 모드): nextWave(n) -> { spawns, spawnAt, healPct }, 웨이브 사이 resolvedFloor.waveGapSec초. 소환할 적이 떨어지면 다음 웨이브를
+    // 뒤에 이어 붙이므로 'cleared'가 되지 않는다(성벽이 0이 될 때까지). 없으면 일반 층.
+    this.nextWave = resolvedFloor.nextWave ?? null;
+    this.wave = 1;
 
     this.enemies = [];
     this.events = [];
@@ -149,6 +157,7 @@ export class BattleState {
     const amount = Math.round(this.wallMaxHealth * pct);
     this.wallHealth = Math.max(0, this.wallHealth - amount);
     this._pushEvent('wallDamaged', { amount, remainingHealth: this.wallHealth, source: 'obstacle' });
+    if (this._spirits) this._spiritPhoenix();
     if (this.wallHealth <= 0) this.status = 'failed';
   }
 
@@ -206,8 +215,9 @@ export class BattleState {
     return true;
   }
 
+  // 모래시계(전체 정지) 또는 서리 고래 빙결(그 적만, enemy.spiritFreeze).
   isEnemyFrozen(enemy) {
-    return (enemy.rank === 'boss' ? this._freeze.boss : this._freeze.normal) > 0;
+    return (enemy.rank === 'boss' ? this._freeze.boss : this._freeze.normal) > 0 || enemy.spiritFreeze > 0;
   }
 
   get frozen() {
@@ -231,6 +241,122 @@ export class BattleState {
     this._spawnedCount = 0;
     this._killedCount = 0;
     this._sincePullSec = Infinity; // 마지막 즉시 등장(_pullSpawn) 뒤 지난 시간(초).
+    this._shotCounts = this.towersData.map(() => 0); // 수호자별 일반 사격 수(특수 잼 몫·정령 추가 사격 제외) - 정령 'N발마다'.
+    this._guardHealPct = 0; // 이번 층 수호 정령 회복 합계(성벽 최대 HP 비율, 이월 전 기준).
+    this._guardCarry = 0; // 수호 정령 회복량의 소수 이월(HP) - 층마다 0부터.
+    this._phoenixUsed = false; // 불사조 - 층당 1회.
+    this._treantStacks = 0; // 고대 나무요정 - 이번 층에 쌓인 사격 수.
+  }
+
+  // 정령 주입 - list = 수호자 순서 칸마다 null 또는 { id, role, element, mul, every }(src/core/spirits/spirits.js battleSpirits),
+  // roles = config/spirits.json roles, rng = seed RNG(속성 정령 확률 - 없으면 속성 정령은 발동하지 않는다). 전부 null이면 정령 없음.
+  setSpirits(list, { roles = null, rng = null } = {}) {
+    this._spirits = roles && list?.some(Boolean) ? list : null;
+    this._spiritRoles = roles;
+    this._spiritRng = rng;
+    // 전설·보조(sp.key) -> 그 정령이 붙은 수호자 index. 같은 key가 여럿이면 값(value·mul)이 가장 높은 것만.
+    this._spiritKey = {};
+    this._spirits?.forEach((sp, i) => {
+      if (!sp?.key) return;
+      const cur = this._spirits[this._spiritKey[sp.key]];
+      if (!cur || (sp.value ?? sp.mul) > (cur.value ?? cur.mul)) this._spiritKey[sp.key] = i;
+    });
+  }
+
+  // 화면용: 이번 층에 적용 중인 정령 5칸(없으면 null). 고치지 말 것.
+  get spirits() {
+    return this._spirits;
+  }
+
+  // 전설·보조 key를 장착한 정령(없으면 null). at = 그 수호자 index.
+  _spiritByKey(key) {
+    return this._spirits?.[this._spiritKey?.[key]] ?? null;
+  }
+
+  // 고대 나무요정: 다른 수호자 4명의 공격력 배율(본인·정령 없음 = 1). 분노의 북과는 곱.
+  _treantMul(towerIndex) {
+    const sp = this._spiritByKey('elder_treant');
+    if (!sp || this._spiritKey.elder_treant === towerIndex) return 1;
+    return 1 + Math.min(sp.u.cap, sp.u.perShot * this._treantStacks) * sp.mul;
+  }
+
+  // 불사조: 층당 1회, 성벽 피해 직후 HP가 wallPct 이하(0 포함 - 패배 판정보다 먼저)면 최대 HP x min(healCap, healPct x 배율) 회복.
+  // 결계로 막힌 피해는 여기까지 오지 않는다. 패배가 아니므로 깃털·광고 이어하기 횟수는 쓰지 않는다.
+  _spiritPhoenix() {
+    const sp = this._spiritByKey('phoenix');
+    if (!sp || this._phoenixUsed || this.wallHealth > this.wallMaxHealth * sp.u.wallPct) return;
+    this._phoenixUsed = true;
+    const before = this.wallHealth;
+    this.wallHealth = Math.min(this.wallMaxHealth, before + Math.round(this.wallMaxHealth * Math.min(sp.u.healCap, sp.u.healPct * sp.mul)));
+    this._pushEvent('wallHealed', { amount: this.wallHealth - before, remainingHealth: this.wallHealth, spiritTower: this._spiritKey.phoenix, phoenix: true });
+  }
+
+  // 그 수호자의 일반 사격 n발째(정령 추가 사격·특수 잼 몫 제외)에 걸리는 전설·보조 효과.
+  _spiritOnShot(tower, ti, n) {
+    const sp = this._spirits[ti];
+    if (!sp?.key) return;
+    if (sp.key === 'elder_treant') {
+      // 쏠 때마다 1씩, 상한에 닿기 전까지만 번쩍.
+      if (sp.u.perShot * this._treantStacks < sp.u.cap) this._pushEvent('spiritProc', { towerIndex: ti, role: 'unique', key: sp.key });
+      this._treantStacks += 1;
+    } else if (sp.key === 'frost_whale' && n % sp.every === 0) {
+      // 가장 앞 적 1마리만 빙결(보스는 bossMul). 이미 얼어 있으면 더 긴 쪽.
+      const e = this._frontmostEnemy();
+      if (!e) return;
+      const sec = sp.u.sec * sp.mul * (e.rank === 'boss' ? sp.u.bossMul : 1);
+      e.spiritFreeze = Math.max(e.spiritFreeze ?? 0, sec);
+      this._pushEvent('spiritProc', { towerIndex: ti, role: 'unique', key: sp.key, enemyId: e.id, durationSec: sec });
+    } else if (sp.key === 'storm_kirin' && n % sp.every === 0) {
+      // 연쇄 번개: 앞에서부터 targets마리에 즉시 피해(공격력 x 북 x 나무요정 x mul x 배율 - 방어, 표식만). 색 효과 없음.
+      const targets = this._enemiesFrontToBack().slice(0, sp.u.targets);
+      if (targets.length === 0) return;
+      const raw = tower.stats.attack * this.atkMul * this._treantMul(ti) * sp.u.mul * sp.mul;
+      this._pushEvent('spiritProc', { towerIndex: ti, role: 'unique', key: sp.key, enemyIds: targets.map((e) => e.id) });
+      for (const e of targets) {
+        if (e.state !== 'alive' || this.status !== 'active') continue;
+        const dmg = Math.max(this.battleConfig.minDamage, Math.round((raw - e.def) * this._markMul(e)));
+        this._damageEnemy(e, dmg, { towerId: tower.id, source: 'spirit', spirit: true }, ti);
+      }
+    } else if (sp.key === 'tinker' && n % sp.every === 0) {
+      // 하단 아이템 쿨다운 -1은 아이템 쪽(BattleController -> ItemController.reduceCooldowns)이 이 이벤트를 보고 한다.
+      this._pushEvent('spiritProc', { towerIndex: ti, role: 'support', key: sp.key });
+    }
+  }
+
+  // 퍼즐 쪽 보조(해체 정령의 추가 피해)가 발동했을 때 PuzzleBattleBridge가 부른다 - 화면 번쩍용 이벤트만 낸다.
+  noteSupportProc(key) {
+    const at = this._spirits ? this._spiritKey[key] : null;
+    if (at != null) this._pushEvent('spiritProc', { towerIndex: at, role: 'support', key });
+  }
+
+  // 망령 여왕: 독이 걸린 적이 죽으면 남은 독(남은 시간 그대로)을 가장 가까운 살아 있는 적 1마리에게 옮긴다.
+  // 중첩은 uniques.wraith_queen.keepStacks면 그대로, 아니면 1.
+  // 이미 독이 있는 적이면 남은 시간만 더 긴 쪽으로. 독 면역 적은 건너뛴다. 독을 건 수호자(처치 판정)는 그대로 따라간다.
+  _spiritWraith(dead) {
+    const p = dead.effects.poison;
+    const queen = this._spiritByKey('wraith_queen');
+    if (!queen || p.stacks === 0 || p.time <= 1e-9) return;
+    let to = null;
+    for (const e of this.enemies) {
+      if (e === dead || e.state !== 'alive' || e.immune.includes('purple')) continue;
+      if (!to || Math.abs(e.progress - dead.progress) < Math.abs(to.progress - dead.progress)) to = e;
+    }
+    if (!to) return;
+    const q = to.effects.poison;
+    if (q.stacks === 0) Object.assign(q, { stacks: queen.u.keepStacks ? p.stacks : 1, base: p.base, time: p.time, tickTimer: 0, carry: 0, source: p.source });
+    else q.time = Math.max(q.time, p.time);
+    this._pushEvent('spiritProc', { towerIndex: this._spiritKey.wraith_queen, role: 'unique', key: 'wraith_queen', enemyId: to.id, fromEnemyId: dead.id });
+  }
+
+  // towerIndex 수호자의 정령이 role이면 그 정령, 아니면 null(towerIndex null 포함).
+  _spiritOf(towerIndex, role) {
+    const sp = this._spirits?.[towerIndex];
+    return sp?.role === role ? sp : null;
+  }
+
+  _towerIndex(key, value) {
+    for (let i = 0; i < this.towersData.length; i++) if (this.towersData[i][key] === value) return i;
+    return null;
   }
 
   // 빈 전장 즉시 등장: 사격·기술이 대상을 고르기 직전에 부른다. 판정은 emptySpawnCount(src/core), 등장은 기존
@@ -238,6 +364,7 @@ export class BattleState {
   // 소환 연출·튜토리얼(holdSpawns) 중에는 안 낸다. 냈으면 true.
   _pullSpawn() {
     if (this.emptySpawn === 'off' || this.summon.active || this.holdSpawns) return false;
+    this._appendWave();
     const n = emptySpawnCount(this.emptySpawn, this.enemies, this._spawnedCount, this.spawns.length, this.spawnAt, this.spawnInterval, this.packGap, this._sincePullSec, this.emptySpawnCooldown);
     if (n === 0) return false;
     for (let k = 0; k < n; k++) this._spawnEnemy(this.spawns[this._spawnedCount++]);
@@ -291,7 +418,7 @@ export class BattleState {
   // 탑 발사 시점 - towerAttack 이벤트만 내보낸다(피해는 아직 적용하지 않음). render가 이
   // 이벤트로 공격 애니메이션 + 투사체를 띄우고, 투사체가 화면에서 목표에 "충돌"하는 순간
   // resolveTowerAttack(event)를 호출해 실제 피해를 적용한다.
-  _fireShot(tower, target, damage, cascadeIndex, color, isSpecial) {
+  _fireShot(tower, target, damage, cascadeIndex, color, isSpecial, extra = null) {
     const shotId = this._nextShotId++;
     target.pendingDamage += damage;
     this._pendingShots.set(shotId, { enemyId: target.id, damage, ageMs: 0 });
@@ -304,7 +431,18 @@ export class BattleState {
       isSpecial,
       shotId,
       buffed: this.atkMul > 1, // 분노의 북 중 발사 - 렌더 전용(crit 폰트, 밝은 투사체).
+      ...extra,
     });
+  }
+
+  // 공격 정령의 추가 1발(docs/spirits.md 3장): 그 시점 대상(예약 피해 규칙 그대로)에게 공격력 x 북 x roles.attack.mul x 배율 - 방어.
+  // 색 효과·약점 없음(표식 배율만). 같은 towerAttack 이벤트에 spirit: true, towerIndex를 붙인다(color는 투사체 그림용).
+  _fireSpiritShot(tower, towerIndex, sp, cascadeIndex) {
+    const target = this._pickTarget();
+    if (!target) return null;
+    const raw = tower.stats.attack * this.atkMul * this._treantMul(towerIndex) * this._spiritRoles.attack.mul * sp.mul;
+    const damage = Math.max(this.battleConfig.minDamage, Math.round((raw - target.def) * this._damageMul(target, null)));
+    return this._fireShot(tower, target, damage, cascadeIndex, tower.color, false, { spirit: true, towerIndex });
   }
 
   // render가 투사체 충돌을 감지한 순간 호출한다. 목표가 그 사이 이미 죽었거나 전투가
@@ -318,21 +456,75 @@ export class BattleState {
     const target = this.enemies.find((e) => e.id === event.targetEnemyId && e.state === 'alive');
     if (!target) return;
 
-    this._damageEnemy(target, event.damage, { towerId: event.towerId, buffed: !!event.buffed });
+    const sourceTower = this._towerIndex('id', event.towerId);
+    // spirit = 정령 추가 사격의 피해(화면: 보통 폰트 숫자). 정령이 없으면 필드 자체가 없다.
+    this._damageEnemy(target, event.damage, event.spirit ? { towerId: event.towerId, buffed: !!event.buffed, spirit: true } : { towerId: event.towerId, buffed: !!event.buffed }, sourceTower);
 
     // fromModifier(합성 피해 - 범위/관통/연쇄/도트가 만든 2차 피해)는 색 효과·onHit을 다시 타지
     // 않는다(연쇄가 자기 자신을 다시 트리거해 무한 증폭되는 것을 막는다). 기본 사격의 색 효과는
     // colorEffects.appliesTo === 'all'일 때만(기본 'skills' = 기술 피해에만, docs/skills.md 1장).
     // tools/sim 전용 hooks(docs/simulation.md T2)는 그 뒤에 그대로.
-    if (!event.fromModifier) {
-      if (event.color && this.skills?.colorEffects.appliesTo === 'all') this._applyColorEffect(target, event.color, event.damage);
+    // 정령 추가 사격(event.spirit)도 색 효과·onHit·속성 정령을 타지 않는다.
+    if (!event.fromModifier && !event.spirit) {
+      if (event.color && this.skills?.colorEffects.appliesTo === 'all') this._applyColorEffect(target, event.color, event.damage, false, sourceTower);
+      if (event.elementProc) this._spiritElement(sourceTower, target, event.damage);
+      if (this._spirits && !event.isSpecial) this._spiritQueenShot(sourceTower, target, event.damage);
       this.hooks?.onHit?.(this, event, target);
     }
   }
 
+  // 속성 정령: 그 수호자의 사격마다 min(chanceCap, chance x 배율) 확률로 발동(_rollElement - 쏠 때 굴려 그 발 피해에 +procDmg).
+  // 발동한 발이 명중하면 정령 속성의 색 효과 1회 + spiritProc. 그 색 효과가 잠겨 있으면 피해 증가만 남는다.
+  _rollElement(towerIndex) {
+    const sp = this._spiritOf(towerIndex, 'element');
+    if (!sp || !this._spiritRng) return false;
+    const { chance, chanceCap } = this._spiritRoles.element;
+    return this._spiritRng() < Math.min(chanceCap, chance * sp.mul);
+  }
+
+  _spiritElement(towerIndex, target, damage) {
+    const sp = this._spiritOf(towerIndex, 'element');
+    if (!sp) return;
+    this._applyColorEffect(target, sp.element, damage, false, towerIndex); // 잠긴 색이면 아무 일도 없다
+    this._pushEvent('spiritProc', { towerIndex, role: 'element', enemyId: target.id });
+  }
+
+  // 망령 여왕(uniques.wraith_queen.shotPoison): 장착한 수호자의 일반 사격이 명중하면 독 1중첩(독 색 효과 해금과 무관, 독 면역 제외).
+  // 독 규칙은 이 전투의 독 색 효과 값(colorEffects.purple) 그대로 - 일반 독과 같은 식으로 쌓이고 갱신된다.
+  // 피해 기준(base)만 정령 배율 x shotPoisonMul(공명 1레벨 0.7, 최대 약 1.09). 옮겨 간 독은 원래 수치 그대로(_spiritWraith).
+  _spiritQueenShot(towerIndex, target, damage) {
+    const queen = this._spiritByKey('wraith_queen');
+    const cfg = this.skills?.colorEffects.purple;
+    if (!queen?.u.shotPoison || this._spiritKey.wraith_queen !== towerIndex || !cfg || target.state !== 'alive' || target.immune.includes('purple')) return;
+    const p = target.effects.poison;
+    if (p.stacks === 0) p.tickTimer = 0;
+    p.stacks = Math.min(cfg.maxStacks, p.stacks + 1);
+    p.base = (damage * queen.mul * (queen.u.shotPoisonMul ?? 1)) / this._markMul(target);
+    p.time = cfg.duration;
+    p.source = towerIndex;
+  }
+
+  // 수호 정령: 그 수호자가 처치하면 성벽 회복(healPct x 배율), 층당 합계 floorCapPct까지. 이미 최대 HP면 합계에 안 넣는다.
+  // 회복량의 소수는 층 안에서 이월해 정수 HP만 회복한다(작은 성벽에서 0.4%가 0으로 사라지지 않게). 상한은 이월 전 합계 기준.
+  _spiritGuard(towerIndex) {
+    const sp = this._spiritOf(towerIndex, 'guard');
+    if (!sp || this.wallHealth >= this.wallMaxHealth) return;
+    const { healPct, floorCapPct } = this._spiritRoles.guard;
+    const pct = Math.min(healPct * sp.mul, floorCapPct - this._guardHealPct);
+    if (pct <= 1e-12) return;
+    this._guardHealPct += pct;
+    const amount = this.wallMaxHealth * pct + this._guardCarry;
+    const whole = Math.floor(amount + 1e-9);
+    this._guardCarry = amount - whole;
+    if (whole <= 0) return;
+    const before = this.wallHealth;
+    this.wallHealth = Math.min(this.wallMaxHealth, before + whole);
+    this._pushEvent('wallHealed', { amount: this.wallHealth - before, remainingHealth: this.wallHealth, spiritTower: towerIndex });
+  }
+
   // 피해 적용 + enemyHit + 죽으면 enemyDie/클리어 판정. fields는 enemyHit에 그대로 붙는다
-  // (towerId, source: 'poison'|'splash'|'skill' 등).
-  _damageEnemy(target, damage, fields) {
+  // (towerId, source: 'poison'|'splash'|'skill' 등). sourceTower = 이 피해를 준 수호자 index(모르면 null) - 죽으면 enemyDie.killerTower.
+  _damageEnemy(target, damage, fields, sourceTower = null) {
     // hpFloor(튜토리얼) - 맞는 연출은 그대로, HP는 그 아래로 안 내려간다. skillBreaksFloor(쓰기 수)면 기술 피해만 뚫는다.
     const floor = target.hpFloor == null || (target.skillBreaksFloor && fields.source === 'skill') ? -Infinity : target.hpFloor;
     target.currentHealth = Math.max(floor, target.currentHealth - damage);
@@ -346,8 +538,14 @@ export class BattleState {
       target.state = 'dead';
       // 튜토리얼 몬스터는 처치 수·클리어 판정에 안 들어간다(골드는 0).
       if (!target.tutorial) this._killedCount++;
-      this._pushEvent('enemyDie', { enemyId: target.id, gold: target.gold, enemyType: target.type, rank: target.rank, tutorial: !!target.tutorial });
-      if (!target.tutorial) this._checkProgress();
+      this._pushEvent('enemyDie', { enemyId: target.id, gold: target.gold, enemyType: target.type, rank: target.rank, tutorial: !!target.tutorial, killerTower: sourceTower });
+      if (!target.tutorial) {
+        if (this._spirits) {
+          this._spiritGuard(sourceTower);
+          this._spiritWraith(target);
+        }
+        this._checkProgress();
+      }
     }
   }
 
@@ -365,7 +563,8 @@ export class BattleState {
 
   // 색 효과 1회 적용(docs/skills.md 1장). damage = 이번에 들어간 피해. ultimate = 궁극기·대폭발의
   // 강화판(skills.ultimateEffects): 레드 범위 없음, 블루 ×0.5 3초, 퍼플·그린 최대 중첩 즉시, 옐로우 보스 제외.
-  _applyColorEffect(target, color, damage, ultimate = false) {
+  // sourceTower = 이 효과를 건 수호자 index(범위·독의 처치 판정용, 모르면 null).
+  _applyColorEffect(target, color, damage, ultimate = false, sourceTower = null) {
     const cfg = this.skills?.colorEffects[color];
     if (!cfg || !this.skills.unlocked?.colorEffects?.[color]) return;
     if (target.immune.includes(color)) {
@@ -383,7 +582,7 @@ export class BattleState {
         for (const other of this.enemies) {
           if (other === target || other.state !== 'alive' || Math.abs(other.progress - target.progress) > cfg.radius) continue;
           if (other.immune.includes(color)) this._pushEvent('effectImmune', { enemyId: other.id, color });
-          else this._damageEnemy(other, dmg, { source: 'splash', fromModifier: true });
+          else this._damageEnemy(other, dmg, { source: 'splash', fromModifier: true }, sourceTower);
         }
         break;
       }
@@ -401,6 +600,7 @@ export class BattleState {
         p.stacks = ultimate ? cfg.maxStacks : Math.min(cfg.maxStacks, p.stacks + 1);
         p.base = damage / this._markMul(target); // 표식은 틱마다 다시 곱한다(이중 적용 방지).
         p.time = cfg.duration;
+        p.source = sourceTower; // 마지막으로 독을 건 수호자
         break;
       }
       case 'stun':
@@ -436,7 +636,7 @@ export class BattleState {
       const dmg = Math.floor(p.carry + 1e-9);
       if (dmg > 0) {
         p.carry -= dmg;
-        this._damageEnemy(enemy, dmg, { source: 'poison' });
+        this._damageEnemy(enemy, dmg, { source: 'poison' }, p.source);
       }
     }
     if (p.time <= 1e-9) {
@@ -487,9 +687,16 @@ export class BattleState {
     } else {
       const tower = this.towersData.find((t) => t.color === effectColor);
       if (!tower) return;
-      attack = tower.stats.attack;
+      attack = tower.stats.attack * (this._spirits ? this._treantMul(this.towersData.indexOf(tower)) : 1);
     }
-    const raw = attack * this.atkMul * spec.mul;
+    // 증폭 정령: 기술 피해 x (1 + skillDmg x 배율), 방어 계산 전. roles.amplify.allColors면 색에 상관없이 장착한 증폭 정령을 전부 더하고,
+    // 아니면 그 색 수호자에 붙은 것만. 색 없는 대폭발에는 안 붙는다.
+    let ampSum = 0;
+    if (effectColor && this._spirits) {
+      if (this._spiritRoles.amplify.allColors) for (const sp of this._spirits) ampSum += sp?.role === 'amplify' ? sp.mul : 0;
+      else ampSum = this._spiritOf(this._towerIndex('color', effectColor), 'amplify')?.mul ?? 0;
+    }
+    const raw = attack * this.atkMul * spec.mul * (ampSum ? 1 + this._spiritRoles.amplify.skillDmg * ampSum : 1);
 
     this._pullSpawn();
     const order = this._enemiesFrontToBack();
@@ -575,7 +782,8 @@ export class BattleState {
     if (target) target.pendingDamage = Math.max(0, target.pendingDamage - dmg);
     if (this.status !== 'active' || !target || target.state !== 'alive') return;
 
-    this._damageEnemy(target, dmg, { source: 'skill', skill: event.skill, buffed: !!event.buffed });
+    const sourceTower = event.color ? this._towerIndex('color', event.color) : null; // 그 잼 색 수호자(대폭발은 색 없음)
+    this._damageEnemy(target, dmg, { source: 'skill', skill: event.skill, buffed: !!event.buffed }, sourceTower);
 
     const spec = this.skills.specialSkills[event.skill];
     if (event.skill === 'line' && !target.knockbackImmune && target.state === 'alive') {
@@ -589,7 +797,7 @@ export class BattleState {
     if (event.skill === 'color_color') {
       for (const c of Object.keys(this.skills.unlocked?.colorEffects ?? {})) this._applyColorEffect(target, c, dmg, true);
     } else if (event.color) {
-      this._applyColorEffect(target, event.color, dmg, event.skill === 'color');
+      this._applyColorEffect(target, event.color, dmg, event.skill === 'color', sourceTower);
     }
   }
 
@@ -623,6 +831,7 @@ export class BattleState {
 
   // 전부 스폰됐고 살아있는 적이 없으면 층 클리어(웨이브 구분 없음 - docs/balance.md §6).
   _checkProgress() {
+    if (this.nextWave) return; // 무한 웨이브는 클리어 없음
     const allSpawned = this._spawnedCount >= this.spawns.length;
     const anyAlive = this.enemies.some((e) => e.state === 'alive');
     if (allSpawned && !anyAlive) this.status = 'cleared';
@@ -649,7 +858,13 @@ export class BattleState {
     const tower = this.towersData.find((t) => t.color === color);
     if (!tower) return shots;
 
-    const { cascadeBonusPerStep, minDamage } = this.battleConfig;
+    const { minDamage } = this.battleConfig;
+    // 연쇄 정령(sup_cascade): 단계당 보너스에 +value(1단계는 어차피 x0이라 2단계부터 붙는다).
+    const casc = this._spiritByKey('cascade');
+    const cascadeBonusPerStep = this.battleConfig.cascadeBonusPerStep + (casc ? casc.value : 0);
+    const ti = this.towersData.indexOf(tower);
+    const atkMul = this._spirits ? this.atkMul * this._treantMul(ti) : this.atkMul;
+    if (casc && cascadeIndex >= 2) this._pushEvent('spiritProc', { towerIndex: this._spiritKey.cascade, role: 'support', key: 'cascade' });
     const rainbowDef = this.battleConfig.rainbowDef ?? RAINBOW_DEF_DEFAULT;
     if (rainbowDef === 'sum') split = false;
     const gems = split ? 1 : count; // 1발에 담는 잼 수
@@ -658,13 +873,23 @@ export class BattleState {
       this._pullSpawn();
       const target = this._pickTarget();
       if (!target) break;
-      let rawDamage = tower.stats.attack * this.atkMul * gems * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
+      let rawDamage = tower.stats.attack * atkMul * gems * (1 + cascadeBonusPerStep * (cascadeIndex - 1));
       // 가상 효과(modifier) 훅 - 기본은 battleConfig.hooks가 없어 아무 영향도 없다(docs/simulation.md T2).
       if (this.hooks?.onShot) {
         rawDamage = this.hooks.onShot({ color, count: gems, cascadeIndex, isSpecial, tower, target, rawDamage });
       }
+      // 속성 정령 발동: 이 발의 피해 +procDmg(방어 계산 전, 정령 배율 없음). 색 효과는 명중할 때.
+      const elementProc = this._spirits ? this._rollElement(ti) : false;
+      if (elementProc) rawDamage *= 1 + (this._spiritRoles.element.procDmg ?? 0);
       const damage = Math.max(minDamage, Math.round((rawDamage - target.def / defDiv) * this._damageMul(target, color)));
-      shots.push(this._fireShot(tower, target, damage, cascadeIndex, color, isSpecial));
+      shots.push(this._fireShot(tower, target, damage, cascadeIndex, color, isSpecial, elementProc ? { elementProc: true } : null));
+      if (!isSpecial) {
+        const n = ++this._shotCounts[ti];
+        const sp = this._spiritOf(ti, 'attack');
+        const extra = sp && n % sp.every === 0 ? this._fireSpiritShot(tower, ti, sp, cascadeIndex) : null;
+        if (extra) shots.push(extra);
+        if (this._spirits) this._spiritOnShot(tower, ti, n);
+      }
     }
     return shots;
   }
@@ -709,7 +934,7 @@ export class BattleState {
       // 상태 효과(docs/skills.md 1장), 시간 단위 초. 적마다 한 번만 만든다(매 프레임 할당 없음).
       effects: {
         slow: { time: 0, mul: 1 },
-        poison: { time: 0, stacks: 0, base: 0, tickTimer: 0, carry: 0 },
+        poison: { time: 0, stacks: 0, base: 0, tickTimer: 0, carry: 0, source: null },
         stun: { time: 0, cooldown: 0 },
         mark: { time: 0, stacks: 0, cooldown: 0 },
       },
@@ -730,7 +955,28 @@ export class BattleState {
     return this._pendingShots.size > 0 || this._pendingSkills.size > 0;
   }
 
+  // 무한 웨이브: 이번 웨이브를 다 소환했으면 다음 웨이브를 마지막 소환 waveGapSec초 뒤부터 이어 붙이고 성벽을 healPct만큼 회복.
+  _appendWave() {
+    if (!this.nextWave || this._spawnedCount < this.spawns.length) return;
+    // 웨이브 수 = 실제로 나오기 시작한 웨이브 - 마지막 적 소환 + gapSec이 지나야 붙인다(그 전에 무너지면 앞 웨이브에서 끝).
+    const gap = this.resolvedFloor.waveGapSec ?? 0;
+    const lastAt = this.spawnAt[this.spawnAt.length - 1] ?? 0;
+    if (this._elapsedSec < lastAt + gap) return;
+    const w = this.nextWave(this.wave + 1);
+    const base = lastAt + gap;
+    for (let i = 0; i < w.spawns.length; i++) {
+      this.spawns.push(w.spawns[i]);
+      this.spawnAt.push(base + w.spawnAt[i]);
+    }
+    this.totalEnemies = this.spawns.length;
+    this.wave++;
+    const wallRatio = this.wallHealth / this.wallMaxHealth; // 회복 전 - 점수(앞 웨이브를 얼마나 잘 버텼나)용
+    if (w.healPct > 0) this.wallHealth = Math.min(this.wallMaxHealth, this.wallHealth + this.wallMaxHealth * w.healPct);
+    this._pushEvent('waveStart', { wave: this.wave, wallRatio });
+  }
+
   _spawnDue() {
+    this._appendWave();
     while (this._spawnedCount < this.spawns.length && this._elapsedSec >= (this.spawnAt ? this.spawnAt[this._spawnedCount] : this._spawnedCount * this.spawnInterval)) {
       this._spawnEnemy(this.spawns[this._spawnedCount]);
       this._spawnedCount++;
@@ -791,6 +1037,10 @@ export class BattleState {
 
       const moveMul = this.skills ? this._tickEffects(enemy, dtSec) : 1;
       if (enemy.state !== 'alive' || this.status !== 'active') continue; // 독으로 죽음/클리어.
+      if (enemy.spiritFreeze > 0) {
+        enemy.spiritFreeze -= dtSec; // 서리 고래 빙결 - 이 적만 이동·성벽 공격 정지(둔화·경직보다 우선)
+        continue;
+      }
       if (moveMul === 0) continue; // 경직 - 이동·성벽 공격(_attackTimer) 정지.
       if ((enemy.rank === 'boss' ? frozenBoss : frozenNormal) > 0) continue; // 모래시계 정지(isEnemyFrozen과 같은 판정, 갱신 전 값).
 
@@ -823,6 +1073,7 @@ export class BattleState {
             remainingHealth: this.wallHealth,
             sourceEnemyId: enemy.id,
           });
+          if (this._spirits) this._spiritPhoenix();
           if (this.wallHealth <= 0) {
             this.status = 'failed';
           }

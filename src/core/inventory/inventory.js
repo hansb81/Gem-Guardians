@@ -2,29 +2,33 @@
 // 저장·이벤트·지갑은 src/game/inventory.js가 맡는다.
 import { normalizeRanking } from '../../ranking/rankingSave.js';
 
-// 2 = 아이템·장착·예약·젬 스킬 inv 묶음, 3 = 랭킹 블록(docs/ranking.md 7-1).
-export const SAVE_VERSION = 3;
+// 2 = 아이템·장착·예약·젬 스킬 inv 묶음, 3 = 랭킹 블록(docs/ranking.md 7-1), 4 = 정령(docs/spirits.md 8장 - totems 키 삭제,
+// perm.spirits/spiritStones, loadout.spirits 5칸/pendingSpirits).
+export const SAVE_VERSION = 4;
 export const ITEM_CAP = 999;
 export const SKILL_MAX = 5;
 export const HOTBAR_LEN = 4; // 저장되는 hotbar는 항상 길이 4(4번째 칸은 slot4 플래그 없으면 잠김).
 export const LOG_MAX = 50;
+const SPIRIT_SLOTS = 5; // 수호자 수 = 정령 칸 수(src/core/spirits/spirits.js SPIRIT_SLOTS와 같은 값)
 
 export function defaultInv() {
   return {
     items: {},
-    loadout: { hotbar: Array(HOTBAR_LEN).fill(null), pendingHotbar: null, preFloor: {}, totems: [] },
-    perm: { skills: {}, flags: [], totems: {} },
+    loadout: { hotbar: Array(HOTBAR_LEN).fill(null), pendingHotbar: null, preFloor: {}, spirits: Array(SPIRIT_SLOTS).fill(null), pendingSpirits: null },
+    perm: { skills: {}, flags: [], spirits: {}, spiritStones: 0 },
     grantedTx: [],
     log: [],
     seenItems: [], // 보관함을 열었을 때 갖고 있던 아이템 id - 메뉴 빨간 점(docs/inventory.md 5-3).
+    pendingSpiritNotice: [], // 소급 지급한 보스 정령 [{ floor, id, kind, stones, stoneReward }] - 화면이 한 번 보여 주고 비운다(docs/spirits.md 10장).
   };
 }
 
-function fitHotbar(arr) {
-  const out = Array(HOTBAR_LEN).fill(null);
-  if (Array.isArray(arr)) for (let i = 0; i < HOTBAR_LEN; i++) out[i] = arr[i] ?? null;
+function fit(arr, len) {
+  const out = Array(len).fill(null);
+  if (Array.isArray(arr)) for (let i = 0; i < len; i++) out[i] = arr[i] ?? null;
   return out;
 }
+const fitHotbar = (arr) => fit(arr, HOTBAR_LEN);
 
 // 저장된 inv에서 빠진 칸만 채운다(손상·부분 저장 대비). 값은 그대로 - 모르는 아이템 id도 보존.
 export function normalizeInv(inv) {
@@ -38,16 +42,20 @@ export function normalizeInv(inv) {
       hotbar: fitHotbar(lo.hotbar),
       pendingHotbar: Array.isArray(lo.pendingHotbar) ? fitHotbar(lo.pendingHotbar) : null,
       preFloor: { ...lo.preFloor },
-      totems: Array.isArray(lo.totems) ? lo.totems : [],
+      spirits: fit(lo.spirits, SPIRIT_SLOTS),
+      pendingSpirits: Array.isArray(lo.pendingSpirits) ? fit(lo.pendingSpirits, SPIRIT_SLOTS) : null,
     },
-    perm: { skills: { ...pm.skills }, flags: Array.isArray(pm.flags) ? [...pm.flags] : [], totems: { ...pm.totems } },
+    // 옛 totems 키는 여기서 옮기지 않으므로 사라진다(v4).
+    perm: { skills: { ...pm.skills }, flags: Array.isArray(pm.flags) ? [...pm.flags] : [], spirits: { ...pm.spirits }, spiritStones: Number.isFinite(pm.spiritStones) ? Math.max(0, pm.spiritStones) : 0 },
     grantedTx: Array.isArray(inv.grantedTx) ? [...inv.grantedTx] : [],
     log: Array.isArray(inv.log) ? inv.log.slice(-LOG_MAX) : [],
     seenItems: Array.isArray(inv.seenItems) ? [...inv.seenItems] : [],
+    pendingSpiritNotice: Array.isArray(inv.pendingSpiritNotice) ? [...inv.pendingSpiritNotice] : [],
   };
 }
 
-// v1(items/equipped/preFloor/shop.skillLv가 playerState에 흩어진 형식) -> v2(inv 묶음) -> v3(ranking 블록).
+// v1(items/equipped/preFloor/shop.skillLv가 playerState에 흩어진 형식) -> v2(inv 묶음) -> v3(ranking 블록) -> v4(정령: normalizeInv가
+// totems를 버리고 정령 칸을 채운다. 시작 정령 지급은 config가 필요해 playerState.initSpirits -> ensureStartSpirit이 한다).
 // 새 객체를 돌려준다. 이미 최신이면 그대로(여러 번 돌려도 같은 결과). 옛 필드는 지운다. v1 단계는 옛 필드가
 // 있을 때만 움직이므로 v2 저장은 inv를 그대로 두고 ranking만 채운다.
 // now = 마이그레이션 log 시각(초) - core는 시계를 모르므로 호출부가 넘긴다.

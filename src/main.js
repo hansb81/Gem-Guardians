@@ -22,6 +22,7 @@ import { computeScreenFit, FRAME_LOGICAL_W } from './render/screenFit.js';
 import { t, tOr, setLocale } from './config/i18n.js';
 import { FONT_LOAD_SPECS } from './config/fonts.js';
 import { towerAttack, normalFloorReward } from './core/economy/economy.js';
+import { compLock } from './core/comp/endless.js';
 import { RankingUi } from './game/rankingUi.js';
 import { pressButton } from './render/uiKit.js';
 import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup } from './render/ui/prepPopup.js';
@@ -88,6 +89,7 @@ const ranking = new RankingUi({
   },
 });
 mainMenuScreen.rankingBadge = () => ranking.hasRewardBadge();
+mainMenuScreen.compStatus = () => compStatus();
 mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
 // 이벤트 팝업 광고 칸(docs/ads.md 3장) - 배너를 띄울 수 있고 광고 제거가 없을 때만 칸을 그린다.
 mainMenuScreen.popupAd = () => platform.caps.popupBanner && !playerState.inventory.isUnlocked('adFree');
@@ -152,6 +154,11 @@ function startExitToMenu() {
     prepLastTab = null; // 판이 끝나면 다음 판은 석상 탭부터.
     upgradeHold = null;
     scene = 'menu';
+    refreshInventoryUi(); // 경쟁 판 키트 -> 본편 장착으로
+    if (compResult) {
+      rewardPopup.show(compResult);
+      compResult = null;
+    }
     CloudSave.flush('menu');
     nudgeCheck = true; // 15층 첫 클리어 뒤 메뉴 복귀 = 연결 권유 한 번
 
@@ -241,6 +248,7 @@ function drawFade(rawDtMs) {
 // 정비 팝업(docs/upgrade-popup.md, src/render/ui/prepPopup.js) - null이 아니면 열려 있고 전투가 멈춘다.
 // { context: 'floorClear'|'defeat'|'village'|'towerTap', tab, selectedTower, flash, view }.
 let prep = null;
+let spiritEnv = null; // { cfg: config/spirits.json, floorReward() } - 데이터 로드 뒤(정령 탭 view·레벨업 비용)
 let prepLastTab = null; // 층 클리어/패배끼리 같은 판에서 마지막에 본 탭.
 let upgradeHold = null;
 // 인벤토리 탭: 고른 보유 아이템 id, 장착 칸 누름 { slot, downMs, done } - 0.5초 넘게 누르면 해제(loop), 그 전에 떼면 탭.
@@ -364,6 +372,65 @@ function handleTutorialPointerDown(x, y) {
 // 그 저장들이 dirty로 잡히지 않는다(진짜 진행만 dirty). 판정은 hello -> 미지급 복구·출석·우편 다음.
 let cloudConflict = null;
 let iapEnv = null; // 결제 지급·회수 콜백(상점 준비 뒤) - 계정 전환 전 결제 대기열 비우기에도 씀 // 메뉴에 띄울 충돌 팝업 인자(메뉴에 다른 팝업이 없을 때 연다)
+// ---- 경쟁 모드(docs/ranking.md 5장) ----
+// 판 = 서버 rank-comp-start(시즌 시드·하루 입장) -> BattleController.startComp(무한 웨이브) -> 패배/나가기 때 rank-comp-finish.
+let compCfg = null; // config/ranking.json comp
+let rankingCfg = null; // config/ranking.json(compUnlocked 판정)
+let compBusy = false; // 시작 요청 중(연타 방지)
+let compLeftAsked = false;
+let compResult = null; // 메뉴로 돌아온 뒤 띄울 경쟁 결과 팝업
+// 메뉴 모드 팝업·랭킹 탭이 보는 상태: unlocked = config compUnlocked + 본편 unlockBestFloor층 도달 + 서버 랭킹 연결, open = 지금 시작 가능.
+function compStatus() {
+  const svc = ranking.service;
+  const lock = compLock(rankingCfg, playerState.bestFloor, !!svc && 'compLeft' in svc && net.on);
+  if (lock) return { unlocked: false, open: false, hint: t(lock.hint, lock.params ?? undefined) };
+  if (svc.compLeft == null && !compLeftAsked) {
+    compLeftAsked = true; // 남은 입장은 한 번 물어 둔다(이후엔 시작 응답이 갱신). 실패하면 다음에 다시.
+    svc.me('comp').finally(() => (compLeftAsked = svc.compLeft != null));
+  }
+  const left = svc.compLeft;
+  return { unlocked: true, open: left !== 0, left, daily: compCfg.dailyEntries, hint: left === 0 ? t('comp.noEntries') : null };
+}
+
+async function startCompGame() {
+  if (compBusy || fade || !controller || !compStatus().open) return;
+  compBusy = true;
+  let res;
+  try {
+    res = await call('rank-comp-start');
+  } finally {
+    compBusy = false;
+  }
+  if (res.left != null) ranking.service.compLeft = res.left;
+  if (!res.ok) {
+    mainMenuScreen.showToast(t(res.reason === 'dailyLimit' ? 'comp.noEntries' : 'comp.startFail'));
+    return;
+  }
+  controller.startComp({ runId: res.runId, seasonId: res.seasonId, seed: Number(res.seed) >>> 0, modifier: res.modifier ?? null, cfg: compCfg });
+  itemUi.equipped = Object.keys(controller.comp.kit); // 하단 바 = 이번 판 키트(본편 가방은 그대로)
+  itemUi.counts = controller.comp.kit;
+  playGameBgm(1000);
+  startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
+    scene = 'game';
+  });
+}
+
+// 판 끝(패배 "결과 보기" 또는 일시정지 "나가기") - 지금 점수로 제출하고 메뉴로, 메뉴에서 결과 팝업.
+// 앱을 강제로 끄면 제출되지 않는다(입장 1회는 이미 씀).
+function endCompRun() {
+  const run = controller?.comp;
+  if (!run || run.done || fade) return;
+  run.done = true;
+  const points = run.score.total;
+  const wave = controller.battleState.wave;
+  compResult = { title: t('comp.resultTitle'), notes: [t('comp.resultScore', { score: points.toLocaleString() }), t('comp.resultWave', { wave })], gold: 0, diamonds: 0, items: {}, skills: {}, flags: [] };
+  call('rank-comp-finish', { runId: run.runId, points, floor: wave, log: run.input.log }).then((r) => {
+    if (!r.ok) console.warn('경쟁 점수 제출 실패/보류', r);
+  });
+  ranking.service.submit('comp', { value: points, floor: wave, at: ranking.service.now(), seasonId: run.seasonId }); // 오프라인 표시용 기기 기록
+  startExitToMenu(); // retryFloor가 본편 층 전투로 되돌린다(경쟁 판 상태는 버림)
+}
+
 function startCloudSave() {
   const tx = playerState.inventory.data.grantedTx;
   const kept = pruneGrantedTx(tx, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)); // KST 오늘
@@ -545,6 +612,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
   if (!battleData || !balanceData) return;
   serverUi = { ...serverUi, ...setupServer(serverConfig, { menu: mainMenuScreen, rewardPopup, player: playerState, dev: DEV_MODE, beforeStart: accountRedirect }) };
   serverUi.started?.then(() => (titleNetReady = true));
+  if (balanceData.spirits) spiritEnv = { cfg: balanceData.spirits, floorReward: () => normalFloorReward(balanceData, playerState.bestFloor) };
   controller = new BattleController({
     balance: balanceData.balance,
     enemies: balanceData.enemies,
@@ -553,6 +621,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
     itemsConfig: balanceData.items,
     shopConfig: balanceData.shop,
     mineConfig: balanceData.mine,
+    spiritsConfig: balanceData.spirits,
     towersBaseData: balanceData.balance.tower.towers,
     battleConfig: {
       cascadeBonusPerStep: balanceData.balance.tower.puzzleShot.cascadeBonus,
@@ -569,9 +638,12 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
   if (balanceData.ranking) {
     // 참여 보상 골드 = 층 기준가 x 3(config/ranking.json tiers part.goldFloorMul) - 기준가는 상점과 같은 normalFloorReward.
     // 서버 랭킹은 일반 모드만, 마켓 리더보드가 있는 빌드(토스)는 그대로 마켓 리더보드(docs/server.md §9).
+    compCfg = balanceData.ranking.comp ?? null;
+    rankingCfg = balanceData.ranking;
     ranking.init(balanceData.ranking, {
       floorGold: () => normalFloorReward(balanceData, playerState.bestFloor),
       server: serverUi.enabled && !platform.caps.leaderboard,
+      compOpen: () => compStatus().unlocked,
     });
     // 일반 모드 랭킹 = 클리어한 가장 높은 층(더 높을 때만 갱신, 도달 시각 기록).
     controller.onFloorClear = (floor) => ranking.service.submit('normal', { floor, at: ranking.service.now() });
@@ -585,7 +657,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
   // 재대입하므로 battleBridge/animator의 "이전 보드 기준" 기억도 같이 비워야 한다.
   function resetPuzzleBoard(floorObstacles) {
     gameState = new GameState({
-      seed: Date.now(),
+      seed: controller.comp ? (controller.comp.seed ^ 0x51a7e) >>> 0 : Date.now(), // 경쟁 모드 = 주간 시드(모두 같은 보드)
       obstaclesConfig: balanceData.obstacles,
       floorObstacles,
     });
@@ -622,6 +694,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
     shopScreen.setEnv({
       cfg: balanceData.shop,
       itemsConfig: balanceData.items,
+      spiritsConfig: balanceData.spirits ?? null, // 정령 도감
       data: balanceData,
       player: playerState,
       save: () => playerState.save(),
@@ -995,6 +1068,30 @@ function handlePrepPointerDown(x, y) {
     case 'item':
       invDrag = { y: hit.by, startScroll: renderer.inventoryTab.scroll, moved: false, id: hit.id };
       return;
+    // ---- 정령 탭(src/render/ui/spiritTab.js) ----
+    case 'spiritSlot':
+      audio.play('ui_click');
+      prep.spirit.slot = hit.index;
+      return;
+    case 'spiritFilter':
+      audio.play('ui_click');
+      if (hit.kind === 'element') prep.spirit.element = hit.key;
+      else prep.spirit.grade = prep.spirit.grade === hit.key ? null : hit.key; // 같은 등급을 다시 누르면 해제
+      return;
+    case 'spiritItem':
+      audio.play('ui_click');
+      prep.spirit.detail = hit.id;
+      return;
+    case 'spiritBack':
+      audio.play('ui_cancel');
+      prep.spirit.detail = null;
+      return;
+    case 'spiritEquip':
+      audio.play(playerState.inventory.equipSpirit(prep.spirit.slot, hit.id).ok ? 'ui_click' : 'gem_swap_fail');
+      return;
+    case 'spiritLevelUp':
+      audio.play(playerState.inventory.levelUpSpirit(hit.id, spiritEnv.floorReward()).ok ? 'ui_click' : 'gem_swap_fail');
+      return;
   }
 }
 
@@ -1119,7 +1216,8 @@ canvas.addEventListener('pointerdown', (e) => {
       startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
         scene = 'game';
       });
-    } else if (action === 'openShop') enterShop();
+    } else if (action === 'startCompGame') startCompGame();
+    else if (action === 'openShop') enterShop();
     else if (action === 'openMine') enterMine();
     else if (action === 'openShopGold') enterShop('dia', 'goldex');
     else if (action === 'openShopDia') enterShop('dia');
@@ -1144,7 +1242,8 @@ canvas.addEventListener('pointerdown', (e) => {
     if (mainMenuScreen.handlePointerDown(x, y) === 'quitFloor') {
       prep = null;
       upgradeHold = null;
-      startExitToMenu(); // 정비 팝업 "마을로"와 같은 길.
+      if (controller?.comp) endCompRun(); // 경쟁 판 = 지금 점수로 제출하고 나감
+      else startExitToMenu(); // 정비 팝업 "마을로"와 같은 길.
     }
     return;
   }
@@ -1166,7 +1265,9 @@ canvas.addEventListener('pointerdown', (e) => {
       // 나가기는 전환음(ui_game_exit)을 startExitToMenu가 낸다.
       if (!pressButton(x, y, btnRect, action === 'exit' ? 'none' : 'click')) continue;
       if (action === 'resume') paused = false;
-      else if (action === 'revive') {
+      else if (action === 'compEnd' || (action === 'exit' && controller?.comp)) {
+        endCompRun(); // 경쟁 판: 패배 "결과 보기" / 일시정지 "나가기" = 지금 점수로 제출하고 메뉴로
+      } else if (action === 'revive') {
         if (!controller?.revive()) audio.play('gem_swap_fail');
       } else if (action === 'adContinue') {
         startAdContinue();
@@ -1505,6 +1606,7 @@ new PointerInput(canvas, {
     // 아예 받아들여지지 않은 입력뿐) - 스왑음은 유효/무효 모두 내고, 되돌아감은 cellStates의
     // bounce로 가려내 그 절반 지점(= 되돌아가기 시작하는 순간)에 실패음을 낸다.
     if (!gameState.trySwap(r1, c1, r2, c2)) return;
+    controller?.logSwap(r1, c1, r2, c2); // 경쟁 판 입력 기록(일반 모드는 아무것도 안 함)
     audio.play('gem_swap');
     if (gameState.board.cellStates[gameState.board.index(r1, c1)]?.bounce) {
       audio.play('gem_swap_fail', { delayMs: ANIMATION_DURATIONS_MS.swap });
@@ -1526,14 +1628,14 @@ function togglePreFloor(id) {
 }
 
 // 패배 팝업 이어하기(docs/ads.md 2장) - 깃털·광고 버튼 판정은 continueOptions 하나.
-// mode: 경쟁 모드는 아직 잠김(플레이 경로 없음) - 열리면 여기서 그 판의 모드를 넘긴다.
+// mode: 경쟁 판이면 'competitive'(깃털·광고 이어하기 없음 - docs/ads.md).
 let adBusy = false; // 광고 띄우는 중(연타·재진입 금지, 일시정지 팝업 안 띄움)
 function continueState() {
   const cfg = controller?.itemsConfig?.adContinue;
   if (!controller || controller.battleState.status !== 'failed') return { revive: false, ad: false };
   return continueOptions({
     cfg,
-    mode: 'normal',
+    mode: controller.comp ? 'competitive' : 'normal',
     tutorial: tutorialRunning(),
     featherOk: controller.canRevive(),
     floorLeft: controller.adContinueLeft(),
@@ -1576,23 +1678,29 @@ function buildItemUi() {
   itemUi.adContinue = cont.ad ? (playerState.inventory.isUnlocked('adFree') ? 'free' : 'ad') : null;
   itemUi.adBusy = adBusy;
   itemUi.goldMul = controller?.goldMul ?? 1;
+  itemUi.comp = controller?.comp && !controller.comp.done ? controller.comp : null; // 패배 팝업 = 경쟁 결과 버튼
   return itemUi;
 }
 
 function buildBattleHud() {
   if (!controller) return null;
   const { balance, battleState } = controller;
+  const comp = controller.comp;
   return {
     floor: controller.floor,
-    chapter: tOr(`names.chapter.${Math.floor((controller.floor - 1) / 10) % controller.enemies.chapters.length}`, controller.currentFloor.chapter),
+    // 경쟁 판: 층 배지 = "웨이브 N"(바뀔 때 배너도), 보드 위 점수 띠 = 경쟁 점수(퍼즐 점수 대신).
+    label: comp ? t('comp.waveBanner', { wave: battleState.wave }) : null,
+    compScore: comp ? comp.score.total : null,
+    chapter: comp ? t('comp.waveBanner', { wave: battleState.wave }) : tOr(`names.chapter.${Math.floor((controller.floor - 1) / 10) % controller.enemies.chapters.length}`, controller.currentFloor.chapter),
     tag: controller.floorTag,
     remainingEnemies: battleState.remainingEnemies,
     totalEnemies: battleState.totalEnemies,
     gold: playerState.gold,
-    towerLevels: playerState.towerLevels,
-    towerCosts: playerState.towerLevels.map((_, i) => playerState.nextTowerLevelCost(balance, i)),
-    towerAttacks: playerState.towerLevels.map((lvl) => towerAttack(balance, lvl)),
-    towerNextAttacks: playerState.towerLevels.map((lvl) => towerAttack(balance, lvl + 1)),
+    // 경쟁 판은 석상 레벨 고정(comp.towerLevel) - 레벨 글자·모습·이펙트도 그 값으로(본편 레벨 아님).
+    towerLevels: comp ? comp.towerLevels : playerState.towerLevels,
+    towerCosts: comp ? null : playerState.towerLevels.map((_, i) => playerState.nextTowerLevelCost(balance, i)),
+    towerAttacks: (comp ? comp.towerLevels : playerState.towerLevels).map((lvl) => towerAttack(balance, lvl)),
+    towerNextAttacks: (comp ? comp.towerLevels : playerState.towerLevels).map((lvl) => towerAttack(balance, lvl + 1)),
     maxLevel: balance.tower.maxLevel,
     towerFxTiers: balance.towerFxTiers ?? null, // 수호자 레벨 구간 이펙트(guardianFx.js)
     towerLookTiers: balance.towerLookTiers ?? null, // 수호자 모습 등급 시트(guardianFx.lookGrade)
@@ -1615,6 +1723,18 @@ function processUpgradeHold(nowMs) {
   upgradeHold.nextMs = nowMs + upgradeHold.intervalMs;
 }
 
+// 획득 팝업 내용에 정령을 붙인다. list = [{ id, kind: 'new'|'star'|'stones', stones(중복 변환분), stoneReward }].
+function withSpirits(reward, list, title) {
+  const base = reward ?? { gold: 0, diamonds: 0, items: {}, skills: {}, flags: [] };
+  const cfg = spiritEnv?.cfg;
+  return {
+    ...base,
+    ...(title ? { title } : null),
+    spirits: list.map((s) => ({ id: s.id, kind: s.kind, stones: s.stones, element: cfg?.spirits[s.id]?.element, grade: cfg?.spirits[s.id]?.grade })),
+    spiritStones: list.reduce((n, s) => n + (s.stoneReward ?? 0) + (s.stones ?? 0), 0),
+  };
+}
+
 // 정비 팝업 그릴 값(석상 5줄·골드·층) - 팝업이 열려 있을 때만 매 프레임 채운다.
 function drawPrep(now) {
   if (!prep || !controller) return;
@@ -1632,6 +1752,9 @@ function drawPrep(now) {
     v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, look: lookGrade(level, balance.towerLookTiers), atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
   });
   v.all = statueAllInfo(balance, playerState.towerLevels, playerState.gold);
+  const inv = playerState.inventory;
+  // 정령 탭: 층 중에 바꾼 장착(pendingSpirits)이 있으면 그쪽을 보여 준다(하단 아이템 장착 칸과 같은 규칙).
+  v.spirit = spiritEnv && { cfg: spiritEnv.cfg, owned: inv.data.perm.spirits, slots: inv.pendingSpirits() ?? inv.spiritSlots(), pending: inv.inFloor, stones: inv.spiritStones, gold: playerState.gold, floorReward: spiritEnv.floorReward() };
   renderer.drawPrepPopup(prep, buildItemUi());
   if (prep.flash) prep.flash.white = false; // 흰 테는 1프레임만.
 }
@@ -1678,6 +1801,12 @@ function loop(now) {
     } else if ((nudgeCheck || pendingNudge) && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) maybeNudge();
     // 하루 첫 메뉴 진입: 출석 팝업 자동 1회(저장 충돌·연결 권유가 먼저, 그게 닫힌 뒤에).
     else if (!cloudConflict && !prep && !fade && !ranking.isOpen && !rewardPopup.active) autoOpenAttendance(serverUi.att, mainMenuScreen, !!playerState.tutorial?.done);
+    // 소급 지급한 보스 정령(inv.pendingSpiritNotice) - 메뉴에서 다른 팝업이 없을 때 한 번 보여 주고 비운다.
+    const spiritNotice = playerState.inventory.data.pendingSpiritNotice;
+    if (spiritNotice.length > 0 && spiritEnv && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) {
+      rewardPopup.show(withSpirits(null, spiritNotice, t('spirit.noticeTitle')));
+      playerState.inventory.clearSpiritNotice();
+    }
     renderer.drawRankingPopup(ranking, now);
     renderer.drawRewardPopup(rewardPopup); // 출석·우편 받기
     drawFade(rawDtMs);
@@ -1783,7 +1912,9 @@ function loop(now) {
     const clear = controller?.lastClearReward;
     if (clear && clear !== shownClearReward) {
       shownClearReward = clear;
-      rewardPopup.show(rewardFromDelta(clear.grant));
+      // 보스 첫 처치 정령(새로 얻음 / 별 +1 / 정령석 변환)과 정령석을 아이템 보상과 같은 팝업에.
+      const reward = rewardFromDelta(clear.grant);
+      rewardPopup.show(clear.spirit ? withSpirits(reward, [clear.spirit]) : reward);
       // 광산: 10층 보스 첫 처치 = 보상 팝업 다음에 해금 안내 1회, 20~50층 = 새 광맥 토스트(보상 팝업을 닫은 뒤).
       if (clear.mineOpened?.length) {
         if (clear.floor === mineMenu.floor) rewardPopup.show({ title: t('mine.openedTitle'), notes: [t('mine.openedHint')], gold: 0, diamonds: 0, items: {}, skills: {}, flags: [] });

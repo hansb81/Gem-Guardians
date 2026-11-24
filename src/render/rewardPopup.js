@@ -7,12 +7,25 @@ import { getFontString } from '../config/fonts.js';
 import { t } from '../config/i18n.js';
 import { HUD_CONFIG } from '../config/hud.js';
 import { screen } from './screenFit.js';
+import { drawSpirit, drawSpiritStone, SPIRIT_GRADE_COLOR } from './spiritSprite.js';
 
 const K = 2;
 const SLOT = 22 * K;
 const GAP = 8;
 const DIM = '#0d0a10';
 const NOT_ITEMS = new Set(['gold', 'diamonds', 'over', 'skills', 'flags']);
+
+// 칸 이름이 칸 폭(maxW)을 넘으면 띄어쓰기에서 두 줄로 나눈다(두 줄의 긴 쪽이 가장 짧아지는 자리). 띄어쓰기가 없으면 그대로 한 줄.
+export function splitName(text, maxW, measure) {
+  if (measure(text) <= maxW) return [text];
+  let best = null;
+  for (let i = text.indexOf(' '); i > 0; i = text.indexOf(' ', i + 1)) {
+    const parts = [text.slice(0, i), text.slice(i + 1)];
+    const w = Math.max(measure(parts[0]), measure(parts[1]));
+    if (!best || w < best.w) best = { w, parts };
+  }
+  return best ? best.parts : [text];
+}
 
 // grant/buy delta -> 보여 줄 것(받은 것만: buy의 비용(음수)은 뺀다). 아무것도 없으면 null.
 export function rewardFromDelta(d) {
@@ -63,6 +76,14 @@ export class RewardPopup {
     if (r.gold) cells.push({ icon: 'icons/gold.png', n: r.gold, label: t('reward.gold') });
     if (r.diamonds) cells.push({ icon: 'icons/diamond.png', n: r.diamonds, label: t('reward.diamonds') });
     for (const [id, n] of Object.entries(r.items)) cells.push({ item: id, n, label: t(`item.name.${id}`) });
+    // 정령(보스 첫 처치·소급 지급): 칸마다 이름 + 새로 얻음 / 별 +1 / 정령석 변환, 그 뒤에 정령석 합계.
+    for (const s of r.spirits ?? []) cells.push({ spirit: s, label: t(`spirit.name.${s.id}`), sub: t(`spirit.got.${s.kind}`, { n: s.stones }) });
+    if (r.spiritStones) cells.push({ stone: true, n: r.spiritStones, label: t('spirit.stone') });
+    const subH = cells.some((c) => c.sub) ? 12 : 0; // 정령 칸의 둘째 줄
+    // 긴 이름(정령·아이템 공통)은 두 줄 - 옆 칸 이름과 붙지 않게 칸 폭 + 간격 안에서.
+    ctx.font = getFontString(11);
+    for (const c of cells) c.lines = splitName(c.label, SLOT + 16 + GAP - 4, (s) => ctx.measureText(s).width);
+    const nameH = cells.some((c) => c.lines.length > 1) ? 12 : 0;
     const lines = [];
     for (const [key, lv] of Object.entries(r.skills)) lines.push(t('reward.skill', { name: t(`shop.skill.${key}.name`), lv }));
     for (const f of r.flags) lines.push(t(`reward.flag.${f}`));
@@ -72,7 +93,7 @@ export class RewardPopup {
     const perRow = Math.max(1, Math.floor((cardW - 32 + GAP) / (SLOT + 16 + GAP)));
     const rows = Math.ceil(cells.length / perRow);
     const cellW = SLOT + 16;
-    const cardH = snap(70 + rows * (SLOT + 26) + lines.length * 18 + 16 + SLOT + 16);
+    const cardH = snap(70 + rows * (SLOT + 26 + subH + nameH) + lines.length * 18 + 16 + SLOT + 16);
     const cardX = Math.round((width - cardW) / 2);
     const cardY = Math.round((height - cardH) / 2);
 
@@ -101,17 +122,32 @@ export class RewardPopup {
       for (const c of rowCells) {
         const sx = x + 8;
         if (c.item) drawSlot(sx, y, c.item, { count: c.n });
-        else {
+        else if (c.spirit) {
+          drawSlot(sx, y, null, {});
+          ctx.strokeStyle = SPIRIT_GRADE_COLOR[c.spirit.grade] ?? DIM;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(sx + 1, y + 1, SLOT - 2, SLOT - 2);
+          drawSpirit(ctx, assets, c.spirit.id, c.spirit.element, sx + (SLOT - 30) / 2, y + (SLOT - 30) / 2, 3, performance.now());
+        } else if (c.stone) {
+          drawSlot(sx, y, null, {});
+          drawSpiritStone(ctx, assets, sx + SLOT / 2, y + SLOT / 2, K);
+          drawNumber(String(c.n), sx + SLOT, y + SLOT);
+        } else {
           drawSlot(sx, y, null, {});
           drawFixedImage(ctx, assets, c.icon, sx + SLOT / 2, y + SLOT / 2, K);
           drawNumber(String(c.n), sx + SLOT, y + SLOT);
         }
         ctx.fillStyle = HUD_CONFIG.text.primary;
         ctx.font = getFontString(11);
-        drawText(ctx, c.label, x + cellW / 2, y + SLOT + 11);
+        c.lines.forEach((line, i) => drawText(ctx, line, x + cellW / 2, y + SLOT + 11 + i * 12));
+        if (c.sub) {
+          ctx.fillStyle = '#9cd872';
+          ctx.font = getFontString(10);
+          drawText(ctx, c.sub, x + cellW / 2, y + SLOT + 12 + c.lines.length * 12);
+        }
         x += cellW + GAP;
       }
-      y += SLOT + 26;
+      y += SLOT + 26 + subH + nameH;
     }
     ctx.font = getFontString(12, true);
     ctx.fillStyle = '#9cd872';

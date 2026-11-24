@@ -35,7 +35,7 @@
 |---|---|---|
 | 재화 | `gold`, `diamonds` | 유료 다이아 포함. 잃으면 문의 1순위 |
 | 진행 | `floor`, `bestFloor`, `towerLevels[5]` | 게임 진행 자체 |
-| 인벤토리 `inv` | `items`(소모품 개수), `loadout`(hotbar·pendingHotbar·preFloor·totems/정령 장착), `perm`(젬 스킬 레벨·**flags: slot4/adFree**·totems/정령 보유) | 유료 상품(4번째 슬롯·광고 제거) 효과가 여기 있음 |
+| 인벤토리 `inv` | `items`(소모품 개수), `loadout`(hotbar·pendingHotbar·preFloor·spirits/정령 장착), `perm`(젬 스킬 레벨·**flags: slot4/adFree**·spirits/정령 보유) | 유료 상품(4번째 슬롯·광고 제거) 효과가 여기 있음 |
 | 〃 | **`grantedTx`** | **중복 지급 방지의 핵심.** 빠지면 새 기기에서 출석·쿠폰·결제 보상이 한 번 더 들어감 |
 | 〃 | `seenItems`, `log`(최근 50) | 빨간 점·문의 대응용, 작아서 같이 |
 | 상점 `shop` | `purchasedOnce`, `firstBuyUsed`(첫 구매 2배), `passes`(주간·월간 남은 일수, 오늘 받음), `freeClaimedDate`, `day`, `offers`(기간 한정 노출) | 유료 패스 남은 일수, 첫 구매 2배 재사용 방지 |

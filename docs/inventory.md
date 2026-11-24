@@ -19,8 +19,8 @@
 | 구분 | 예 | 성질 | 저장 위치 |
 |---|---|---|---|
 | **소모품** | 아이템 16종(망치~부활) | 개수. 쓰면 줄어든다 | `inv.items { id: 개수 }` |
-| **장착·예약** | 하단 슬롯 3~4칸, 다음 층 예약(부스터 2종·황금 주화), 토템 슬롯(나중) | 무엇을 어디에 꽂았나. 개수는 소모품 쪽 | `inv.loadout` |
-| **영구 보유** | 젬 스킬 해금·레벨, 4번째 슬롯, 광고 제거, 토템(나중) | 한 번 얻으면 안 사라짐 | `inv.perm` |
+| **장착·예약** | 하단 슬롯 3~4칸, 다음 층 예약(부스터 2종·황금 주화), 정령 슬롯(나중) | 무엇을 어디에 꽂았나. 개수는 소모품 쪽 | `inv.loadout` |
+| **영구 보유** | 젬 스킬 해금·레벨, 4번째 슬롯, 광고 제거, 정령(나중) | 한 번 얻으면 안 사라짐 | `inv.perm` |
 
 **인벤토리가 아닌 것**
 - 골드·다이아 = 지갑(`playerState.gold/diamonds`) 그대로. 단, 지급 묶음(번들)에는 골드·다이아도 들어갈 수 있고 `grant()`가 지갑에 넣어 준다.
@@ -40,16 +40,19 @@
     "hotbar":  ["hammer", "scythe_h", null, null],
     "pendingHotbar": null,
     "preFloor": { "booster_line": true, "booster_bomb": false, "gold_coin": false },
-    "totems":  []
+    "spirits":  ["fire_wisp", null, null, null, null],
+    "pendingSpirits": null
   },
   "perm": {
     "skills":  { "red": 1, "blue": 1, "yellow": 1, "green": 1, "purple": 1, "spike": 1, "meteor": 0, "souls": 0, "ultimate": 0 },
     "flags":   ["slot4"],
-    "totems":  {}
+    "spirits":  { "fire_wisp": { "lv": 1, "star": 1 } },
+    "spiritStones": 0
   },
   "grantedTx": ["iap:starter:GPA.1234", "boss:20"],
   "log": [ { "t": 1762500000, "src": "shopGold", "d": { "hammer": 5, "gold": -1200 } } ],
-  "seenItems": ["hammer", "scythe_h"]
+  "seenItems": ["hammer", "scythe_h"],
+  "pendingSpiritNotice": []
 }
 ```
 
@@ -180,7 +183,7 @@
 
 ## 6. 나중에 붙일 것 (자리만 마련)
 
-- **토템**: `perm.totems { id: { lv } }` + `loadout.totems` (슬롯 0/2). 지금은 빈 값, 로직 없음.
+- **정령**(로직·저장 완료, 화면은 아직 - docs/spirits.md, saveVersion 4): 보유 `perm.spirits { id: { lv, star } }` + 정령석 `perm.spiritStones`, 장착 `loadout.spirits`(5칸, 수호자 순서, null 가능) + 층 중 변경 `loadout.pendingSpirits`(pendingHotbar와 같은 방식), 소급 지급 알림 `pendingSpiritNotice`. 지급은 `grant({ spirits: [id], spiritStones: n })`, 레벨업 `levelUpSpirit`, 장착 `equipSpirit`.
 - **우편함**: 서버/이벤트 보상을 바로 넣지 않고 받기 버튼으로. `grant(..., {src:'mail', txId})` 재사용.
 - **클라우드 저장·경쟁 모드**: 경쟁 모드에서는 인벤토리를 서버가 확인해야 함(로컬 저장은 조작 가능). 지금 API를 그대로 두고 저장소만 바꿀 수 있게 `storage` 인터페이스 유지.
 - **구매 복원**: 4번째 슬롯·광고 제거 같은 비소모 상품은 스토어 복원 시 `perm.flags`를 다시 세움.
@@ -230,4 +233,4 @@
 |---|---|---|
 | 11 | 하단 바 갱신 | 개수·장착은 `inventory.onChange` 때만 읽어도 된다. 쿨다운·층당 남은 횟수는 inventory onChange로는 안 바뀌는 값이라 `itemController`에서 매 프레임(또는 스왑마다) 읽는다 - `itemBarRenderer.drawBar`가 `cooldownLeft()`/`perFloorLeft()`를 매 프레임 부름(테스트: tests/inventoryUi.test.js "스왑 직후 숫자가 줄어든다") |
 | 12 | 기존 팝업 반투명 배경 | 코드 채우기라 PNG 규칙 위반은 아님. 통일하고 싶을 때 체커 디더로 바꾸는 건 선택(급하지 않음) |
-| 1 | 지운 "타워별 장착 칸 2개" | 토템이 생길 때 `loadout.totems` 자리로 다시 검토 |
+| 1 | 지운 "타워별 장착 칸 2개" | 정령이 생길 때 `loadout.spirits` 자리로 다시 검토 |
