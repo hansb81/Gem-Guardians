@@ -26,6 +26,7 @@ import { compLock } from './core/comp/endless.js';
 import { RankingUi } from './game/rankingUi.js';
 import { pressButton } from './render/uiKit.js';
 import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup } from './render/ui/prepPopup.js';
+import { cycleFilter, resetFilter } from './render/ui/spiritTab.js';
 import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
 import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
@@ -258,6 +259,7 @@ let invPress = null;
 let invDrag = null;
 const INV_DRAG_PX = 8;
 const INV_HOLD_MS = 500;
+let spiritPress = null; // 정령 탭 필터 버튼 누름 { kind, downMs, done } - 길게(INV_HOLD_MS) = 전체로
 let mineVeinToast = false; // 새 광맥 토스트 대기(보상 팝업이 닫히면 띄운다)
 // 메뉴의 광산 버튼 상태(객체 하나를 재사용 - 매 프레임 만들지 않는다). 설정을 읽은 뒤 mainMenuScreen.mine에 연결.
 const mineMenu = {
@@ -694,7 +696,6 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
     shopScreen.setEnv({
       cfg: balanceData.shop,
       itemsConfig: balanceData.items,
-      spiritsConfig: balanceData.spirits ?? null, // 정령 도감
       data: balanceData,
       player: playerState,
       save: () => playerState.save(),
@@ -1073,10 +1074,8 @@ function handlePrepPointerDown(x, y) {
       audio.play('ui_click');
       prep.spirit.slot = hit.index;
       return;
-    case 'spiritFilter':
-      audio.play('ui_click');
-      if (hit.kind === 'element') prep.spirit.element = hit.key;
-      else prep.spirit.grade = prep.spirit.grade === hit.key ? null : hit.key; // 같은 등급을 다시 누르면 해제
+    case 'spiritFilter': // 탭 = 다음 값(손을 뗄 때), 길게 누르기 = 그 필터만 전체로(processSpiritHold)
+      spiritPress = { kind: hit.kind, downMs: performance.now(), done: false };
       return;
     case 'spiritItem':
       audio.play('ui_click');
@@ -1172,6 +1171,12 @@ function inventorySlotTap(slot) {
 }
 
 function processInventoryHold(nowMs) {
+  // 정령 탭 필터 버튼 길게 누르기 = 그 필터만 전체로(손을 떼도 다음 값으로 안 넘어간다).
+  if (spiritPress && !spiritPress.done && nowMs - spiritPress.downMs >= INV_HOLD_MS) {
+    spiritPress.done = true;
+    if (prep) resetFilter(prep.spirit, spiritPress.kind);
+    audio.play('ui_cancel');
+  }
   if (!invPress || invPress.done || nowMs - invPress.downMs < INV_HOLD_MS) return;
   invPress.done = true;
   if (playerState.inventory.unequip(invPress.slot).ok) audio.play('ui_cancel');
@@ -1376,6 +1381,11 @@ window.addEventListener('pointerup', (e) => {
   serverUi.pointerUp();
   if (invPress && !invPress.done) inventorySlotTap(invPress.slot);
   invPress = null;
+  if (spiritPress && !spiritPress.done && prep) {
+    cycleFilter(prep.spirit, spiritPress.kind);
+    audio.play('ui_click');
+  }
+  spiritPress = null;
   if (aim?.down) aimPointerUp();
   upgradeHold = null;
   sliderDrag = null;
@@ -1393,6 +1403,7 @@ window.addEventListener('pointercancel', () => {
   renderer.tutorial.skipPressed = false;
   ranking.pointerUp();
   invPress = null;
+  spiritPress = null;
   invDrag = null;
   if (aim) aim.down = false;
   upgradeHold = null;

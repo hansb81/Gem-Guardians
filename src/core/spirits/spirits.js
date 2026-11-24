@@ -155,3 +155,11 @@ export function battleSpirits(cfg, slots, owned, towerColors) {
     return key ? { ...out, key, u: u ?? null, value: sp.support ? supportValue(sp, mul) : null } : out;
   });
 }
+
+// 도감(정령 탭 "도감" 모드, 예전 상점 정령 레일): config 순서 30종 전부, 필터(속성·등급) 적용.
+// owned = inv.perm.spirits. 반환 { ids: [{ id, owned }], ownedCount, total } - total·ownedCount는 필터와 상관없는 전체 기준.
+export function dexEntries(cfg, owned, { element = null, grade = null } = {}) {
+  const all = Object.keys(cfg.spirits);
+  const ids = all.filter((id) => (!element || cfg.spirits[id].element === element) && (!grade || cfg.spirits[id].grade === grade)).map((id) => ({ id, owned: !!owned[id] }));
+  return { ids, ownedCount: all.filter((id) => owned[id]).length, total: all.length };
+}

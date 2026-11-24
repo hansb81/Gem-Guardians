@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack, skillLevelCap } from '../src/core/shop/shop.js';
+import { RAILS, buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack, skillLevelCap } from '../src/core/shop/shop.js';
 import { itemPrice, normalFloorReward } from '../src/core/economy/economy.js';
 import { defaultSkillLevels } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -173,16 +173,9 @@ test('골드 교환·정령', () => {
   const small = SHOP.goldExchange.find((e) => e.id === 'small'); // 수치는 shop.json에서 읽는다
   assert.equal(player.gold, Math.round(small.floors * normalFloorReward(DATA, 12)));
   assert.equal(player.diamonds, 1000 - small.dia);
-  // 정령 줄 = 도감(판매 없음): 30종 전부 나오고, 없는 정령·가진 정령 모두 살 수 없다. 설정이 없으면 머리글만.
-  const SPIRITS = JSON.parse(readFileSync(new URL('../config/spirits.json', import.meta.url), 'utf-8'));
-  const sctx = ctxOf(player, { spiritsConfig: SPIRITS });
-  const dex = buildRail(sctx, 'spirit');
-  assert.equal(dex.filter((e) => e.kind === 'spirit').length, 30);
-  assert.equal(buyProduct(sctx, 'spirit.phoenix').reason, 'locked');
-  player.inventory.data.perm.spirits.phoenix = { lv: 1, star: 1 };
-  assert.equal(buyProduct(sctx, 'spirit.phoenix').reason, 'sold');
-  assert.deepEqual(dex[0].params, { n: 0, max: 30 });
-  assert.equal(buildRail(ctxOf(player), 'spirit').length, 1);
+  // 정령 도감은 정비 팝업 정령 탭으로 옮겼다 - 상점에는 정령 레일·상품이 없다.
+  assert.equal(RAILS.includes('spirit'), false);
+  assert.equal(buyProduct(ctxOf(player), 'spirit.phoenix').reason, 'missing');
 });
 
 test('applySkillLevels: Lv 1이면 skills.json 그대로(특수 기술 잠금만), 레벨은 배율만 곱한다', () => {

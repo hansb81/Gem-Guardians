@@ -1,35 +1,53 @@
 // 정비 팝업의 정령 탭(docs/spirits.md 7장). 그리기 + 터치 사각형만 - 장착·레벨업은 main.js가 inventory를 부른다.
 // 좌표는 prepPopup과 같은 540 폭 기준(basis). 위 = 정령석 + 수호자 5줄(정령 칸·공명·효과 한 줄),
-// 아래 = 보유 정령 목록(5열, 속성·등급 필터) 또는 고른 정령의 상세(수치·레벨업·장착/해제).
-//   sel(state.spirit)  = { slot, element, grade, detail }  - 고른 수호자 칸 / 필터 / 상세로 연 정령 id
+// 아래 = "보유 n / 30" + 필터 버튼 3개(속성·등급·보유 - 누를 때마다 다음 값, 길게 누르면 전체) + 정령 목록 하나(5열).
+// 보유 "전체"면 안 가진 정령이 실루엣으로 섞인다. 누르면 가진 정령 = 상세(레벨업·장착), 안 가진 정령 = 도감 설명(spiritDex.js).
+//   sel(state.spirit)  = { slot, element, grade, ownedOnly, detail } - 고른 수호자 칸 / 필터 / 상세·설명을 연 정령 id
 //   view(view.spirit)  = { cfg, owned, slots, pending, stones, gold, floorReward }
 import { t } from '../../config/i18n.js';
 import { getFontString } from '../../config/fonts.js';
 import { HUD_CONFIG } from '../../config/hud.js';
 import { fmt as fmtGold, spiritEffectText } from '../shopText.js';
-import { levelUpCost } from '../../core/spirits/spirits.js';
+import { levelUpCost, dexEntries } from '../../core/spirits/spirits.js';
 import { drawSpirit, drawSpiritPortrait, drawSpiritStone, SPIRIT_GRADE_COLOR, SPIRIT_ELEMENT_COLOR, SPIRIT_SIZE } from '../spiritSprite.js';
-import { drawFixedImage } from '../uiKit.js';
+import { drawFixedImage, drawNine, getUi, uiReady } from '../uiKit.js';
+import { drawImageSnapped } from '../screenFit.js';
 import { nine, label } from './prepPopup.js';
+import { drawDexCell, drawDexInfo } from './spiritDex.js';
 
-const ELEMENTS = ['red', 'blue', 'yellow', 'green', 'purple'];
-const GRADES = ['common', 'rare', 'epic', 'legend'];
+// 필터 순환 순서(docs/spirits.md 7장)와 "전체" 값. 보유 필터는 true = 보유만(기본), false = 전체.
+export const FILTER_CYCLE = { element: [null, 'red', 'blue', 'green', 'purple', 'yellow'], grade: [null, 'common', 'rare', 'epic', 'legend'], ownedOnly: [true, false] };
+export const FILTER_ALL = { element: null, grade: null, ownedOnly: false };
 const TOP_H = 28;
 const ROW_H = 44;
 const ROW_GAP = 4;
-const FILTER_H = 30;
+const FILTER_H = 40;
+const HEAD_H = 16; // "보유 n / 30" 줄
+const SLOT_SLICE = [5, 5, 5, 5]; // items/slot_selected(22x22, 틀 두께 4 + 그림자 1)을 9-slice로
 const COLS = 5;
 const C = { title: HUD_CONFIG.text.title, text: HUD_CONFIG.text.primary, sub: HUD_CONFIG.text.dim, outline: '#0d0a10', green: HUD_CONFIG.popup.upgradeColor, chip: '#8cc4ee', white: '#ffffff', star: '#f2d264', starOff: '#3b3347' };
 
 const rect = (x, y, width, height) => ({ x, y, width, height });
 
 export function newSpiritSel() {
-  return { slot: 0, element: null, grade: null, detail: null };
+  return { slot: 0, element: null, grade: null, ownedOnly: true, detail: null };
 }
 
-// 목록에 보일 보유 정령 id(config 순서 = 속성·등급 순), 필터 적용.
+// 필터 버튼 탭 = 다음 값, 길게 누르기 = 전체로. 열어 둔 상세·설명은 닫는다.
+export function cycleFilter(sel, kind) {
+  const list = FILTER_CYCLE[kind];
+  sel[kind] = list[(list.indexOf(sel[kind]) + 1) % list.length];
+  sel.detail = null;
+}
+
+export function resetFilter(sel, kind) {
+  sel[kind] = FILTER_ALL[kind];
+  sel.detail = null;
+}
+
+// 목록에 보일 정령 id(config 순서 그대로 - 정렬하지 않는다), 속성·등급 필터 + 보유만(ownedOnly)이면 가진 것만.
 export function spiritList(cfg, owned, sel) {
-  return Object.keys(cfg.spirits).filter((id) => owned[id] && (!sel.element || cfg.spirits[id].element === sel.element) && (!sel.grade || cfg.spirits[id].grade === sel.grade));
+  return dexEntries(cfg, owned, sel).ids.filter((e) => e.owned || sel.ownedOnly === false).map((e) => e.id);
 }
 
 function gradeFrame(ctx, r, grade, width = 2) {
@@ -48,7 +66,8 @@ function stars(ctx, x, y, n, max, size = 4) {
 }
 
 // c = 본문 사각형. 반환 = 터치 목록 [{ r, hit }] (hitSpiritTab이 읽는다).
-export function drawSpiritTab(ctx, assets, c, view, sel, towers, drawStatue, nowMs) {
+// uiScale = 화면 px / basis px(prepPopup layout.scale) - 필터 글자를 화면 11px 아래로 안 줄이는 데 쓴다.
+export function drawSpiritTab(ctx, assets, c, view, sel, towers, drawStatue, nowMs, uiScale = 1) {
   const hits = [];
   const { cfg, owned, slots } = view;
 
@@ -87,38 +106,69 @@ export function drawSpiritTab(ctx, assets, c, view, sel, towers, drawStatue, now
 
   const area = rect(c.x, y + 4, c.width, c.y + c.height - y - 4);
   if (area.height < 80) return hits;
-  if (sel.detail && owned[sel.detail]) drawDetail(ctx, assets, area, view, sel, towers, hits, nowMs);
-  else drawList(ctx, assets, area, view, sel, hits, nowMs);
+  // 목록 위: 오른쪽 "보유 n / 30"(항상) + 필터 버튼 3개(속성·등급·보유, 누를 때마다 다음 값, 길게 누르면 전체).
+  const dex = dexEntries(cfg, owned);
+  label(ctx, t('spirit.dexCount', { n: dex.ownedCount, max: dex.total }), rect(area.x, area.y, area.width, HEAD_H), C.title, 12, true, 'right');
+  const fy = area.y + HEAD_H + 2;
+  drawFilters(ctx, assets, rect(area.x, fy, area.width, FILTER_H), sel, hits, uiScale);
+  const rest = rect(area.x, fy + FILTER_H + 6, area.width, area.y + area.height - fy - FILTER_H - 6);
+  if (sel.detail && cfg.spirits[sel.detail]) {
+    if (owned[sel.detail]) drawDetail(ctx, assets, rest, view, sel, towers, hits, nowMs);
+    else drawInfo(ctx, assets, rest, view, sel, hits, nowMs);
+  } else drawList(ctx, assets, rest, view, sel, hits, nowMs);
   return hits;
 }
 
+// 필터 버튼 한 칸의 글자(+ 속성 잼 아이콘 색).
+function filterText(kind, sel) {
+  if (kind === 'element') return sel.element ? t(`spirit.element.${sel.element}`) : t('spirit.filter.elementAll');
+  if (kind === 'grade') return sel.grade ? t(`spirit.grade.${sel.grade}`) : t('spirit.filter.gradeAll');
+  return sel.ownedOnly ? t('spirit.filter.ownedOnly') : t('spirit.filter.all');
+}
+
+// 같은 폭 버튼 3개(간격 4). 전체가 아닌 값이면 slot_selected 틀. 글자 = 본문 22 기준, 안 들어가면 줄이되 화면 11px 아래로는 안 내린다.
+function drawFilters(ctx, assets, a, sel, hits, uiScale) {
+  const w = (a.width - 8) / 3;
+  const minSize = Math.ceil(11 / uiScale);
+  const PAD = 14; // slot_selected 틀 두께(5 x 2) + 여유 - 글자가 틀에 닿지 않게
+  ['element', 'grade', 'ownedOnly'].forEach((kind, i) => {
+    const r = rect(Math.round(a.x + i * (w + 4)), a.y, Math.round(w), a.height);
+    const active = sel[kind] !== FILTER_ALL[kind];
+    const st = active ? getUi(assets, 'items/slot_selected.png') : null;
+    if (st && uiReady(st)) drawNine(ctx, st.img, SLOT_SLICE, r.x, r.y, r.width, r.height, 2);
+    else nine(ctx, assets, active ? 'upgrade/card_selected.png' : 'menu/inset.png', r, active ? HUD_CONFIG.popup.ghost : C.outline);
+    const text = filterText(kind, sel);
+    const icon = kind === 'element' && sel.element ? 24 : 0; // 그 속성 잼(몸통 32 -> 24)
+    let size = 22;
+    ctx.font = getFontString(size, true);
+    while (size > minSize && ctx.measureText(text).width + icon + (icon ? 6 : 0) > r.width - PAD * 2) ctx.font = getFontString(--size, true);
+    const tw = Math.min(r.width - PAD * 2 - icon - (icon ? 6 : 0), ctx.measureText(text).width);
+    const x0 = Math.round(r.x + (r.width - tw - icon - (icon ? 6 : 0)) / 2);
+    if (icon) drawGem(ctx, assets, sel.element, x0, r.y + (r.height - icon) / 2, icon);
+    const color = kind === 'grade' && sel.grade ? SPIRIT_GRADE_COLOR[sel.grade] : active ? C.text : C.sub;
+    label(ctx, text, rect(x0 + icon + (icon ? 6 : 0), r.y, tw + 1, r.height), sel.grade === 'common' && kind === 'grade' ? C.sub : color, size, true, 'left');
+    hits.push({ r, hit: { type: 'spiritFilter', kind } });
+  });
+}
+
+// 잼 미니 아이콘(assets/gems normal, 몸통만). 그림이 없으면 속성 색 네모.
+function drawGem(ctx, assets, color, x, y, size) {
+  const st = assets?.gemImages?.get(`${color}_normal`);
+  if (uiReady(st)) {
+    const body = assets.gemBodySize ?? 32;
+    const pad = ((assets.gemTileSize ?? 48) - body) / 2;
+    drawImageSnapped(ctx, st.img, pad, pad, body, body, Math.round(x), Math.round(y), size, size);
+    return;
+  }
+  ctx.fillStyle = SPIRIT_ELEMENT_COLOR[color][1];
+  ctx.fillRect(Math.round(x + 4), Math.round(y + 4), size - 8, size - 8);
+}
+
+// 하나로 합친 목록: config 순서, 필터 적용. 가진 정령 = 등급 테두리 + Lv·별(·장착 중), 안 가진 정령 = #221c2b 실루엣.
 function drawList(ctx, assets, a, view, sel, hits, nowMs) {
   const { cfg, owned, slots } = view;
-  // 필터 한 줄: 전체 + 속성 5(색 칩) | 등급 4(테두리 색 글자).
-  const ew = 30;
-  const chips = [{ key: null, kind: 'element' }, ...ELEMENTS.map((key) => ({ key, kind: 'element' })), ...GRADES.map((key) => ({ key, kind: 'grade' }))];
-  const gw = Math.floor((a.width - 6 * (ew + 4) - 8 - 3 * 4) / 4);
-  let x = a.x;
-  chips.forEach((ch, i) => {
-    const w = ch.kind === 'element' ? ew : gw;
-    if (i === 6) x += 8;
-    const r = rect(x, a.y, w, FILTER_H - 4);
-    const on = ch.kind === 'element' ? sel.element === ch.key : sel.grade === ch.key;
-    nine(ctx, assets, on ? 'upgrade/tab_on.png' : 'menu/inset.png', r, on ? HUD_CONFIG.popup.ghost : C.outline);
-    if (ch.kind === 'grade') label(ctx, t(`spirit.grade.${ch.key}`), r, on ? C.text : SPIRIT_GRADE_COLOR[ch.key], 11, true, 'center');
-    else if (ch.key == null) label(ctx, t('inv.filter.all'), r, on ? C.text : C.sub, 11, true, 'center');
-    else {
-      ctx.fillStyle = C.outline;
-      ctx.fillRect(r.x + w / 2 - 7, r.y + r.height / 2 - 7, 14, 14);
-      ctx.fillStyle = SPIRIT_ELEMENT_COLOR[ch.key][on ? 2 : 1];
-      ctx.fillRect(r.x + w / 2 - 5, r.y + r.height / 2 - 5, 10, 10);
-    }
-    hits.push({ r, hit: { type: 'spiritFilter', kind: ch.kind, key: ch.key } });
-    x += w + 4;
-  });
-
   const ids = spiritList(cfg, owned, sel);
-  const top = a.y + FILTER_H + 2;
+  const top = a.y;
   if (ids.length === 0) {
     label(ctx, t('spirit.none'), rect(a.x, top, a.width, 40), C.sub, 12, false, 'center');
     return;
@@ -131,6 +181,11 @@ function drawList(ctx, assets, a, view, sel, hits, nowMs) {
     const sp = cfg.spirits[id];
     const own = owned[id];
     const r = rect(a.x + (i % COLS) * (cellW + 4), top + Math.floor(i / COLS) * (cellH + 4), cellW, cellH);
+    hits.push({ r, hit: { type: 'spiritItem', id } });
+    if (!own) {
+      drawDexCell(ctx, assets, r, cfg, id, false, false, nowMs);
+      return;
+    }
     nine(ctx, assets, 'menu/inset.png', r, C.outline);
     gradeFrame(ctx, r, sp.grade);
     drawSpirit(ctx, assets, id, sp.element, Math.round(r.x + 8), Math.round(r.y + (cellH - SPIRIT_SIZE * k) / 2), k, nowMs + i * 90);
@@ -145,8 +200,18 @@ function drawList(ctx, assets, a, view, sel, hits, nowMs) {
       if (ctx.measureText(mark).width <= mw && cellH >= 38) label(ctx, mark, rect(tx, r.y + cellH / 2 - 7, mw, 14), C.green, 10, true, 'left');
       else gradeFrame(ctx, rect(r.x + 2, r.y + 2, r.width - 4, r.height - 4), null, 2);
     }
-    hits.push({ r, hit: { type: 'spiritItem', id } });
   });
+}
+
+// 안 가진 정령: 도감 설명(이름·등급·속성·역할·1레벨 기준 효과). 레벨업·장착 없음, "목록"으로 돌아가기만.
+function drawInfo(ctx, assets, a, view, sel, hits, nowMs) {
+  nine(ctx, assets, 'menu/inset.png', a, C.outline);
+  drawDexInfo(ctx, assets, a, view.cfg, sel.detail, null, nowMs);
+  const P = 10;
+  const back = rect(a.x + a.width - P - 64, a.y + a.height - P - 40, 64, 40);
+  const bm = nine(ctx, assets, 'buttons/btn_secondary.png', back, HUD_CONFIG.popup.ghost);
+  label(ctx, t('spirit.back'), back, bm?.textColor ?? C.text, 13, true, 'center');
+  hits.push({ r: back, hit: { type: 'spiritBack' } });
 }
 
 function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {

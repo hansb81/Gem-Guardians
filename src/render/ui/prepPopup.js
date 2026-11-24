@@ -207,7 +207,7 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   drawTab(ctx, assets, layout.tabs[state.tab], state.tab, true);
 
   if (layout.statue) drawStatueTab(ctx, assets, state, layout.statue, view);
-  else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStatue, view.nowMs) : null;
+  else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStatue, view.nowMs, layout.scale) : null;
   else layout.vaultHits = view.drawVault ? view.drawVault(layout.content) : null;
 
   for (const a of layout.actions) {

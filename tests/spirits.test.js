@@ -608,3 +608,51 @@ test('획득 팝업 이름: 칸 폭을 넘으면 띄어쓰기에서 두 줄, 안
   assert.equal(splitName('Copper Squirrel Spirit', 60, measure).length, 2);
   assert.deepEqual(splitName('Clockwork', 60, measure), ['Clockwork']);
 });
+
+test('dexEntries: 30종 전부(config 순서), 필터는 목록에만, 보유 수는 전체 기준', async () => {
+  const { dexEntries } = await import('../src/core/spirits/spirits.js');
+  const owned = { fire_wisp: { lv: 1, star: 1 }, phoenix: { lv: 3, star: 2 }, ice_owl: { lv: 1, star: 1 } };
+  const all = dexEntries(CFG, owned);
+  assert.deepEqual([all.ids.length, all.total, all.ownedCount], [30, 30, 3]);
+  assert.deepEqual(all.ids.map((e) => e.id), Object.keys(CFG.spirits));
+  assert.equal(all.ids.find((e) => e.id === 'phoenix').owned, true);
+  assert.equal(all.ids.find((e) => e.id === 'flame_fox').owned, false);
+  const red = dexEntries(CFG, owned, { element: 'red' });
+  assert.deepEqual([red.ids.length, red.ownedCount], [6, 3], '속성 필터 - 보유 수는 그대로 전체 기준');
+  assert.deepEqual(dexEntries(CFG, owned, { element: 'red', grade: 'legend' }).ids, [{ id: 'phoenix', owned: true }]);
+});
+
+test('정령 탭 필터: 탭 = 다음 값(속성 불→얼음→숲→독→번개, 등급 일반→전설, 보유만↔전체), 길게 = 전체, 목록은 config 순서', async () => {
+  const { newSpiritSel, cycleFilter, resetFilter, spiritList, FILTER_ALL } = await import('../src/render/ui/spiritTab.js');
+  const sel = newSpiritSel();
+  assert.deepEqual([sel.element, sel.grade, sel.ownedOnly], [null, null, true], '기본 = 속성·등급 전체, 보유만');
+  const seen = [];
+  for (let i = 0; i < 6; i++) {
+    cycleFilter(sel, 'element');
+    seen.push(sel.element);
+  }
+  assert.deepEqual(seen, ['red', 'blue', 'green', 'purple', 'yellow', null]);
+  const grades = [];
+  for (let i = 0; i < 5; i++) {
+    cycleFilter(sel, 'grade');
+    grades.push(sel.grade);
+  }
+  assert.deepEqual(grades, ['common', 'rare', 'epic', 'legend', null]);
+  cycleFilter(sel, 'ownedOnly');
+  assert.equal(sel.ownedOnly, false);
+  cycleFilter(sel, 'ownedOnly');
+  assert.equal(sel.ownedOnly, true);
+  sel.detail = 'phoenix';
+  cycleFilter(sel, 'grade');
+  assert.equal(sel.detail, null, '필터를 바꾸면 열어 둔 상세는 닫는다');
+  resetFilter(sel, 'grade');
+  resetFilter(sel, 'ownedOnly');
+  assert.deepEqual([sel.grade, sel.ownedOnly], [FILTER_ALL.grade, false], '길게 = 전체(보유는 "전체" = 안 가진 것도)');
+
+  const owned = { phoenix: { lv: 1, star: 1 }, ember_rat: { lv: 1, star: 1 }, snow_fairy: { lv: 1, star: 1 } };
+  const ids = Object.keys(CFG.spirits);
+  assert.deepEqual(spiritList(CFG, owned, { ...newSpiritSel() }), ids.filter((id) => owned[id]), '보유만 - config 순서');
+  assert.deepEqual(spiritList(CFG, owned, { ...newSpiritSel(), ownedOnly: false }), ids, '보유 전체 = 30종, 정렬 그대로');
+  assert.deepEqual(spiritList(CFG, owned, { ...newSpiritSel(), ownedOnly: false, element: 'red', grade: 'legend' }), ['phoenix']);
+  assert.deepEqual(spiritList(CFG, owned, { ...newSpiritSel(), element: 'yellow' }), [], '조건에 맞는 정령이 없으면 빈 목록');
+});
