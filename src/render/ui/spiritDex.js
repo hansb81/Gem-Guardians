@@ -1,5 +1,5 @@
-// 정령 도감 그리기(docs/spirits.md 7장) - 정령 탭의 "도감" 모드가 쓴다(예전 상점 정령 레일의 격자·설명 칸을 옮긴 것).
-// 좌표는 호출부(정비 팝업)의 basis 그대로. 가진 정령 = 밝게 + 등급 테두리, 없는 정령 = #221c2b 실루엣.
+// 정령 도감 그리기(docs/spirits.md 7장) - 정령 탭 목록의 안 가진 정령 칸과 그 설명(예전 상점 정령 레일의 격자·설명 칸을 옮긴 것).
+// 좌표는 호출부(정비 팝업)의 basis 그대로. 칸은 등급 테두리 + 그림(가진 정령 = 밝게, 없는 정령 = #221c2b 실루엣).
 import { t } from '../../config/i18n.js';
 import { HUD_CONFIG } from '../../config/hud.js';
 import { spiritEffectText } from '../shopText.js';
@@ -21,7 +21,7 @@ function frame(ctx, r, color, w = 2) {
 export function drawDexCell(ctx, assets, r, cfg, id, owned, selected, nowMs) {
   const sp = cfg.spirits[id];
   nine(ctx, assets, 'menu/inset.png', r, C.outline);
-  if (owned) frame(ctx, r, SPIRIT_GRADE_COLOR[sp.grade]);
+  frame(ctx, r, SPIRIT_GRADE_COLOR[sp.grade]); // 안 가진 정령도 등급 테두리(그림만 실루엣)
   if (selected) frame(ctx, rect(r.x + 2, r.y + 2, r.width - 4, r.height - 4), C.white);
   const k = Math.max(1, Math.floor((Math.min(r.width, r.height) - 8) / SPIRIT_SIZE));
   const s = SPIRIT_SIZE * k;
