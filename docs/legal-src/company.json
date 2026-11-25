@@ -1,0 +1,13 @@
+{
+  "_doc": "이용약관·환불 안내(docs/terms.html, docs/refund.html)의 회사 정보 한 곳. 값을 채우고 node tools/legal_fill.mjs. 빈 값은 노란 빈칸으로 남는다. _en = 영어 쪽.",
+  "name": "",
+  "name_en": "",
+  "ceo": "",
+  "ceo_en": "",
+  "bizNo": "",
+  "mailOrderNo": "",
+  "address": "",
+  "address_en": "",
+  "email": "",
+  "phone": ""
+}

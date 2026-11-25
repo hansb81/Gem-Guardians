@@ -45,7 +45,9 @@ export const ko = {
         '"16x16 Enchanted Forest Characters" by Superdark (CC0)',
         '그 밖의 그림과 오디오는 직접 제작했습니다.',
         { head: '이용약관' },
-        '준비 중입니다.',
+        { link: 'terms', text: '전문 보기' },
+        { head: '환불 안내' },
+        { link: 'refund', text: '전문 보기' },
         { head: '개인정보처리방침' },
         { link: 'privacy', text: '전문 보기' },
         { head: '오픈소스 라이선스' },
@@ -407,8 +409,45 @@ export const ko = {
     dia: { name: '다이아 {n}', bonus: '보너스 +{n}', first: '첫 구매: {n}', amount: '받는 양 {n}', long: '다이아 {n}개를 산다.', longFirst: '다이아 {n}개를 산다. 첫 구매라 기본 다이아가 2배.' },
     slot4: { name: '4번째 슬롯', desc: '하단 아이템 슬롯 1칸', desc2: '영구 추가', long: '하단 슬롯 4번째 칸을 바로 연다. 20층 보스를 처음 잡아도 무료로 열린다.' },
     goldex: { small: '골드 소', mid: '골드 중', big: '골드 대', desc: '약 일반 층 {n}개 분량', desc2: '최고 층이 오르면 같이 커짐', long: '다이아 {dia}개로 골드 {gold}을 받는다. 양은 최고 도달 층의 일반 층 보상 {n}개 분량.' },
-    legal: { restore: '구매 내역 복원', terms: '이용약관', refund: '환불 안내', page: '{name} 페이지 자리' },
-    popup: { total: '총 가격', price: '가격', cancel: '취소', buy: '구매', unlock: '해금', pay: '결제하기', ok: '확인', claim: '받기', store: '여기서 스토어 결제 창이 뜹니다', store2: '(Google Play / App Store 자리)', done: '구매 완료', qtyN: '{n}개' },
+    // 약관·환불 고지(docs/legal-src/shop-refund-notice.md ①②③ 그대로). 상점 맨 아래 작은 글씨 + 링크 줄.
+    legal: { restore: '구매 내역 복원', terms: '이용약관', refund: '환불 안내' },
+    notice: {
+      refund: '구매 후 7일 안에, 받은 아이템을 하나도 쓰지 않았다면 청약철회(환불)할 수 있어요. 일부를 쓴 묶음 상품, 보너스를 쓴 다이아, 이미 적용되어 쓴 상품은 철회가 제한돼요. 결제·환불은 각 마켓 정책을 함께 따릅니다.',
+      minor: '만 19세 미만은 부모님 등 법정대리인의 동의를 받고 구매해 주세요. 동의 없는 결제는 취소할 수 있어요.',
+      guest: '게스트 계정은 앱을 지우거나 기기를 바꾸면 아이템이 사라질 수 있어요. 구매 전에 계정 연결을 권해요.',
+    },
+    // ② 구매 확인 팝업의 철회 제한 한 줄(구매 전에 보여야 함 - 전자상거래법 제17조 제6항).
+    withdraw: {
+      dia: '받은 다이아(첫 구매 보너스 포함)를 쓰면 청약철회할 수 없어요.',
+      diaFirst: '첫 구매 2배! 환불 시 보너스도 함께 회수되고 다시 받을 수 없어요.',
+      pack: '구성품을 하나라도 쓰면 청약철회할 수 없어요.',
+      slot4: '구매 즉시 적용돼요. 슬롯을 전투에서 쓰거나 무지개를 쓰면 청약철회할 수 없어요.',
+      adfree: '구매 즉시 적용돼요. 광고 없이 보상을 한 번 받거나 다이아를 쓰면 청약철회할 수 없어요.',
+      pass: '보상을 받기 시작하면 청약철회는 안 되고, 남은 일수만큼 해지 환불(위약금 10%)을 신청할 수 있어요.',
+    },
+    // ③ 환불 안내 팝업. market = 그 빌드 마켓 줄만(platform.id), 원스토어 빌드에 다른 마켓 이름이 나오면 안 된다.
+    refundPop: {
+      title: '환불 안내',
+      lines: ['• 구매 후 7일 안에, 받은 것을 하나도 쓰지 않았다면 전액 환불돼요.', '• 환불하면 그 결제로 받은 다이아·아이템·보너스를 회수해요.', '• 패스는 받기 시작한 뒤에도 남은 일수만큼 해지 환불할 수 있어요.', '• 신청 방법'],
+      market: {
+        android: '  – Google Play: 48시간 안에는 Google Play에서, 그 뒤에는 아래 이메일로',
+        onestore: '  – 원스토어: 원스토어 구매내역 또는 아래 이메일로',
+        ios: '  – App Store: Apple(reportaproblem.apple.com)에 직접',
+        toss: '  – 토스: 아래 이메일로',
+      },
+      ask: '• 보내 주실 것: 회원 번호(이 화면 아래), 마켓 주문 번호, 구매 날짜, 상품명',
+      contact: '• 문의: {email}',
+      noEmail: '[이메일]',
+      id: '회원 번호: {id}',
+      noId: '회원 번호: (서버 연결 안 됨)',
+      copy: '복사',
+      copied: '회원 번호를 복사했어요',
+      full: '전문 보기',
+      url: '전문: {url}',
+    },
+    // 외부 링크가 없는 마켓(토스)의 이용약관 - 짧은 팝업 + 주소 글자.
+    termsPop: { title: '이용약관', body: '이용약관 전문은 아래 주소에서 볼 수 있어요.' },
+    popup: { total: '총 가격', price: '가격', cancel: '취소', buy: '구매', unlock: '해금', pay: '결제하기', ok: '확인', claim: '받기', store: { android: 'Google Play로 결제돼요', onestore: '원스토어로 결제돼요', ios: 'App Store로 결제돼요', toss: '토스로 결제돼요', web: '테스트 결제(실제 청구 없음)' }, done: '구매 완료', qtyN: '{n}개' },
     toast: {
       poorGold: '골드가 부족해요', poorDia: '다이아가 부족해요', toGoldex: '골드 교환', toDia: '다이아 충전',
       bought: '{name} ×{n} 구매', unlocked: '{name} 해금', levelUp: '{name} Lv {lv}', maxLevel: '이미 최대 레벨이에요', already: '이미 구매했어요',
@@ -432,7 +471,7 @@ export const ko = {
       streakBroken: '연속이 끊겼어요. 오늘부터 다시 1일!', streakBonusTitle: '7일 연속 출석 보너스!',
     },
     mail: { empty: '우편이 없어요', claim: '받기', claimed: '받음', delete: '삭제' },
-    about: { code: '플레이어 코드 {code}', noCode: '플레이어 코드 (연결 안 됨)', copied: '복사했어요' },
+    about: { code: '회원 번호 {code}', noCode: '회원 번호 (연결 안 됨)', copied: '복사했어요', copy: '복사' },
   },
   // 경쟁 모드(docs/ranking.md 5장) - 무한 웨이브.
   comp: {

@@ -701,6 +701,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       save: () => playerState.save(),
       showReward: (r) => rewardPopup.show(r),
       itemIcons: () => renderer.itemAssets?.icons,
+      playerId: () => net.playerId ?? null, // 환불 안내 팝업의 회원 번호(설정 > 게임 정보의 회원 번호와 같은 id)
     });
     // 결제는 됐는데 지급 전에 꺼진 주문(토스 getPendingOrders 등) - 상점 데이터가 준비된 지금 다시 지급한다.
     iapEnv = {

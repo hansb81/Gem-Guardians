@@ -204,7 +204,7 @@ function railDia(ctx) {
   }
   out.push(hdr('goldex'));
   for (const g of cfg.goldExchange) out.push({ id: `goldex.${g.id}`, kind: 'goldEx', exId: g.id, cur: 'dia', price: g.dia, gold: goldOf(ctx, g.floors), floors: g.floors, stack: g.stack, state: '' });
-  if (out[0].hdr === 'diaBuy') out.push({ legal: true }); // 현금 상품이 없는 마켓·빌드는 약관·환불 고지도 없다.
+  out.push({ legal: true }); // 현금 상품이 없는 마켓·빌드(웹)는 render가 이용약관 링크만 그린다.
   return out;
 }
 

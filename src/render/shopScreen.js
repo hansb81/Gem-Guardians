@@ -15,6 +15,7 @@ import { ITEM_CAP } from '../core/inventory/inventory.js';
 import { productText, gotText, fmt } from './shopText.js';
 import { rewardFromDelta } from './rewardPopup.js';
 import { drawImageSnapped, screen } from './screenFit.js';
+import { GAME_INFO } from '../config/gameInfo.js';
 
 // 획득 팝업으로 알리는 상품(나머지는 토스트) - docs/inventory.md 5-2.
 const REWARD_KINDS = new Set(['pack', 'passClaim', 'free']);
@@ -52,7 +53,10 @@ const PANEL = [118, 96, 410, 852];
 const LIST = { x: 126, y: 104, w: 394, h: 836, padTop: 10, padBottom: 16, gap: 8 };
 const CARD = { x: 127, w: 392, h: 96, bannerH: 220 };
 const HDR_H = 38;
-const LEGAL_H = 44;
+const LEGAL_H = 44; // 맨 아래 링크 줄(그 위에 ① 작은 글씨 - 결제가 되는 마켓만)
+const NOTICE_LINE = 15;
+const NOTICE_GAP = 6;
+const NOTICE_KEYS = ['refund', 'minor', 'guest'];
 const POP = { x: 40, w: 460, border: 32 };
 const TOAST = [40, 764, 460, 76];
 const TOAST_MS = 2800;
@@ -61,6 +65,14 @@ const STACK_POS = { 1: [[22, 6]], 3: [[8, 12], [36, 12], [22, 0]], 5: [[0, 12], 
 
 function inRect(x, y, [rx, ry, rw, rh]) {
   return x >= rx && x < rx + rw && y >= ry && y < ry + rh;
+}
+
+// ② 구매 확인 팝업의 철회 제한 줄(docs/legal-src/shop-refund-notice.md). [locale 키, 색].
+function withdrawLines(p, packs) {
+  if (p.kind === 'diaBundle') return p.first ? [['dia', C.redL], ['diaFirst', C.goldL]] : [['dia', C.redL]];
+  if (p.kind !== 'pack') return [];
+  const key = packs[p.pack]?.pass ? 'pass' : p.pack === 'slot4' || p.pack === 'adfree' ? p.pack : 'pack';
+  return [[key, C.redL]];
 }
 
 function localDay(ms) {
@@ -84,6 +96,7 @@ export class ShopScreen {
     this.newPack = false;
     this.sel = null; // 마지막으로 누른 카드 id(card_selected)
     this.popup = null; // { p, tx, qty, step: 'confirm'|'paying'|'done', got, layout, layoutK }
+    this.legalPop = null; // ③ 환불 안내(토스는 이용약관도) 짧은 팝업 { kind: 'refund'|'terms', layout, layoutK }
     this.toast = null; // { msg, action: [label, to] | null, until }
     this._pressed = null;
     this._drag = null;
@@ -107,6 +120,7 @@ export class ShopScreen {
     this.rail = rail;
     this.scroll = 0;
     this.popup = null;
+    this.legalPop = null;
     this.toast = null;
     this.sel = null;
     this.changed = false;
@@ -279,6 +293,7 @@ export class ShopScreen {
     this._nine(ctx, 'upgrade/tab_body.png', ...PANEL);
     this._drawList(ctx, now);
     if (this.popup) this._drawPopup(ctx, nowMs);
+    if (this.legalPop) this._drawLegalPop(ctx);
     if (this.toast) {
       if (now > this.toast.until) this.toast = null;
       else this._drawToast(ctx);
@@ -321,12 +336,13 @@ export class ShopScreen {
     ctx.beginPath();
     ctx.rect(offsetX + LIST.x * k, offsetY + LIST.y * k, LIST.w * k, LIST.h * k);
     ctx.clip();
+    this._legalRow(ctx);
     const top = this.scroll;
     for (const row of this.entries) {
       if (row.y + row.h + 16 < top || row.y - 16 > top + LIST.h) continue;
       const y = LIST.y + row.y - top;
       if (row.e.hdr) this._drawHeader(ctx, row, y);
-      else if (row.e.legal) this._drawLegal(ctx, y);
+      else if (row.e.legal) this._drawLegal(ctx, row, y);
       else if (row.e.banner) this._drawBanner(ctx, row, y, now);
       else this._drawCard(ctx, row, y);
     }
@@ -342,9 +358,21 @@ export class ShopScreen {
     this._fill(ctx, C.bg2, x, y + HDR_H - 2, CARD.w, 2);
   }
 
-  // 구매 내역 복원은 복원이 있는 마켓(iOS)에서만.
+  // 구매 내역 복원은 복원이 있는 마켓(iOS)에서만. 결제가 없는 빌드(웹)는 이용약관만.
   _legalParts() {
+    if (!platform.caps.iap) return ['terms'];
     return platform.caps.restore ? ['restore', 'terms', 'refund'] : ['terms', 'refund'];
+  }
+
+  // 맨 끝 법적 고지 줄: ① 작은 글씨를 배율이 바뀔 때만 다시 줄바꿈하고 높이를 반영한다(맨 끝이라 다른 줄 위치는 그대로).
+  _legalRow(ctx) {
+    const row = this.entries[this.entries.length - 1];
+    if (!row?.e.legal || row.linesK === this._transform.k) return;
+    row.lines = platform.caps.iap ? NOTICE_KEYS.map((key) => this._wrap(ctx, t(`shop.notice.${key}`), CARD.w - 8, 11)) : [];
+    row.linesK = this._transform.k;
+    row.h = row.lines.reduce((h, para) => h + para.length * NOTICE_LINE + NOTICE_GAP, 0) + LEGAL_H;
+    this.contentH = row.y + row.h + LIST.padBottom;
+    this._clampScroll();
   }
 
   // 결제가 끝난 주문 지급(시작 시 미지급 복구·구매 복원) - 성공이면 true(어댑터가 스토어에 지급 완료를 알린다).
@@ -378,7 +406,14 @@ export class ShopScreen {
     this._showToast(n > 0 ? t('shop.toast.restored', { n }) : t('shop.toast.restoreNone'));
   }
 
-  _drawLegal(ctx, y) {
+  _drawLegal(ctx, row, y) {
+    for (const para of row.lines ?? []) {
+      for (const line of para) {
+        this._text(ctx, line, CARD.x + 4, y + NOTICE_LINE / 2, 11, C.bone);
+        y += NOTICE_LINE;
+      }
+      y += NOTICE_GAP;
+    }
     const parts = this._legalParts();
     const w = CARD.w / parts.length;
     parts.forEach((p, i) => {
@@ -555,7 +590,13 @@ export class ShopScreen {
     add('para', para.length * 18, 8, { lines: para });
     if (tx.info?.length) add('info', tx.info.length * 16 + 22, 8);
     const krw = p.cur === 'krw';
-    if (krw && step !== 'done') add('note', 52, 8, { lines: [t('shop.popup.store'), t('shop.popup.store2')] });
+    if (krw && step !== 'done') {
+      const wd = withdrawLines(p, this.env.cfg.packs).flatMap(([key, color]) => this._wrap(ctx, t(`shop.withdraw.${key}`), innerW - 28, 11).map((text) => ({ text, color })));
+      if (wd.length) add('withdraw', wd.length * 16 + 20, 8, { lines: wd });
+    }
+    // 결제 수단 한 줄 - 그 빌드 마켓 이름만(원스토어 빌드에 다른 마켓 이름 금지). 웹 = dev 가짜 결제뿐.
+    const stores = t('shop.popup.store');
+    if (krw && step !== 'done') add('note', 38, 8, { lines: [stores[platform.id] ?? stores.web] });
     if (p.kind === 'free' && tx.note) add('note', 38, 8, { lines: tx.note });
     if (krw && step === 'done') add('done', 64, 8);
     if (p.qty && step === 'confirm') add('qty', 52, 10);
@@ -630,6 +671,9 @@ export class ShopScreen {
           this._text(ctx, a, innerX + 14, ry + 19 + i * 16, 11, C.bg3);
           this._text(ctx, b, innerX + 14 + labelW + 12, ry + 19 + i * 16, 11);
         });
+      } else if (r.type === 'withdraw') {
+        this._nine(ctx, 'panels/panel_inset.png', innerX, ry, innerW, r.h);
+        r.lines.forEach((line, i) => this._text(ctx, line.text, innerX + 14, ry + 18 + i * 16, 11, line.color));
       } else if (r.type === 'note') {
         this._nine(ctx, 'panels/panel_inset.png', innerX, ry, innerW, r.h);
         r.lines.forEach((line, i) => this._text(ctx, line, innerX + innerW / 2, ry + 19 + i * 14, 11, C.bone, 'center'));
@@ -677,6 +721,105 @@ export class ShopScreen {
     const path = skin.startsWith('buttons/') && down ? `${skin}_pressed.png` : `${skin}.png`;
     this._nine(ctx, path, ...rect);
     this._text(ctx, label, rect[0] + rect[2] / 2, rect[1] + rect[3] / 2 - 1 + (down ? 2 : 0), size, color, 'center');
+  }
+
+  // ---- ③ 환불 안내 / (토스) 이용약관 짧은 팝업 ----
+
+  _openLegalPop(kind) {
+    this.legalPop = { kind, layout: null, layoutK: 0 };
+  }
+
+  _legalPopLayout(ctx) {
+    const pop = this.legalPop;
+    const k = this._transform.k;
+    if (pop.layout && pop.layoutK === k) return pop.layout;
+    const innerW = POP.w - POP.border * 2;
+    const refund = pop.kind === 'refund';
+    const ext = platform.caps.externalLinks;
+    const src = [];
+    if (refund) {
+      const m = t('shop.refundPop.market');
+      // 그 빌드 마켓 줄만(원스토어 빌드에 다른 마켓 이름 금지). 웹(dev 가짜 결제)만 전부.
+      src.push(...t('shop.refundPop.lines'), ...(m[platform.id] ? [m[platform.id]] : Object.values(m)));
+      src.push(t('shop.refundPop.ask'), t('shop.refundPop.contact', { email: GAME_INFO.contactEmail || t('shop.refundPop.noEmail') }));
+    } else src.push(t('shop.termsPop.body'));
+    if (!ext) src.push(t('shop.refundPop.url', { url: GAME_INFO.links[pop.kind] }));
+    const lines = src.flatMap((str, i) => {
+      const indent = str.startsWith('  ') ? 18 : 0;
+      const url = !ext && i === src.length - 1;
+      return this._wrap(ctx, str.trim(), innerW - indent, 11).map((text) => ({ text, x: indent, url }));
+    });
+    let y = 0;
+    const rows = { head: y };
+    y += 44;
+    rows.text = y;
+    y += lines.length * 18 + 10;
+    if (refund) {
+      rows.id = y;
+      y += 52 + (ext ? 10 : 0);
+    }
+    if (ext) {
+      rows.full = y;
+      y += 52;
+    }
+    const h = y + POP.border * 2;
+    const top = Math.max(60, Math.round((BASIS_H - h) / 2));
+    pop.layout = { lines, rows, h, top, innerX: POP.x + POP.border, innerY: top + POP.border, innerW };
+    pop.layoutK = k;
+    return pop.layout;
+  }
+
+  _legalPopButtons(L) {
+    const { innerX, innerY, innerW, rows, top } = L;
+    const out = { x: { img: [POP.x + POP.w - 52 + 6, top + 8 + 6], hit: [POP.x + POP.w - 52 - 10, top - 8, 64, 64] } };
+    if (rows.id != null) {
+      out.idBox = [innerX, innerY + rows.id, innerW - 106, 52];
+      if (this.env.playerId?.()) out.copy = [innerX + innerW - 96, innerY + rows.id, 96, 52];
+    }
+    if (rows.full != null) out.full = [innerX, innerY + rows.full, innerW, 52];
+    return out;
+  }
+
+  _drawLegalPop(ctx) {
+    const F = screen.full;
+    const { offsetX, offsetY, k } = this._transform;
+    this._dither(ctx, (F.x - offsetX) / k, (F.y - offsetY) / k, F.width / k, F.height / k);
+    const L = this._legalPopLayout(ctx);
+    const b = this._legalPopButtons(L);
+    this._nine(ctx, 'menu/popup_menu.png', POP.x, L.top, POP.w, L.h);
+    this._img(ctx, `upgrade/btn_close${this._pressed === 'px' ? '_pressed' : ''}.png`, b.x.img[0], b.x.img[1]);
+    const title = this.legalPop.kind === 'refund' ? 'shop.refundPop.title' : 'shop.termsPop.title';
+    this._text(ctx, t(title), L.innerX, L.innerY + L.rows.head + 18, 22, C.goldL, 'left', false, true);
+    L.lines.forEach((l, i) => this._text(ctx, l.text, L.innerX + l.x, L.innerY + L.rows.text + 9 + i * 18, 11, l.url ? C.blueL : C.bone));
+    if (b.idBox) {
+      this._nine(ctx, 'panels/panel_inset.png', ...b.idBox);
+      const id = this.env.playerId?.();
+      // 설정 > 게임 정보의 회원 번호와 같은 앞 8자리, 복사는 전체 id(serverUi.js와 같게).
+      const label = id ? t('shop.refundPop.id', { id: id.slice(0, 8) }) : t('shop.refundPop.noId');
+      this._text(ctx, label, b.idBox[0] + 14, b.idBox[1] + 26, 11);
+    }
+    if (b.copy) this._button(ctx, 'buttons/btn_secondary', b.copy, t('shop.refundPop.copy'), 11, 'lcopy');
+    if (b.full) this._button(ctx, 'buttons/btn_primary', b.full, t('shop.refundPop.full'), 22, 'lfull');
+  }
+
+  _legalPopPointerDown(bx, by) {
+    const L = this.legalPop.layout;
+    if (!L) return;
+    const b = this._legalPopButtons(L);
+    const hit = (r) => r && inRect(bx, by, r);
+    if (hit(b.copy)) {
+      this._pressed = 'lcopy';
+      audio.play('ui_click');
+      navigator.clipboard?.writeText(this.env.playerId()).then(() => this._showToast(t('shop.refundPop.copied')), () => {});
+    } else if (hit(b.full)) {
+      this._pressed = 'lfull';
+      audio.play('ui_click');
+      platform.links.open(GAME_INFO.links[this.legalPop.kind]);
+    } else if (hit(b.x.hit) || !inRect(bx, by, [POP.x, L.top, POP.w, L.h])) {
+      this._pressed = hit(b.x.hit) ? 'px' : null;
+      audio.play('ui_cancel');
+      this.legalPop = null;
+    }
   }
 
   _drawToast(ctx) {
@@ -754,6 +897,10 @@ export class ShopScreen {
 
   // 뒤로 가기: 팝업 -> 토스트 순으로 닫는다. 닫은 게 있으면 true(상점은 그대로).
   closeOverlay() {
+    if (this.legalPop) {
+      this.legalPop = null;
+      return true;
+    }
     if (this.popup && this.popup.step !== 'paying') {
       this.popup = null;
       return true;
@@ -863,6 +1010,10 @@ export class ShopScreen {
   handlePointerDown(x, y) {
     if (!this._transform || !this.env) return null;
     const [bx, by] = this._toBasis(x, y);
+    if (this.legalPop) {
+      this._legalPopPointerDown(bx, by);
+      return null;
+    }
     if (this.popup) {
       this._popupPointerDown(bx, by);
       return null;
@@ -952,11 +1103,13 @@ export class ShopScreen {
     const row = this.entries.find((r) => ly >= r.y && ly < r.y + r.h);
     if (!row || row.e.hdr) return;
     if (row.e.legal) {
+      if (ly < row.y + row.h - LEGAL_H) return; // 위쪽 작은 글씨는 누를 데가 아니다.
       const parts = this._legalParts();
       const i = Math.max(0, Math.min(parts.length - 1, Math.floor(((drag.bx - CARD.x) / CARD.w) * parts.length)));
       audio.play('ui_click');
       if (parts[i] === 'restore') this._restore();
-      else this._showToast(t('shop.legal.page', { name: t(`shop.legal.${parts[i]}`) }));
+      else if (parts[i] === 'refund') this._openLegalPop('refund'); // 웹으로 바로 가지 않고 게임 안 짧은 안내부터
+      else if (!platform.links.open(GAME_INFO.links.terms)) this._openLegalPop('terms'); // 외부 링크가 없는 마켓(토스)
       return;
     }
     if (drag.bx < CARD.x || drag.bx >= CARD.x + CARD.w) return;
@@ -970,7 +1123,7 @@ export class ShopScreen {
   }
 
   handleWheel(deltaY) {
-    if (!this._transform || this.popup) return;
+    if (!this._transform || this.popup || this.legalPop) return;
     this.scroll += deltaY / this._transform.k;
     this._clampScroll();
   }

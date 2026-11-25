@@ -122,14 +122,20 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
         showGrant(res);
       });
     }
-    else if (action === 'playerCodeDown') {
+    else if (action === 'playerCodeDown' || action === 'playerCodeCopy') {
       clearTimeout(ui._holdTimer);
-      ui._holdTimer = setTimeout(() => {
+      const copy = () => {
         const c = net.playerId; // 화면엔 앞 8자리, 복사는 전체 uid - 문의 때 운영(우편·제재·삭제)에서 한 사람을 정확히 집도록.
         if (!c) return;
         navigator.clipboard?.writeText(c).then(() => notice('net.about.copied'), () => {});
-        audio.play('ui_click');
-      }, HOLD_MS);
+      };
+      if (action === 'playerCodeCopy') copy(); // [복사] 버튼(누름 소리는 pressButton이 냈다)
+      else {
+        ui._holdTimer = setTimeout(() => {
+          copy();
+          audio.play('ui_click');
+        }, HOLD_MS); // 코드 칸 길게 누르기
+      }
     } else if (action === 'cloudUseServer') {
       CloudSave.applyConflictServer().then((ok) => ok || menu.showToast(t('net.error')));
     } else if (action === 'cloudUseDevice') {

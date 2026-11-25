@@ -161,7 +161,7 @@ const ABOUT = { viewY: 84, viewBottom: 790, bodyX: 30, bodyW: 420, textSize: 13,
 const aboutLineH = (l) => (l.head ? ABOUT.headH : l.link ? ABOUT.linkH : ABOUT.lineH);
 // 서버가 켜져 있으면 게임 정보 아래에 플레이어 코드(길게 누르면 복사)와 데이터 삭제 요청 버튼(docs/server.md §10, §14-3).
 // cloudY = 클라우드 저장 한 줄(작은 글씨, 코드 칸과 삭제 버튼 사이).
-const ABOUT_NET = { viewBottom: 716, code: [30, 722, 420, 40], cloudY: 780 };
+const ABOUT_NET = { viewBottom: 716, code: [30, 722, 314, 40], copy: [354, 722, 96, 40], cloudY: 780 }; // copy = [복사](코드 칸 길게 누르기와 같음)
 // 저장 충돌(docs/auth.md §4-2, 카드 왼쪽 위 기준). 두 카드(서버 쪽 / 이 기기) + 각 [이걸로 계속]. confirm = 이 기기 고른 뒤 확인.
 const CONFLICT = {
   bodyY: [92, 116],
@@ -1299,14 +1299,16 @@ export class MainMenuScreen {
     return this.server ? ABOUT_NET.viewBottom : ABOUT.viewBottom;
   }
 
-  // 플레이어 코드(서버 id 앞 8자 - 문의 대응용, 길게 누르면 복사) + 내 데이터 삭제 요청.
+  // 회원 번호(서버 id 앞 8자 - 문의 대응용, [복사] 또는 길게 누르면 전체 복사) + 내 데이터 삭제 요청.
   _drawAboutNet(ctx, [cx, cy, cw]) {
     const code = this.server.playerCode();
     const notice = this.aboutNotice && performance.now() < this.aboutNotice.until ? t(this.aboutNotice.key) : null;
     const c = ABOUT_NET.code;
     if (!this._nine(ctx, 'panels/panel_inset.png', [cx + c[0], cy + c[1], c[2], c[3]])) this._panel(ctx, [cx + c[0], cy + c[1], c[2], c[3]], COLORS.bg2, COLORS.bg3);
     const text = notice ?? (code ? t('net.about.code', { code }) : t('net.about.noCode'));
-    this._text(ctx, text, cx + cw / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
+    this._text(ctx, text, cx + c[0] + c[2] / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
+    const cp = ABOUT_NET.copy;
+    if (code) this._drawButton(ctx, [cx + cp[0], cy + cp[1], cp[2], cp[3]], 'aboutCopy', 'btn_secondary', t('net.about.copy'));
     const cs = this.server.cloud?.();
     if (cs && (cs.on || cs.offline)) {
       const line = cs.on && cs.lastSyncAt ? t('menu.saveConflict.line', { time: shortTime(cs.lastSyncAt) }) : t('menu.saveConflict.pending');
@@ -1323,7 +1325,8 @@ export class MainMenuScreen {
     const versionLine = t('menu.about.version', GAME_INFO);
     for (const item of Array.isArray(body) ? body : []) {
       if (typeof item === 'object') {
-        lines.push(item);
+        // 외부 링크가 없는 마켓(토스) - 버튼 대신 주소를 글자로.
+        lines.push(item.link && !platform.caps.externalLinks ? { text: GAME_INFO.links[item.link] } : item);
         continue;
       }
       let line = '';
@@ -1529,6 +1532,10 @@ export class MainMenuScreen {
       if (this.server) {
         const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
         if (pointInRect(x, y, at(ABOUT_NET.code))) return 'playerCodeDown'; // main.js: 0.5초 누르고 있으면 복사
+        if (this.server.playerCode() && pressButton(x, y, at(ABOUT_NET.copy))) {
+          this._pressed = 'aboutCopy';
+          return 'playerCodeCopy';
+        }
       }
     }
 
