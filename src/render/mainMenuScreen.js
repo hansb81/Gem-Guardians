@@ -23,6 +23,7 @@ import { haptics } from '../platform/haptics.js';
 import { guardianFxSetting } from './guardianFx.js';
 import { drawImageSnapped, screen } from './screenFit.js';
 import { createDomInput, placeDomInput } from './ui/domInput.js';
+import { splitName } from './rewardPopup.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -588,6 +589,17 @@ export class MainMenuScreen {
     ctx.fillRect(r.x, r.y, r.width, r.height);
   }
 
+  // 출석 칸 글자 줄: 칸 폭을 넘는 줄은 획득 팝업과 같은 splitName으로 두 줄. 보상표·언어·배율이 바뀔 때만 다시 잰다.
+  _attLines(ctx, rewards, i) {
+    const key = `${getLocale()}|${this._transform.k}`;
+    if (this._attLinesOf !== rewards || this._attLinesKey !== key) {
+      this._attLinesOf = rewards;
+      this._attLinesKey = key;
+      this._attLinesCache = rewards.map((b) => this._bundleLines(b).flatMap((line) => splitName(line, ATT.cellW, (s) => this._measure(ctx, s, 10))));
+    }
+    return this._attLinesCache[i];
+  }
+
   _attCell(card, i) {
     const row = i < 4 ? 0 : 1;
     const n = row ? 3 : 4;
@@ -604,14 +616,16 @@ export class MainMenuScreen {
       const r = this._attCell(card, i);
       if (!this._nine(ctx, 'panels/panel_inset.png', r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
       this._text(ctx, t('net.att.day', { n: i + 1 }), r[0] + r[2] / 2, r[1] + 14, { size: 11, align: 'center', color: COLORS.title });
+      const lines = this._attLines(ctx, s.rewards, i);
+      const n = lines.length;
+      const iy = r[1] + (n > 3 ? 22 : 26); // 네 줄(영어 7일째)이면 아이콘을 4 올려 글자 자리를 만든다
       // 정령석이 있는 칸은 대표 아이콘 옆에 정령석 아이콘(32 그대로, 두 개 = 68 <= 칸 80).
       if (b.spiritStones && (b.diamonds || b.gold || b.items)) {
-        this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 34, r[1] + 26);
-        this._bundleIcon(ctx, STONE_ONLY, r[0] + r[2] / 2 + 2, r[1] + 26);
-      } else this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 16, r[1] + 26);
-      const lines = this._bundleLines(b);
-      const lh = lines.length > 2 ? 12 : 14; // 세 줄(7일째: 다이아·무지개·정령석)이면 줄 간격만 좁혀 칸 안에
-      lines.forEach((line, j) => this._text(ctx, line, r[0] + r[2] / 2, r[1] + (lines.length > 2 ? 65 : 70) + j * lh, { size: 10, align: 'center' }));
+        this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 34, iy);
+        this._bundleIcon(ctx, STONE_ONLY, r[0] + r[2] / 2 + 2, iy);
+      } else this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 16, iy);
+      const lh = n > 3 ? 11 : n > 2 ? 12 : 14; // 세 줄 이상(7일째·긴 영어 이름)이면 줄 간격만 좁혀 칸 안에
+      lines.forEach((line, j) => this._text(ctx, line, r[0] + r[2] / 2, r[1] + (n > 3 ? 59 : n > 2 ? 65 : 70) + j * lh, { size: 10, align: 'center' }));
       if (i < s.days) {
         const sr = this._toScreen(r);
         ctx.fillStyle = COLORS.overlay;
