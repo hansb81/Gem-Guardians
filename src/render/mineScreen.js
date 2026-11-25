@@ -340,7 +340,7 @@ export class MineScreen {
     }
     this.armed = null;
     const res = refineStone(cfg, player.mine, c);
-    if (this._result(res, res.ok ? t('spirit.got.stones', { n: 1 }) : null)) this._stoneFx = performance.now();
+    if (this._result(res, res.ok ? t('mine.gotStone', { n: 1 }) : null)) this._stoneFx = performance.now();
   }
 
   _refineItem(id) {
@@ -606,7 +606,7 @@ export class MineScreen {
     }, 'stone', C.dim);
     this._button(ctx, 'buttons/btn_secondary', STORE, v.storeLabel, 11, 'store');
     this._button(ctx, 'buttons/btn_secondary', BOOST, v.boostLabel, 11, 'boost');
-    if (v.pouchOk) this._img(ctx, 'menu/badge.png', QUICK[0] + QUICK[2] - 12, QUICK[1] - 6, 16, 16);
+    if (v.pouchOk) this._img(ctx, 'menu/badge.png', QUICK[0] + QUICK[2] - 18, QUICK[1] + 2, 16, 16); // 칸 안쪽 오른쪽 위(옆 정령석 칸과 안 겹치게)
   }
 
   // 수확 연출: 조각이 수레 더미에서 부채꼴로 튀어 올랐다 떨어지고, 수레 위에 "+받은 양"이 떠오른다.

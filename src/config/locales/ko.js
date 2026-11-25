@@ -582,7 +582,7 @@ export const ko = {
     guide1: '광맥이 시간이 지나면 원석을 캡니다. 앱을 꺼 둬도 쌓여요.', guide2: '원석으로 광맥을 키우면 더 많이 캡니다.', guide3: '정제소에서 원석을 골드와 아이템으로 바꾸세요.',
     next: '다음', start: '시작',
     guard: '강화하면 오늘 골드 주머니({cost})를 못 삽니다. 한 번 더 누르면 강화.', guardGold: '원석 {cost}을 씁니다. 한 번 더 누르면 정제.',
-    stoneDone: '내일 다시',
+    stoneDone: '내일 다시', gotStone: '정령석 +{n}',
     gotGold: '골드 +{n}', gotItem: '{name} +1', gotCart: '수레 +{n}', noDia: '다이아가 부족합니다',
   },
   tutorial: {
