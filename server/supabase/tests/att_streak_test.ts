@@ -44,18 +44,20 @@ const row = async (db: PGlite, who: string) =>
   (await db.query<{ days: number; streak: number; best_streak: number; streak_bonuses: number }>(
     "select days, streak, best_streak, streak_bonuses from public.attendance where player_id = $1", [who])).rows[0];
 const BONUS = ATTENDANCE_STREAK.bonus;
-const DAY7_PLUS = { diamonds: 50 + BONUS.diamonds, items: { rainbow: 1, revive: 1 } };
+const DAY7_PLUS = { diamonds: 50 + BONUS.diamonds, items: { rainbow: 1, revive: 1 }, spiritStones: 10 }; // 정령석 = 7일째 5 + 연속 보너스 5
 
 Deno.test("bundle_add: 숫자는 더하고 items는 id별로 더함, null·없는 키 안전", async () => {
   const db = await setup();
   const add = async (a: unknown, b: unknown) =>
     (await db.query<{ r: unknown }>("select public.bundle_add($1::jsonb, $2::jsonb) r",
       [a === undefined ? null : JSON.stringify(a), b === undefined ? null : JSON.stringify(b)])).rows[0].r;
-  assertEquals(await add({ diamonds: 50, items: { rainbow: 1 } }, BONUS), DAY7_PLUS);
+  assertEquals(await add(ATTENDANCE_DAYS[6], BONUS), DAY7_PLUS);
   assertEquals(await add({ items: { revive: 2, dye: 1 } }, { gold: 5, items: { revive: 1 } }), { gold: 5, items: { revive: 3, dye: 1 } });
   assertEquals(await add({ diamonds: 10 }, undefined), { diamonds: 10 });
   assertEquals(await add(undefined, { gold: 3 }), { gold: 3 });
   assertEquals(await add(null, { items: null }), {});
+  assertEquals(await add({ spiritStones: 5 }, { spiritStones: 5, diamonds: 1 }), { spiritStones: 10, diamonds: 1 }, "정령석도 더한다");
+  assertEquals(await add({ spiritStones: 5 }, undefined), { spiritStones: 5 });
 });
 
 Deno.test("연속 1: 7일 연속 -> 7일째 bundle = 판 7일 + 보너스, 그 전엔 보너스 없음", async () => {
@@ -108,7 +110,7 @@ Deno.test("연속 5: 빠진 뒤 다시 7일 연속 -> 판 칸과 어긋나도 7�
   // 판: 1·2일, 4~8일 = 3~7칸, 9·10일 = 새 판 1·2칸 / 연속: 4일부터 세어 10일이 7일째
   assertEquals([r.day, r.streak], [2, 7]);
   assertEquals(r.streakBonus, BONUS);
-  assertEquals(r.bundle, { diamonds: BONUS.diamonds, items: { repair: 1, revive: 1 } });
+  assertEquals(r.bundle, { diamonds: BONUS.diamonds, items: { repair: 1, revive: 1 }, spiritStones: BONUS.spiritStones }, "판 7일째와 안 겹치면 보너스 정령석만(5)");
   assertEquals((await row(db, A)).streak_bonuses, 1);
 });
 

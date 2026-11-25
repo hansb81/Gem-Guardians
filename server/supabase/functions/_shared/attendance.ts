@@ -6,8 +6,8 @@ export const ATTENDANCE_DAYS = [
   { items: { hourglass: 1 } },
   { diamonds: 20 },
   { items: { scythe_h: 2 } },
-  { diamonds: 50, items: { rainbow: 1 } },
+  { diamonds: 50, items: { rainbow: 1 }, spiritStones: 5 },
 ];
 
 // 연속 출석: 연속 일수가 goal의 배수인 날 bonus를 그날 출석 보상에 더한다(att_claim).
-export const ATTENDANCE_STREAK = { goal: 7, bonus: { diamonds: 30, items: { revive: 1 } } };
+export const ATTENDANCE_STREAK = { goal: 7, bonus: { diamonds: 30, items: { revive: 1 }, spiritStones: 5 } };

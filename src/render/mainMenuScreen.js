@@ -185,6 +185,7 @@ function shortTime(ms) {
 
 // 출석(7일판) - 카드 왼쪽 위 기준. 1줄 4칸 + 2줄 3칸, 아래 받기 버튼.
 // streakRow = 연속 출석 줄(왼쪽 "연속 n일", 가운데 점, 오른쪽 보너스 아이콘 32px) + 그 아래 안내 문구. dot = 점 한 변, dotGap = 점 사이.
+const STONE_ONLY = { spiritStones: 1 }; // 출석 칸에 정령석 아이콘만 그릴 때(_bundleIcon 인자)
 const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], streakRow: [24, 308, 352, 48], dot: 8, dotGap: 6, claim: [100, 370, 200, 50] };
 const STREAK_DOT = { on: '#f2d264', off: '#3b3347' };
 // 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼.
@@ -566,12 +567,13 @@ export class MainMenuScreen {
     if (b?.gold) out.push(`${t('reward.gold')} ${b.gold}`);
     if (b?.diamonds) out.push(`${t('reward.diamonds')} ${b.diamonds}`);
     for (const [id, n] of Object.entries(b?.items ?? {})) out.push(`${t(`item.name.${id}`)} ${n}`);
+    if (b?.spiritStones) out.push(`${t('spirit.stone')} ${b.spiritStones}`);
     return out;
   }
 
   // 보상 아이콘(32x32 자리): 골드·다이아는 UI 팩, 아이템은 아이템 팩(14x14 -> x2, 가운데). 못 그리면 회색 자리.
   _bundleIcon(ctx, b, bx, by) {
-    const icon = b?.diamonds ? 'icons/diamond.png' : b?.gold ? 'icons/gold.png' : null;
+    const icon = b?.diamonds ? 'icons/diamond.png' : b?.gold ? 'icons/gold.png' : b?.spiritStones && !b.items ? 'icons/spirit_stone.png' : null;
     if (icon && this._sprite(ctx, icon, bx, by)) return;
     const st = icon ? null : this.itemIcons()?.get(Object.keys(b?.items ?? {})[0]);
     if (uiReady(st)) {
@@ -602,8 +604,14 @@ export class MainMenuScreen {
       const r = this._attCell(card, i);
       if (!this._nine(ctx, 'panels/panel_inset.png', r)) this._panel(ctx, r, COLORS.bg2, COLORS.bg3);
       this._text(ctx, t('net.att.day', { n: i + 1 }), r[0] + r[2] / 2, r[1] + 14, { size: 11, align: 'center', color: COLORS.title });
-      this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 16, r[1] + 26);
-      this._bundleLines(b).forEach((line, j) => this._text(ctx, line, r[0] + r[2] / 2, r[1] + 70 + j * 14, { size: 10, align: 'center' }));
+      // 정령석이 있는 칸은 대표 아이콘 옆에 정령석 아이콘(32 그대로, 두 개 = 68 <= 칸 80).
+      if (b.spiritStones && (b.diamonds || b.gold || b.items)) {
+        this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 34, r[1] + 26);
+        this._bundleIcon(ctx, STONE_ONLY, r[0] + r[2] / 2 + 2, r[1] + 26);
+      } else this._bundleIcon(ctx, b, r[0] + r[2] / 2 - 16, r[1] + 26);
+      const lines = this._bundleLines(b);
+      const lh = lines.length > 2 ? 12 : 14; // 세 줄(7일째: 다이아·무지개·정령석)이면 줄 간격만 좁혀 칸 안에
+      lines.forEach((line, j) => this._text(ctx, line, r[0] + r[2] / 2, r[1] + (lines.length > 2 ? 65 : 70) + j * lh, { size: 10, align: 'center' }));
       if (i < s.days) {
         const sr = this._toScreen(r);
         ctx.fillStyle = COLORS.overlay;
@@ -651,10 +659,15 @@ export class MainMenuScreen {
         ...(b?.gold ? [{ gold: b.gold }] : []),
         ...(b?.diamonds ? [{ diamonds: b.diamonds }] : []),
         ...Object.keys(b?.items ?? {}).map((id) => ({ items: { [id]: b.items[id] } })),
+        ...(b?.spiritStones ? [{ spiritStones: b.spiritStones }] : []),
       ];
     }
     const icons = this._streakIcons;
-    for (let i = 0; i < icons.length; i++) this._bundleIcon(ctx, icons[i], right - (icons.length - i) * 36 + 4, cy - 16);
+    for (let i = 0; i < icons.length; i++) {
+      const ix = right - (icons.length - i) * 36 + 4;
+      this._bundleIcon(ctx, icons[i], ix, cy - 16);
+      if (icons[i].spiritStones) this._text(ctx, String(icons[i].spiritStones), ix + 32, cy + 12, { size: 10, align: 'right', color: COLORS.title }); // 정령석 수량(아이콘 오른쪽 아래)
+    }
     // 안내: 남은 날 수 = 오늘 받을 것까지 포함. 1일 남았고 아직 안 받았으면 "오늘 받으면".
     const left = goal - (n % goal);
     const ty = card[1] + ATT.streakRow[1] + 42;

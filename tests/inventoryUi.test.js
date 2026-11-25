@@ -23,6 +23,12 @@ test('rewardFromDelta: 받은 것만(buy 비용 음수·over 제외), 빈 지급
   assert.equal(rewardFromDelta(null), null);
 });
 
+test('rewardFromDelta: 정령석은 아이템 칸이 아니라 spiritStones로(출석 7일째 등)', () => {
+  const r = rewardFromDelta({ diamonds: 80, rainbow: 1, revive: 1, spiritStones: 10 });
+  assert.deepEqual([r.diamonds, r.items, r.spiritStones], [80, { rainbow: 1, revive: 1 }, 10]);
+  assert.deepEqual(rewardFromDelta({ spiritStones: 5 }).items, {}, '정령석만 받아도 팝업이 뜬다');
+});
+
 test('하단 바 쿨다운: 스왑 직후(validSwapCount+1) 숫자가 줄어든다 - inventory onChange 없이 ItemController를 매 프레임 읽음', async () => {
   const { ItemController } = await import('../src/game/itemController.js');
   const { ItemBarRenderer } = await import('../src/render/itemBarRenderer.js');

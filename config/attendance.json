@@ -7,7 +7,7 @@
     { "items": { "hourglass": 1 } },
     { "diamonds": 20 },
     { "items": { "scythe_h": 2 } },
-    { "diamonds": 50, "items": { "rainbow": 1 } }
+    { "diamonds": 50, "items": { "rainbow": 1 }, "spiritStones": 5 }
   ],
-  "streak": { "goal": 7, "bonus": { "diamonds": 30, "items": { "revive": 1 } } }
+  "streak": { "goal": 7, "bonus": { "diamonds": 30, "items": { "revive": 1 }, "spiritStones": 5 } }
 }

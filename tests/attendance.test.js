@@ -19,6 +19,22 @@ test('출석 보상표: config와 서버 사본이 같다(days·streak)', () => 
   assert.ok(cfg.streak.goal > 0);
 });
 
+test('출석 정령석(docs/spirit-stones.md B): 7일째 5, 연속 보너스 5, 받은 번들 그대로 지급(txId att:{날짜})', async () => {
+  const cfg = JSON.parse(readFileSync(new URL('../config/attendance.json', import.meta.url), 'utf8'));
+  assert.deepEqual(cfg.days[6], { diamonds: 50, items: { rainbow: 1 }, spiritStones: 5 });
+  assert.deepEqual(cfg.streak.bonus, { diamonds: 30, items: { revive: 1 }, spiritStones: 5 });
+  assert.ok(cfg.days.slice(0, 6).every((d) => !d.spiritStones), '1~6일째는 그대로');
+  // 판 7일째 + 연속 7일째가 겹친 날 서버가 합친 번들(bundle_add, server/supabase/tests/att_streak_test.ts가 SQL로 확인) -> 정령석 10.
+  const { Inventory } = await import('../src/game/inventory.js');
+  const inv = new Inventory(null, { wallet: { gold: 0, diamonds: 0 } });
+  const bundle = { diamonds: 80, items: { rainbow: 1, revive: 1 }, spiritStones: cfg.days[6].spiritStones + cfg.streak.bonus.spiritStones };
+  const api = { call: async (name) => (name === 'att-claim' ? { ok: true, day: 7, txId: 'att:2026-11-25', bundle, streak: 7, streakBonus: cfg.streak.bonus } : { ok: true }), syncClaims: async () => [] };
+  const res = await new AttendanceService(inv, api).claim();
+  assert.equal(res.delta.spiritStones, 10);
+  assert.equal(inv.spiritStones, 10);
+  assert.ok(inv.data.grantedTx.includes('att:2026-11-25'));
+});
+
 test('서버 꺼짐: fetch를 한 번도 부르지 않고 offline', async () => {
   const orig = globalThis.fetch;
   let calls = 0;

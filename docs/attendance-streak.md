@@ -163,3 +163,12 @@ alter table public.attendance
 | A-4 | 끊김 보호권 | **v1 없음** |
 | A-5 | 하루 첫 진입 자동 팝업 | **켬** |
 | A-6 | 기존 플레이어 연속 기록 | **claims로 되채움** |
+
+## 5. 정령석 추가 (2026-11-25, docs/spirit-stones.md B)
+- 7일째 보상 = 다이아 50 + 무지개 1 + **정령석 5**, 연속 보너스 = 다이아 30 + 깃털 1 + **정령석 5**. 판 7일째와 연속 7일째가 겹친 날은 정령석 10.
+- 표: `config/attendance.json` == `server/supabase/functions/_shared/attendance.ts`(tests/attendance.test.js).
+- 서버: 3-3의 `bundle_add`가 diamonds·gold·items만 더하고 그 밖의 키는 b 우선이라, 겹친 날 정령석이 5로 나왔다. 새 마이그레이션 `20261125000000_bundle_add_spirit_stones.sql`이 `spiritStones`도 더하게 다시 만든다(`att_claim`은 그대로). 확인 = server/supabase/tests/att_streak_test.ts.
+- 기기: 받은 번들을 그대로 `inventory.grant`(txId `att:{날짜}`). 획득 팝업은 `rewardFromDelta`가 `spiritStones`를 정령석 칸으로 보여 준다(전에는 아이템 id로 잘못 읽었다).
+- 팝업: 7일째 칸 = 다이아 아이콘 옆에 정령석 아이콘(32 그대로), 글자 세 줄(줄 간격 12). 연속 줄 = 다이아·깃털·정령석 아이콘, 정령석만 오른쪽 아래에 수량.
+- 정령석 지급을 모르는 옛 기기(2026-11-24 정령 커밋 전)는 `spiritStones`를 조용히 버리고 다이아·아이템만 받는다. 오류는 없고 txId가 남아 나중에 다시 받을 수도 없다.
+

@@ -13,7 +13,7 @@ const K = 2;
 const SLOT = 22 * K;
 const GAP = 8;
 const DIM = '#0d0a10';
-const NOT_ITEMS = new Set(['gold', 'diamonds', 'over', 'skills', 'flags']);
+const NOT_ITEMS = new Set(['gold', 'diamonds', 'over', 'skills', 'flags', 'spiritStones', 'spirits']);
 
 // 칸 이름이 칸 폭(maxW)을 넘으면 띄어쓰기에서 두 줄로 나눈다(두 줄의 긴 쪽이 가장 짧아지는 자리). 띄어쓰기가 없으면 그대로 한 줄.
 export function splitName(text, maxW, measure) {
@@ -33,7 +33,8 @@ export function rewardFromDelta(d) {
   const items = {};
   for (const [k, v] of Object.entries(d)) if (!NOT_ITEMS.has(k) && v > 0) items[k] = v;
   const r = { gold: Math.max(0, d.gold ?? 0), diamonds: Math.max(0, d.diamonds ?? 0), items, skills: { ...d.skills }, flags: [...(d.flags ?? [])] };
-  const empty = !r.gold && !r.diamonds && !Object.keys(items).length && !Object.keys(r.skills).length && !r.flags.length;
+  if (d.spiritStones > 0) r.spiritStones = d.spiritStones; // 출석·우편 등 grant의 정령석(보스 정령은 main.js가 따로 붙인다)
+  const empty = !r.gold && !r.diamonds && !r.spiritStones && !Object.keys(items).length && !Object.keys(r.skills).length && !r.flags.length;
   return empty ? null : r;
 }
 
