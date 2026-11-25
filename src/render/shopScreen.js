@@ -342,7 +342,9 @@ export class ShopScreen {
     const top = this.scroll;
     for (const row of this.entries) {
       if (row.y + row.h + 16 < top || row.y - 16 > top + LIST.h) continue;
-      const y = LIST.y + row.y - top;
+      // 줄 시작을 정수 기기 px에 맞춘다 - 분수 배율(1 원본 px = 1.33 기기 px 등)에서 스크롤 값에 따라 9-slice 테두리가 1·2px로 바뀌어 줄처럼 보이던 것.
+      const u = screen.unit;
+      const y = (Math.round((offsetY + (LIST.y + row.y - top) * k) * u) / u - offsetY) / k;
       if (row.e.hdr) this._drawHeader(ctx, row, y);
       else if (row.e.legal) this._drawLegal(ctx, row, y);
       else if (row.e.banner) this._drawBanner(ctx, row, y, now);
