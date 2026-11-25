@@ -344,7 +344,7 @@ export const ko = {
     notUnlocked: '미해금',
     locked: '잠김',
     sold: { bought: '구매 완료', max: '최대 레벨', tomorrow: '내일 다시', opened: '열림' },
-    lock: { floor: '{floor}층 도달 시', boss: '{floor}층 보스 처치 시', skillLv: '{floor}층 도달 시 Lv {lv} 해금' },
+    lock: { floor: '{floor}층 도달 시', boss: '{floor}층 보스 처치 시', skillLv: '{floor}층부터 Lv {lv}' },
     lockMsg: { item: '{name}은(는) {floor}층에 도달하면 열려요', boss: '{floor}층 보스를 처음 잡으면 해금할 수 있어요', skillLv: '{name} Lv {lv}는 {floor}층에 도달하면 열려요' },
     tag: { free: '무료', once: '1회 한정', value: '가치 ×{n}', perBoss: '보스당 1회', h24: '24시간', until20: '20층까지', repeat: '반복 구매', perChapter: '챕터당 1회', one: '1회', claim: '받기', first2: '첫 구매 2배' },
     free: { name: '오늘의 무료 1개', sub: '매일 0시 갱신', desc: '광고를 보면 {item} {n}개', descAdFree: '광고 제거: 바로 받기', btn: '광고 보고 받기', btnAdFree: '바로 받기', btnNoAds: '무료로 받기', long: '하루에 한 번 무료로 아이템을 받는다. 광고 제거를 사면 광고 없이 받는다.', adNote: '광고 영상 자리 (15~30초)' },
