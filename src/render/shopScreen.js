@@ -443,6 +443,7 @@ export class ShopScreen {
     let path = null;
     if (p.kind === 'skill' || p.kind === 'skillUnlock') path = `shop/skill_${p.skill}.png`;
     else if (p.kind === 'pack' || p.kind === 'passClaim') path = `shop/${this.env.cfg.packs[p.pack].icon}.png`;
+    else if (p.kind === 'diaStones') path = 'icons/spirit_stone.png';
     if (path) this._img(ctx, path, x + 8, y + 8, 28, 28);
     if (p.special) {
       Object.keys(this.env.cfg.skills.color).forEach((c, i) => this._fill(ctx, SKILL_DOT[c], x + 12 + i * 6, y + 38, 4, 4));
@@ -925,7 +926,7 @@ export class ShopScreen {
     this.sel = p.id;
     if (p.state === 'locked') return this._showToast(tx.lockMsg ?? tx.lockText ?? '');
     if (p.state === 'sold') {
-      const key = p.kind === 'skill' ? 'shop.toast.maxLevel' : p.kind === 'free' || p.kind === 'passClaim' ? 'shop.toast.tomorrow' : 'shop.toast.already';
+      const key = p.kind === 'skill' ? 'shop.toast.maxLevel' : p.kind === 'free' || p.kind === 'passClaim' || p.kind === 'diaStones' ? 'shop.toast.tomorrow' : 'shop.toast.already';
       return this._showToast(t(key));
     }
     if (p.kind === 'passClaim') return this._buy(p, tx, 1);

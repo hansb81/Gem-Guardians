@@ -314,3 +314,26 @@ test('복원·환불: 목록에 없는 1회 팩도 기록이 되살아나고, �
   assert.deepEqual(revokePaidProduct(ctx, 'pack.slot4', 'o3').removed, [], 'slot4는 다른 경로로도 얻으므로 회수 안 함');
   assert.ok(player.inventory.isUnlocked('slot4'));
 });
+
+// 정령석 묶음(docs/spirit-stones.md C): diaItems의 객체 칸.
+test('정령석 묶음: 다이아 40 -> 정령석 5, 하루 1번(KST 날짜, txId shop:stones:{날짜}), 다음 날 다시', () => {
+  const player = makePlayer({ diamonds: 100 });
+  const ctx = ctxOf(player);
+  const card = buildRail(ctx, 'dia').find((p) => p.id === 'dg.stones');
+  assert.deepEqual([card.kind, card.cur, card.price, card.stones, card.state, card.qty], ['diaStones', 'dia', 40, 5, '', undefined]);
+  const r = buyProduct(ctx, 'dg.stones', 10);
+  assert.ok(r.ok);
+  assert.deepEqual([r.qty, r.got.spiritStones, player.diamonds, player.inventory.spiritStones], [1, 5, 60, 5], '수량 선택 없음');
+  assert.ok(player.inventory.data.grantedTx.includes(`shop:stones:${TODAY}`));
+  assert.equal(buildRail(ctx, 'dia').find((p) => p.id === 'dg.stones').state, 'sold');
+  assert.equal(buyProduct(ctx, 'dg.stones').reason, 'sold');
+  assert.deepEqual([player.diamonds, player.inventory.spiritStones], [60, 5]);
+  assert.ok(buyProduct(ctxOf(player, { today: '2026-11-08' }), 'dg.stones').ok);
+  assert.deepEqual([player.diamonds, player.inventory.spiritStones], [20, 10]);
+});
+
+test('정령석 묶음: 다이아가 모자라면 실패하고 아무것도 안 바뀐다', () => {
+  const player = makePlayer({ diamonds: 39 });
+  assert.equal(buyProduct(ctxOf(player), 'dg.stones').reason, 'poor');
+  assert.deepEqual([player.diamonds, player.inventory.spiritStones, player.inventory.data.grantedTx.length], [39, 0, 0]);
+});

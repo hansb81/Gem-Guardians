@@ -31,6 +31,7 @@ export function gotText(got) {
   if (got.diamonds) parts.push(t('shop.grant.dia', { n: fmt(got.diamonds) }));
   if (got.gold) parts.push(`+${fmt(got.gold)}`);
   for (const [id, n] of Object.entries(got.items ?? {})) parts.push(t('shop.grant.item', { name: itemName(id), n }));
+  if (got.spiritStones) parts.push(t('spirit.got.stones', { n: got.spiritStones }));
   if (got.slot4) parts.push(t('shop.grant.slot4'));
   return parts.join(', ');
 }
@@ -61,6 +62,11 @@ export function productText(p, env) {
         lockText: t('shop.lock.floor', { floor: p.lockFloor }), lockMsg: t('shop.lockMsg.item', { name: itemName(p.item), floor: p.lockFloor }),
       };
     }
+    case 'diaStones':
+      return {
+        name: t('shop.stones.name'), sub: t('shop.owned', { n: player.inventory?.spiritStones ?? 0 }), desc: [t('shop.stones.desc', { n: p.stones })],
+        soldText: t('shop.sold.tomorrow'), long: t('shop.stones.long', { n: p.stones }),
+      };
     case 'skill':
     case 'skillUnlock': {
       const s = p.special ? cfg.skills.special[p.skill] : cfg.skills.color[p.skill];

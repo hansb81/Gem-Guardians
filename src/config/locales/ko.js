@@ -402,6 +402,7 @@ export const ko = {
     grant: { dia: '다이아 {n}', item: '{name} {n}', slot4: '하단 4번째 슬롯 즉시 해금', adFree: '무료 아이템 광고 없이' },
     pass: { desc: '즉시 {now} + {days}일간 매일 {daily}', total: '(총 {n})', left: '남은 {n}일', today: '오늘 받을 것: 다이아 {n}', claim: '받기 +{n}', plusItem: ' + {name} {n}', mine: ' · 광산 생산 +{pct}%', mineCard: ' · 광산 생산 +{pct}%', mineInfo: '광산', mineVal: '생산 +{pct}%' },
     dia: { name: '다이아 {n}', bonus: '보너스 +{n}', first: '첫 구매: {n}', amount: '받는 양 {n}', long: '다이아 {n}개를 산다.', longFirst: '다이아 {n}개를 산다. 첫 구매라 기본 다이아가 2배.' },
+    stones: { name: '정령석 묶음', desc: '정령석 {n}개 · 하루 1번', long: '정령석 {n}개를 받는다. 하루에 한 번 살 수 있고 자정(한국 시간)에 다시 열린다.' },
     slot4: { name: '4번째 슬롯', desc: '하단 아이템 슬롯 1칸', desc2: '영구 추가', long: '하단 슬롯 4번째 칸을 바로 연다. 20층 보스를 처음 잡아도 무료로 열린다.' },
     goldex: { small: '골드 소', mid: '골드 중', big: '골드 대', desc: '약 일반 층 {n}개 분량', desc2: '최고 층이 오르면 같이 커짐', long: '다이아 {dia}개로 골드 {gold}을 받는다. 양은 최고 도달 층의 일반 층 보상 {n}개 분량.' },
     // 약관·환불 고지(docs/legal-src/shop-refund-notice.md ①②③ 그대로). 상점 맨 아래 작은 글씨 + 링크 줄.
@@ -563,6 +564,7 @@ export const ko = {
     stone: '정령석', slotHint: '수호자를 고르고 아래에서 정령을 장착하세요', empty: '정령 없음', none: '조건에 맞는 정령이 없어요',
     equippedMark: '장착 중', equip: '장착', unequip: '해제', levelUp: '레벨업', now: '지금', next: '다음 레벨',
     got: { new: '새 정령', star: '별 +1', stones: '정령석 +{n}' },
+    stoneWhere: ['광산에서 정제', '상점에서 구매'],
     noticeTitle: '보스 정령 도착',
     filter: { elementAll: '속성: 전체', gradeAll: '등급: 전체', ownedOnly: '보유만', all: '전체' }, dexCount: '보유 {n} / {max}',
     notOwned: '아직 없음', ownedLv: 'Lv.{lv} · 별 {star}',
@@ -580,6 +582,7 @@ export const ko = {
     guide1: '광맥이 시간이 지나면 원석을 캡니다. 앱을 꺼 둬도 쌓여요.', guide2: '원석으로 광맥을 키우면 더 많이 캡니다.', guide3: '정제소에서 원석을 골드와 아이템으로 바꾸세요.',
     next: '다음', start: '시작',
     guard: '강화하면 오늘 골드 주머니({cost})를 못 삽니다. 한 번 더 누르면 강화.', guardGold: '원석 {cost}을 씁니다. 한 번 더 누르면 정제.',
+    stoneDone: '내일 다시',
     gotGold: '골드 +{n}', gotItem: '{name} +1', gotCart: '수레 +{n}', noDia: '다이아가 부족합니다',
   },
   tutorial: {

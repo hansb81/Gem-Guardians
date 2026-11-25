@@ -256,8 +256,22 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     if (always) levelUp();
   };
 
+  // --stonesPerDay(docs/spirit-stones.md 5장): idle과 같은 "하루"(idleDayHours)가 지날 때마다 정령석 N개. 광산 해금(10층 보스) 전 날은 0.
+  let stoneDays = 0;
+  const stoneTick = () => {
+    if (!sp || !(env.stonesPerDay > 0)) return;
+    const d = Math.floor(cumulativeTimeSec / 3600 / env.idleDayHours);
+    if (d <= stoneDays) return;
+    const n = floor - 1 >= env.configs.mine.unlockFloor ? (d - stoneDays) * env.stonesPerDay : 0;
+    stoneDays = d;
+    if (n === 0) return;
+    sp.inv.grant({ spiritStones: n }, { src: 'simStones' });
+    sp.stonesGot += n;
+  };
+
   while (floor <= env.floorsRange.to) {
     idleTick();
+    stoneTick();
     const avgLevel = towerLevels.reduce((s, l) => s + l, 0) / towerLevels.length;
     const unlockPending = buyUnlocks();
     const goldAtEntry = gold; // 아이템 사기 전(selfcheck: always면 탑 레벨업 살 골드가 남아 있지 않아야 한다)

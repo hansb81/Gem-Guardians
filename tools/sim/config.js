@@ -122,7 +122,10 @@ export function parseArgs(argv, sim) {
   const idleDayHours = Number(args.idleDayHours ?? 1);
   const idleRMul = args.idleRMul == null ? null : Number(args.idleRMul);
   if (!(Number.isInteger(idle) && idle >= 0) || !(idleDayHours > 0) || (idleRMul != null && !(idleRMul >= 0))) throw new Error('--idle=0|2|3, --idleDayHours=1|2, --idleRMul=숫자');
-  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset };
+  // --stonesPerDay=N: 하루(--idleDayHours 플레이 시간)마다 정령석 N개(T4, 10층 보스 전 0). 기본 0 = 없음.
+  const stonesPerDay = Number(args.stonesPerDay ?? 0);
+  if (!(Number.isInteger(stonesPerDay) && stonesPerDay >= 0)) throw new Error('--stonesPerDay=0 이상 정수');
+  return { idle, idleDayHours, idleRMul, stonesPerDay, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).

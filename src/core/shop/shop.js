@@ -196,7 +196,13 @@ function railDia(ctx) {
     out.push({ id: `dia.${i}`, kind: 'diaBundle', index: i, cur: 'krw', price: prod.priceKRW, dia: prod.grant.diamonds - b.bonus, bonus: b.bonus, stack: b.stack, first: !shop.firstBuyUsed.includes(i), state: '' });
   });
   out.push(hdr('diaOnly'));
-  for (const id of cfg.diaItems) out.push({ id: `dg.${id}`, kind: 'diaItem', item: id, cur: 'dia', price: itemsConfig.items[id].diamond, state: '' });
+  for (const e of cfg.diaItems) {
+    if (typeof e === 'string') out.push({ id: `dg.${e}`, kind: 'diaItem', item: e, cur: 'dia', price: itemsConfig.items[e].diamond, state: '' });
+    else { // 정령석 묶음: 하루 1번 - 오늘 txId를 이미 받았으면 'sold'(내일 다시)
+      const tx = `shop:${e.id}:${ctx.today}`;
+      out.push({ id: `dg.${e.id}`, kind: 'diaStones', stones: e.spiritStones, cur: 'dia', price: e.dia, tx, state: player.inventory.data.grantedTx.includes(tx) ? 'sold' : '' });
+    }
+  }
   out.push({ id: 'dg.slot4', kind: 'slot4', cur: 'dia', price: cfg.slot4Dia, state: player.inventory.isUnlocked('slot4') ? 'sold' : '' });
   out.push(hdr('goldex'));
   for (const g of cfg.goldExchange) out.push({ id: `goldex.${g.id}`, kind: 'goldEx', exId: g.id, cur: 'dia', price: g.dia, gold: goldOf(ctx, g.floors), floors: g.floors, stack: g.stack, state: '' });
@@ -298,6 +304,10 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       after = () => shop.firstBuyUsed.push(p.index);
       break;
     case 'diaItem': giveItem(p.item, 1); break;
+    case 'diaStones':
+      bundle.spiritStones = p.stones;
+      tx = p.tx;
+      break;
     case 'slot4': giveFlag('slot4'); break;
     case 'goldEx': bundle.gold = p.gold; break;
     default: return { ok: false, reason: 'locked', product: p };
@@ -313,6 +323,7 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
   }
   after?.();
   const got = { diamonds: bundle.diamonds ?? 0, gold: bundle.gold ?? 0, items: bundle.items };
+  if (bundle.spiritStones) got.spiritStones = bundle.spiritStones;
   if (bundle.skills) got.skillLv = player.inventory.skillLevel(p.skill);
   if (bundle.flags?.includes('slot4')) got.slot4 = true;
   return { ok: true, product: p, qty: n, total, got, delta: res.delta };

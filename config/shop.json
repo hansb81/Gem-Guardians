@@ -1,5 +1,5 @@
 {
-  "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. 현금 상품의 가격·지급 내용은 config/products.json(키 pack.{id}, dia.{순번}) - 여기는 노출 조건·패스 일정·첫 구매 2배(diaBundles bonus)만.",
+  "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. diaItems의 객체 칸 = 정령석 묶음(spiritStones개 = 다이아 dia, 하루 1번 KST, txId shop:{id}:{날짜}). 현금 상품의 가격·지급 내용은 config/products.json(키 pack.{id}, dia.{순번}) - 여기는 노출 조건·패스 일정·첫 구매 2배(diaBundles bonus)만.",
   "qtyMax": 99,
   "qtyQuick": [1, 5, 10],
   "free": { "item": "dye", "count": 1 },
@@ -41,7 +41,7 @@
     { "bonus": 850,  "stack": 5 },
     { "bonus": 2100, "stack": 5 }
   ],
-  "diaItems": ["gold_coin", "revive"],
+  "diaItems": ["gold_coin", "revive", { "id": "stones", "spiritStones": 5, "dia": 40 }],
   "slot4Dia": 300,
   "packs": {
     "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",

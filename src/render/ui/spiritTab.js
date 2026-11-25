@@ -282,6 +282,8 @@ function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
     drawSpiritStone(ctx, assets, gx + half + 8, up.y + bh / 2, 1);
     label(ctx, stoneText, rect(gx + half + 20, up.y, half - 22, bh), short(view.stones < cost.stones), 13, true, 'left', opts);
     hits.push({ r: up, hit: { type: 'spiritLevelUp', id } });
+    // 정령석이 모자라면 버튼 위에 얻는 곳 두 줄(글만, docs/spirit-stones.md).
+    if (view.stones < cost.stones) t('spirit.stoneWhere').forEach((s, i) => label(ctx, `· ${s}`, rect(a.x + P, by - 40 + i * 18, bw, 18), C.sub, 12, false, 'left'));
   }
   const equipped = slots[sel.slot] === id;
   const em = nine(ctx, assets, 'buttons/btn_primary.png', eq, HUD_CONFIG.popup.primary);

@@ -15,7 +15,7 @@ const num = (v, d = 0) => (Number.isFinite(v) && v >= 0 ? v : d);
 export const kstDate = (ms) => new Date(ms + KST_OFFSET_MS).toISOString().slice(0, 10);
 const dayOf = (ctx) => ctx.today ?? kstDate(ctx.now);
 
-const newDaily = () => ({ gold: 0, items: 0, ads: 0, diaBoost: 0 });
+const newDaily = () => ({ gold: 0, items: 0, ads: 0, diaBoost: 0, stones: 0 });
 
 export function defaultMine(veinCount = 5) {
   return {
@@ -190,7 +190,7 @@ export function goldNeedsConfirm(cfg, mine, ctx) {
 // 오늘 남은 횟수(화면 표시용). 날짜가 바뀌었으면 전부 남은 것으로 본다(상태는 안 바꾼다).
 export function dailyLeft(cfg, mine, ctx) {
   const d = mine.day === dayOf(ctx) ? mine.daily : newDaily();
-  return { gold: cfg.gold.perDay - d.gold, items: cfg.items.perDay - d.items, ads: cfg.ads.perDay - d.ads, dia: cfg.diaBoost.costs.length - d.diaBoost };
+  return { gold: cfg.gold.perDay - d.gold, items: cfg.items.perDay - d.items, ads: cfg.ads.perDay - d.ads, dia: cfg.diaBoost.costs.length - d.diaBoost, stones: cfg.stones.perDay - d.stones };
 }
 
 // 가속 한 번에 들어오는 원석(kind 'ad' | 'dia').
@@ -213,6 +213,33 @@ export function refineGold(cfg, mine, ctx) {
   mine.ore -= cost;
   mine.stats.totalGold += gold;
   return { ...OK, cost, gold, delta: res.delta };
+}
+
+// 오늘 다음 정령석 비용(다 썼으면 null). 골드 주머니와 같은 규칙, 횟수는 daily.stones로 따로 센다.
+export function nextStoneCost(cfg, mine, ctx) {
+  const used = mine.day === dayOf(ctx) ? mine.daily.stones : 0;
+  return used < cfg.stones.perDay ? cfg.stones.costs[used] : null;
+}
+
+export function stoneNeedsConfirm(cfg, mine, ctx) {
+  const used = mine.day === dayOf(ctx) ? mine.daily.stones : 0;
+  return used + 1 >= cfg.stones.confirmFrom;
+}
+
+// 정령석(docs/spirit-stones.md A): 하루 perDay개, 비용 costs[n]. 정령이 없는 저장에서도 된다. txId mine:stone:{날짜}:{n}.
+export function refineStone(cfg, mine, ctx) {
+  if (!mine.unlocked) return fail('locked');
+  const day = dayOf(ctx);
+  rolloverDay(mine, day);
+  const n = mine.daily.stones;
+  if (n >= cfg.stones.perDay) return fail('limit');
+  const cost = cfg.stones.costs[n];
+  if (mine.ore < cost) return fail('noOre');
+  const res = ctx.inventory.grant({ spiritStones: 1 }, { src: 'mine', txId: `mine:stone:${day}:${n + 1}` });
+  if (res.ok || res.reason === 'duplicate') mine.daily.stones = n + 1; // duplicate = refineGold와 같은 처리
+  if (!res.ok) return res;
+  mine.ore -= cost;
+  return { ...OK, cost, delta: res.delta };
 }
 
 // 보드 아이템: 하루 합계 perDay개. txId mine:item:{날짜}:{n}.

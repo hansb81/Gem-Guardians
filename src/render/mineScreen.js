@@ -12,7 +12,7 @@ import { ITEM_CAP } from '../core/inventory/inventory.js';
 import {
   veinRate, veinCost, maxVeinLevel, nextMaxLevelFloor, capHours, ratePerHour, capacity, cartAt, hoursToFull, cartState, settle, rolloverDay,
   harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, nextGoldCost, pouchGold, upgradeBlocksGold,
-  goldNeedsConfirm, dailyLeft, boostAmount, syncUnlocks, kstDate, hasBadge,
+  goldNeedsConfirm, dailyLeft, boostAmount, syncUnlocks, kstDate, hasBadge, refineStone, nextStoneCost, stoneNeedsConfirm,
 } from '../core/mine/mine.js';
 
 const NATIVE_W = 180;
@@ -36,7 +36,9 @@ const REFINERY = [12, 631, 249, 180];
 const FIRE = { x: 87, y: 721, w: 57, h: 45, frames: 4, ms: 160 };
 const CART = [276, 631, 252, 180];
 const SPARKLE = { at: [[84, 12], [132, 3], [171, 21]], size: 21, ms: 350 };
-const QUICK = [12, 824, 250, 64];
+// 시안: 원래 QUICK 250폭을 골드 146 + 정령석 100으로 나눔(docs/spirit-stones.md A - 배치 확정 전).
+const QUICK = [12, 824, 146, 64];
+const STONE = [162, 824, 100, 64];
 const STORE = [270, 824, 125, 64];
 const BOOST = [403, 824, 125, 64];
 const TOAST = [40, 426, 460];
@@ -81,6 +83,7 @@ export class MineScreen {
     this._pb = {}; // 팝업 버튼 사각형(그릴 때 채우고 터치 판정이 읽는다)
     this._ctxObj = { now: 0, pass: false, bestFloor: 1, today: null, R: 0, inventory: null };
     this._rng = createRng(20261121); // 연출용(불꽃 간격·방향)
+    this._stoneFx = -1e9; // 정령석 정제 연출 시작(performance.now)
     this._fly = { t0: -1e9, n: 0, gain: '', dx: new Float32Array(HARVEST.max), h: new Float32Array(HARVEST.max) };
     this._oreAnim = { from: 0, to: 0, t0: -1e9 };
     this._sparks = []; // 광맥마다 { nextAt, t0, n, vx[], vy[] }
@@ -194,6 +197,8 @@ export class MineScreen {
       pouchOk: pouch != null && mine.ore >= pouch,
       pouchShort: pouch != null ? t('mine.short', { n: fmt(pouch - mine.ore) }) : '',
       gold: fmt(gold),
+      stone: nextStoneCost(cfg, mine, c),
+      stoneLeft: `${left.stones}/${cfg.stones.perDay}`,
       quick: t('mine.quick', { n: left.gold, max: cfg.gold.perDay }),
       goldLeft: t('mine.left', { n: left.gold, max: cfg.gold.perDay }),
       itemLeft: t('mine.left', { n: left.items, max: cfg.items.perDay }),
@@ -327,6 +332,17 @@ export class MineScreen {
     this._result(res, res.ok ? t('mine.gotGold', { n: fmt(res.gold) }) : null);
   }
 
+  _refineStone() {
+    const { cfg, player } = this.env;
+    const c = this._lctx();
+    if (stoneNeedsConfirm(cfg, player.mine, c) && this.armed !== 'stone') {
+      return void this._arm('stone', t('mine.guardGold', { cost: nextStoneCost(cfg, player.mine, c) }));
+    }
+    this.armed = null;
+    const res = refineStone(cfg, player.mine, c);
+    if (this._result(res, res.ok ? t('spirit.got.stones', { n: 1 }) : null)) this._stoneFx = performance.now();
+  }
+
   _refineItem(id) {
     const res = refineItem(this.env.cfg, this.env.player.mine, id, this._lctx());
     this._result(res, res.ok ? t('mine.gotItem', { name: t(`item.name.${id}`) }) : null);
@@ -430,6 +446,7 @@ export class MineScreen {
     this._drawWorkshop(ctx, v, nowMs);
     this._drawBottom(ctx, v);
     this._drawFly(ctx, nowMs);
+    this._drawStoneFx(ctx, nowMs);
     if (this.popup) this._drawPopup(ctx, v);
     if (this.toast) {
       if (wall > this.toast.until) this.toast = null;
@@ -578,6 +595,15 @@ export class MineScreen {
         this._text(ctx, v.gold, x + 20, cy, 11, C.outline);
       }, 'quick', C.outline);
     } else this._btn2(ctx, 'upgrade/btn_disabled', QUICK, v.quick, (cx, cy) => this._text(ctx, v.pouchShort, cx, cy, 11, C.redL, 'center'), 'quick', C.dim);
+    // 정령석: 윗줄 아이콘 + 남은 횟수, 아랫줄 원석 비용(모자라면 빨강) / 다 썼으면 "내일 다시".
+    const sOk = v.stone != null && v.ore >= v.stone;
+    this._btn2(ctx, sOk ? 'buttons/btn_gold' : 'upgrade/btn_disabled', STONE, '', (cx, cy) => {
+      const col = sOk ? C.outline : C.dim;
+      if (this.armed === 'stone') this._text(ctx, t('mine.again'), cx, cy - 19, 11, col, 'center', !sOk);
+      else this._cost(ctx, 'icons/spirit_stone.png', 16, v.stoneLeft, cx, cy - 19, col);
+      if (v.stone == null) this._text(ctx, t('mine.stoneDone'), cx, cy, 11, C.dim, 'center', true);
+      else this._cost(ctx, 'icons/ore_small.png', 16, fmt(v.stone), cx, cy, sOk ? C.outline : C.redL);
+    }, 'stone', C.dim);
     this._button(ctx, 'buttons/btn_secondary', STORE, v.storeLabel, 11, 'store');
     this._button(ctx, 'buttons/btn_secondary', BOOST, v.boostLabel, 11, 'boost');
     if (v.pouchOk) this._img(ctx, 'menu/badge.png', QUICK[0] + QUICK[2] - 12, QUICK[1] - 6, 16, 16);
@@ -599,6 +625,19 @@ export class MineScreen {
     const k = el / HARVEST.numMs;
     ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
     this._num(ctx, f.gain, CART[0] + CART[2] / 2, CART[1] + 10 - HARVEST.numRise * k, 'yellow');
+    ctx.globalAlpha = 1;
+  }
+
+  // 정령석 정제 연출: 칸 위 반짝(수레 반짝 그림) + 떠오르는 "+1"(수확 숫자와 같은 시간·높이).
+  _drawStoneFx(ctx, nowMs) {
+    const el = nowMs - this._stoneFx;
+    if (el < 0 || el > HARVEST.numMs) return;
+    const k = el / HARVEST.numMs;
+    ctx.globalAlpha = k > 0.7 ? (1 - k) / 0.3 : 1;
+    const f = Math.floor(el / (SPARKLE.ms / 2)) % 2;
+    this._mimg(ctx, 'cart_sparkle', STONE[0] - 6, STONE[1] - 8, SPARKLE.size, SPARKLE.size, f * 7, 7); // 칸 모서리 - 글자를 가리지 않게
+    this._mimg(ctx, 'cart_sparkle', STONE[0] + STONE[2] - SPARKLE.size + 6, STONE[1] + STONE[3] - SPARKLE.size + 8, SPARKLE.size, SPARKLE.size, (1 - f) * 7, 7);
+    this._num(ctx, '+1', STONE[0] + STONE[2] / 2, STONE[1] - 10 - HARVEST.numRise * k, 'yellow');
     ctx.globalAlpha = 1;
   }
 
@@ -916,6 +955,10 @@ export class MineScreen {
     else if (inRect(bx, by, QUICK)) {
       this._pressed = 'quick';
       if (v.pouchOk) this._refineGold(true);
+      else audio.play('ui_purchase_fail');
+    } else if (inRect(bx, by, STONE)) {
+      this._pressed = 'stone';
+      if (v.stone != null && v.ore >= v.stone) this._refineStone();
       else audio.play('ui_purchase_fail');
     } else if (inRect(bx, by, STORE)) {
       this._pressed = 'store';

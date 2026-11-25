@@ -72,6 +72,7 @@ async function main() {
     itemSets: args.itemset ? args.itemset.split(',').map((s) => s.trim()).filter(Boolean) : null, // T9 세트 고르기(병렬 실행용)
     idle: args.idle, // --idle: 방치 광산 하루 접속 횟수(0 = 없음). T4 진행과 그 진행을 쓰는 테스트(T7 기준 레벨 등)에 반영
     idleDayHours: args.idleDayHours,
+    stonesPerDay: args.stonesPerDay, // --stonesPerDay: 하루 정령석 수입(T4 정령 진행, 0 = 없음)
     emptySpawn: args.emptySpawn ?? configs.balance.floorShape.emptySpawn ?? 'off', // 빈 전장 즉시 등장: 기본 = balance.json floorShape.emptySpawn(게임 그대로), --emptySpawn=off|on|predict로 덮어쓰기
   };
   const dateTag = todayTag();
@@ -113,6 +114,11 @@ async function main() {
     const idleTag = `광산(측정 전용, tools/sim/idle.js): 하루 접속 ${env.idle}회 x 8시간 분량, 하루 = 플레이 ${env.idleDayHours}시간, rMul ${configs.mine.gold.rMul}${args.idleRMul != null ? '(--idleRMul 덮어쓰기)' : '(mine.json)'}`;
     console.log(idleTag);
     summaryParts.push(`- ${idleTag}`);
+  }
+  if (env.stonesPerDay > 0) {
+    const tag = `정령석 수입(--stonesPerDay): 하루(플레이 ${env.idleDayHours}시간)마다 ${env.stonesPerDay}개, 10층 보스 전 0 - T4 정령 진행`;
+    console.log(tag);
+    summaryParts.push(`- ${tag}`);
   }
   if (comboTag !== 'combo=off window=3s') {
     console.log(comboTag);

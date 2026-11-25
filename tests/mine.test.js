@@ -6,6 +6,7 @@ import {
   defaultMine, normalizeMine, veinRate, veinCost, maxVeinLevel, capHours, ratePerHour, capacity, cartAt, settle, rolloverDay,
   syncUnlocks, harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, hasBadge, nextGoldCost, kstDate,
   nextMaxLevelFloor, hoursToFull, cartState, upgradeBlocksGold, goldNeedsConfirm, dailyLeft, boostAmount, pouchGold,
+  refineStone, nextStoneCost, stoneNeedsConfirm,
 } from '../src/core/mine/mine.js';
 import { pruneGrantedTx } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -184,10 +185,10 @@ test('하루 초기화: KST 날짜가 바뀌면 daily 0, 서버 날짜가 있으
   for (let i = 0; i < 4; i++) refineGold(CFG, mine, ctx(late));
   refineItem(CFG, mine, 'hammer', ctx(late));
   boost(CFG, mine, 'ad', ctx(late));
-  assert.deepEqual(mine.daily, { gold: 4, items: 1, ads: 1, diaBoost: 0 });
+  assert.deepEqual(mine.daily, { gold: 4, items: 1, ads: 1, diaBoost: 0, stones: 0 });
   assert.equal(nextGoldCost(CFG, mine, ctx(KST('2026-11-21T00:00:00'))), 50, '자정 지나면 조회만으로도 0번째');
   assert.equal(refineGold(CFG, mine, ctx(KST('2026-11-21T00:00:00'))).cost, 50);
-  assert.deepEqual(mine.daily, { gold: 1, items: 0, ads: 0, diaBoost: 0 });
+  assert.deepEqual(mine.daily, { gold: 1, items: 0, ads: 0, diaBoost: 0, stones: 0 });
   assert.equal(mine.day, '2026-11-21');
   // 기기 시계는 아직 21일이지만 서버가 22일이라고 하면 22일 키로 초기화
   assert.equal(refineGold(CFG, mine, ctx(KST('2026-11-21T10:00:00'), { today: '2026-11-22' })).cost, 50);
@@ -290,11 +291,11 @@ test('기존 저장 마이그레이션: mine 블록이 없으면 기본값, 이�
 
 test('normalizeMine: 깨진 값만 고치고 정상 값은 그대로(여러 번 돌려도 같다)', () => {
   const saved = { unlocked: true, veins: [4, 3, 3, 0, 0], storageLv: 2, bigStorage: false, ore: 1234, cart: 87.5, anchorAt: 1763620800000,
-    day: '2026-11-20', daily: { gold: 2, items: 1, ads: 0, diaBoost: 0 }, tutorialDone: true, stats: { totalOre: 15320, totalGold: 4200 } };
+    day: '2026-11-20', daily: { gold: 2, items: 1, ads: 0, diaBoost: 0, stones: 0 }, tutorialDone: true, stats: { totalOre: 15320, totalGold: 4200 } };
   assert.deepEqual(normalizeMine(saved, CFG), saved, '9장 예시 그대로');
   assert.deepEqual(normalizeMine(normalizeMine(saved, CFG), CFG), saved);
   const bad = normalizeMine({ unlocked: 1, veins: [2, -1, 'x'], storageLv: 99, ore: -5, cart: NaN, daily: { gold: 2 } }, CFG);
-  assert.deepEqual([bad.unlocked, bad.veins, bad.storageLv, bad.ore, bad.cart, bad.daily], [false, [2, 0, 0, 0, 0], 5, 0, 0, { gold: 2, items: 0, ads: 0, diaBoost: 0 }]);
+  assert.deepEqual([bad.unlocked, bad.veins, bad.storageLv, bad.ore, bad.cart, bad.daily], [false, [2, 0, 0, 0, 0], 5, 0, 0, { gold: 2, items: 0, ads: 0, diaBoost: 0, stones: 0 }]);
 });
 
 test('cartAt: 잠긴 광산·경과 0은 그대로', () => {
@@ -331,8 +332,8 @@ test('화면용 보조: 다음 최대 Lv 층, 가득까지 시간, 수레 3상�
   assert.equal(hoursToFull(CFG, mine, T0 + 99 * HOUR), 0);
   assert.deepEqual([0, 0.7, 0.8, 6.3, 6.4, 99].map((h) => cartState(CFG, mine, T0 + h * HOUR)), [0, 0, 1, 1, 2, 2], '10% / 80% 경계');
   assert.equal(cartState(CFG, { ...mine, veins: [0, 0, 0, 0, 0] }, T0), 0);
-  assert.deepEqual(dailyLeft(CFG, mine, ctx()), { gold: 4, items: 3, ads: 2, dia: 3 });
-  assert.deepEqual(dailyLeft(CFG, { ...mine, day: '2026-11-20', daily: { gold: 4, items: 1, ads: 2, diaBoost: 1 } }, ctx()), { gold: 0, items: 2, ads: 0, dia: 2 });
+  assert.deepEqual(dailyLeft(CFG, mine, ctx()), { gold: 4, items: 3, ads: 2, dia: 3, stones: 3 });
+  assert.deepEqual(dailyLeft(CFG, { ...mine, day: '2026-11-20', daily: { gold: 4, items: 1, ads: 2, diaBoost: 1, stones: 0 } }, ctx()), { gold: 0, items: 2, ads: 0, dia: 2, stones: 3 });
   assert.equal(dailyLeft(CFG, { ...mine, day: '2026-11-19', daily: { gold: 4, items: 3, ads: 2, diaBoost: 3 } }, ctx()).gold, 4, '어제 기록');
   assert.equal(boostAmount(CFG, mine, 'ad'), 20);
   assert.equal(boostAmount(CFG, mine, 'dia', true), 25);
@@ -355,4 +356,63 @@ test('실수 방지 조건: 강화가 오늘 살 수 있던 주머니를 막을 
     assert.equal(goldNeedsConfirm(CFG, mine, ctx()), want, `${used + 1}번째`);
   }
   assert.equal(goldNeedsConfirm(CFG, mine, ctx(T0 + 24 * HOUR)), false, '다음 날은 1번째');
+});
+
+// 정령석 정제(docs/spirit-stones.md A).
+test('정령석 정제: 60/120/240, 4번째 거부, 정령석 +1씩, txId mine:stone:{KST날짜}:{n}', () => {
+  const { mine, inventory, ctx } = make({ ore: 500 });
+  assert.deepEqual(CFG.stones, { perDay: 3, costs: [60, 120, 240], confirmFrom: 3 });
+  assert.equal(Object.keys(inventory.data.perm.spirits).length, 0, '정령이 하나도 없는 저장에서도 된다');
+  for (const cost of [60, 120, 240]) {
+    assert.equal(nextStoneCost(CFG, mine, ctx()), cost);
+    const res = refineStone(CFG, mine, ctx());
+    assert.deepEqual([res.ok, res.cost], [true, cost]);
+  }
+  assert.equal(refineStone(CFG, mine, ctx()).reason, 'limit');
+  assert.equal(nextStoneCost(CFG, mine, ctx()), null);
+  assert.deepEqual([mine.ore, inventory.spiritStones], [80, 3]);
+  assert.deepEqual(inventory.data.grantedTx, [1, 2, 3].map((n) => `mine:stone:2026-11-20:${n}`));
+});
+
+test('정령석 정제: 원석 부족이면 아무것도 안 바뀌고, 확인은 3번째부터', () => {
+  const { mine, inventory, ctx } = make({ ore: 59 });
+  assert.equal(refineStone(CFG, mine, ctx()).reason, 'noOre');
+  assert.deepEqual([mine.ore, mine.daily.stones, inventory.spiritStones], [59, 0, 0]);
+  mine.ore = 1000;
+  assert.equal(stoneNeedsConfirm(CFG, mine, ctx()), false);
+  refineStone(CFG, mine, ctx());
+  assert.equal(stoneNeedsConfirm(CFG, mine, ctx()), false);
+  refineStone(CFG, mine, ctx());
+  assert.equal(stoneNeedsConfirm(CFG, mine, ctx()), true);
+  assert.equal(refineStone(CFG, { ...defaultMine(), ore: 1000 }, ctx()).reason, 'locked', '광산이 안 열렸으면 거부');
+});
+
+test('정령석 정제: KST 날짜가 바뀌면 초기화, 같은 txId는 두 번 지급 안 됨', () => {
+  const { mine, inventory, ctx } = make({ ore: 5000 });
+  for (let i = 0; i < 3; i++) refineStone(CFG, mine, ctx(KST('2026-11-20T23:59:00')));
+  const next = KST('2026-11-21T00:00:00');
+  assert.equal(dailyLeft(CFG, mine, ctx(next)).stones, 3);
+  assert.equal(refineStone(CFG, mine, ctx(next)).cost, 60);
+  assert.equal(inventory.spiritStones, 4);
+  // 시계를 되돌려 같은 날짜의 1번째가 다시 오면: 지급도 원석 차감도 없고 횟수만 맞춘다.
+  mine.day = null;
+  const ore = mine.ore;
+  assert.equal(refineStone(CFG, mine, ctx(next)).reason, 'duplicate');
+  assert.deepEqual([mine.ore, inventory.spiritStones, mine.daily.stones], [ore, 4, 1]);
+});
+
+test('정령석 정제 횟수는 골드 주머니·아이템 정제와 따로 센다', () => {
+  const { mine, ctx } = make({ ore: 5000 });
+  for (let i = 0; i < 4; i++) assert.ok(refineGold(CFG, mine, ctx()).ok);
+  for (let i = 0; i < 3; i++) assert.ok(refineItem(CFG, mine, 'hammer', ctx()).ok);
+  for (let i = 0; i < 3; i++) assert.ok(refineStone(CFG, mine, ctx()).ok);
+  assert.deepEqual(dailyLeft(CFG, mine, ctx()), { gold: 0, items: 0, ads: 2, dia: 3, stones: 0 });
+  assert.equal(nextGoldCost(CFG, mine, ctx()), null);
+  assert.deepEqual(normalizeMine(mine, CFG).daily.stones, 3, '저장·불러오기에 남는다');
+  assert.equal(normalizeMine({ ...mine, daily: { gold: 1 } }, CFG).daily.stones, 0, '옛 저장(stones 없음) = 0');
+});
+
+test('grantedTx 90일 정리: mine:stone·shop:stones도 하루짜리', () => {
+  const list = ['mine:stone:2026-01-01:1', 'shop:stones:2026-01-01', 'mine:stone:2026-11-19:3', 'shop:stones:2026-11-19'];
+  assert.deepEqual(pruneGrantedTx(list, '2026-11-20'), ['mine:stone:2026-11-19:3', 'shop:stones:2026-11-19']);
 });
