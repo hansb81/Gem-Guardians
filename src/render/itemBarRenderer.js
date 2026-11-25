@@ -12,9 +12,10 @@ const HILITE = '#f2d264';
 const SHAKE_MS = 300;
 const TOAST_MS = 1400;
 
-// "row,col" 목록 - 조준 대상 칸.
+// "row,col" 목록 - 조준 대상 칸. 낫(line)은 target 모양으로 방향을 안다: 가로 {row} / 세로 {col}.
 export function itemTargetCells(cfgTarget, target, rows, cols) {
   if (!target) return [];
+  if (cfgTarget === 'line') cfgTarget = target.col == null ? 'row' : 'col';
   if (cfgTarget === 'row') return Array.from({ length: cols }, (_, c) => ({ row: target.row, col: c }));
   if (cfgTarget === 'col') return Array.from({ length: rows }, (_, r) => ({ row: r, col: target.col }));
   if (cfgTarget === 'pair') return [target.a, target.b].filter(Boolean);
@@ -320,7 +321,7 @@ export class ItemBarRenderer {
         // 염료: 고른 칸만 밝게 + 테두리, 색은 옆 팔레트(drawDyePalette)에서 고른다.
         lit = outline = [aim.first];
       } else if (aim.hover) {
-        lit = outline = itemTargetCells(cfg.target, aim.hover, board.rows, board.cols);
+        lit = outline = itemTargetCells(cfg.target === 'line' ? aim.axis : cfg.target, aim.hover, board.rows, board.cols);
       }
 
       // 밝게 둘 칸만 빼고 어둡게(evenodd 구멍).
@@ -338,7 +339,7 @@ export class ItemBarRenderer {
         ctx.strokeRect(Math.round(x + 1 + shake), Math.round(y + 1), w - 2, h - 2);
       }
 
-      const key = aim.confirm ? 'confirm' : cfg.target === 'pair' ? (aim.first ? 'pair2' : 'pair') : cfg.action === 'recolor' ? (aim.first ? 'dye2' : 'dye') : cfg.target;
+      const key = aim.confirm ? 'confirm' : cfg.target === 'pair' ? (aim.first ? 'pair2' : 'pair') : cfg.action === 'recolor' ? (aim.first ? 'dye2' : 'dye') : cfg.target === 'line' ? aim.axis : cfg.target;
       ctx.font = getFontString(Math.max(12, Math.round(guideRect.height * 0.42)), true);
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
@@ -389,10 +390,6 @@ export function drawItemIconFallback(ctx, id, x, y, s) {
     case 'scythe_h':
       r(1, 6, 12, 2, '#e8e8f0');
       r(10, 4, 3, 2, '#e8e8f0');
-      break;
-    case 'scythe_v':
-      r(6, 1, 2, 12, '#e8e8f0');
-      r(8, 1, 2, 3, '#e8e8f0');
       break;
     case 'rainbow':
       r(5, 2, 4, 2, '#ff5a5a');

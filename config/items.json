@@ -11,8 +11,7 @@
   "bossFirstClearReward": { "count": 2 },
   "items": {
     "hammer":    { "group": "hotbar", "kind": "board",  "target": "cell", "action": "destroy",       "cooldownMoves": 2, "perFloor": null, "goldBase": 0.15 },
-    "scythe_h":  { "group": "hotbar", "kind": "board",  "target": "row",  "action": "destroy",       "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
-    "scythe_v":  { "group": "hotbar", "kind": "board",  "target": "col",  "action": "destroy",       "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
+    "scythe_h":  { "group": "hotbar", "kind": "board",  "target": "line", "action": "destroy",       "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
     "rainbow":   { "group": "hotbar", "kind": "board",  "target": "cell", "action": "transform",     "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.6 },
     "glove":     { "group": "hotbar", "kind": "board",  "target": "pair", "action": "freeSwap",      "cooldownMoves": 4, "perFloor": 3,    "goldBase": 0.3 },
     "repair":    { "group": "hotbar", "kind": "battle", "action": "wallHeal",      "pct": 0.40,      "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.30 },
@@ -21,7 +20,6 @@
     "dye":       { "group": "hotbar", "kind": "board",  "target": "cell", "action": "recolor",       "cooldownMoves": 2, "perFloor": null, "goldBase": 0.15 },
     "shuffle":   { "group": "hotbar", "kind": "board",  "target": "none", "action": "shuffle",       "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.15 },
     "barrier":   { "group": "hotbar", "kind": "battle", "action": "wallShield",    "duration": 8.0, "blockFlashSec": 0.5,  "cooldownMoves": 6, "perFloor": 2,    "goldBase": 0.45 },
-    "defuse":    { "group": "hotbar", "kind": "board",  "target": "none", "action": "timeBombTimer", "add": 5,         "cooldownMoves": 4, "perFloor": 2,    "goldBase": 0.3, "unlockFloor": 21 },
     "drum":      { "group": "hotbar", "kind": "battle", "action": "atkBuff",       "mul": 1.5, "moves": 3, "cooldownMoves": 6, "perFloor": 2, "goldBase": 0.45 },
 
     "booster_line": { "group": "preFloor", "action": "starterSpecials", "special": "line", "count": 2, "goldBase": 0.45, "starterCount": 2 },

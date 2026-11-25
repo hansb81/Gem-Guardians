@@ -33,3 +33,6 @@ threads/media-cache/
 
 # 스토어·서명 키 정보(지문, 키 교체 기록)가 들어 있어 저장소에 올리지 않는다
 docs/platforms.md
+
+# 원본·작업용 그림(확인용 스크린샷 포함)
+art/

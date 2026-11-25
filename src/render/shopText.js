@@ -61,12 +61,6 @@ export function productText(p, env) {
         lockText: t('shop.lock.floor', { floor: p.lockFloor }), lockMsg: t('shop.lockMsg.item', { name: itemName(p.item), floor: p.lockFloor }),
       };
     }
-    case 'itemBundle':
-      return {
-        name: `${itemName(p.item)} ×${p.count}`, sub: owned(p.item), subKey: p.item, desc: [t(`item.desc.${p.item}`)], long: t(`shop.long.${p.item}`),
-        info: [[t('shop.info.bundle'), t('shop.info.bundleVal', { n: p.count })], [t('shop.info.each'), t('shop.info.eachVal', { n: Math.round(p.price / p.count) })]],
-        lockText: t('shop.lock.floor', { floor: p.lockFloor }), lockMsg: t('shop.lockMsg.item', { name: itemName(p.item), floor: p.lockFloor }),
-      };
     case 'skill':
     case 'skillUnlock': {
       const s = p.special ? cfg.skills.special[p.skill] : cfg.skills.color[p.skill];

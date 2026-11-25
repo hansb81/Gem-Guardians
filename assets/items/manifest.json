@@ -22,12 +22,6 @@
       "h": 14,
       "group": "hotbar"
     },
-    "scythe_v": {
-      "src": "items/scythe_v.png",
-      "w": 14,
-      "h": 14,
-      "group": "hotbar"
-    },
     "rainbow": {
       "src": "items/rainbow.png",
       "w": 14,
@@ -66,12 +60,6 @@
     },
     "barrier": {
       "src": "items/barrier.png",
-      "w": 14,
-      "h": 14,
-      "group": "hotbar"
-    },
-    "defuse": {
-      "src": "items/defuse.png",
       "w": 14,
       "h": 14,
       "group": "hotbar"

@@ -66,7 +66,7 @@ function itemBotFor(itemsCfg, floor) {
 
 // 기준 레벨 = 그 플레이어의 T4 even 진행에서 그 보스층을 깰 때의 진입 탑 레벨(5개 탑 평균)의 시드 중앙값(시드 1..10, 반올림) +
 // 그때의 스킬 레벨(시드 중앙값 반올림, --skillbuy 그대로). expTowerLevel은 참고 열로만 남긴다.
-function entryLevels(env, player, floors, baseSeeds) {
+export function entryLevels(env, player, floors, baseSeeds) {
   const runs = Array.from({ length: baseSeeds }, (_, s) => runOneProgression(env, player, 'even', s + 1));
   return new Map(
     floors.map((f) => {

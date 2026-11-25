@@ -49,15 +49,13 @@ test('재화 부족이면 실패하고 아무것도 안 바뀐다', () => {
   assert.equal(buyProduct(ctxOf(player), 'dg.revive').reason, 'poor');
 });
 
-test('잠금 조건 전엔 구매 불가: 해제 부적 21층, 특수 기술 A안 보스 첫 처치', () => {
+test('잠금 조건 전엔 구매 불가: 특수 기술 A안 보스 첫 처치', () => {
   const player = makePlayer({ gold: 1e9, bestFloor: 12 });
-  assert.equal(buyProduct(ctxOf(player), 'item.defuse').reason, 'locked');
   assert.equal(buyProduct(ctxOf(player), 'skill.soul').reason, 'locked'); // 20층 보스 전
   assert.equal(player.inventory.skillLevel('soul'), 0);
   assert.ok(buyProduct(ctxOf(player), 'skill.lava').ok, '10층 보스를 잡았으면(최고 층 12) 골드로 해금');
   assert.equal(player.inventory.skillLevel('lava'), 1);
   player.bestFloor = 21;
-  assert.ok(buyProduct(ctxOf(player), 'item.defuse').ok);
   assert.ok(buyProduct(ctxOf(player), 'skill.soul').ok);
 });
 

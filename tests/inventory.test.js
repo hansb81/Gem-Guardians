@@ -157,11 +157,16 @@ test('예약: 켜기만으론 소모 없음, 층 시작 때 1개씩 소모, 0개
   assert.deepEqual(inv.reservations(), [], '꺼짐');
 });
 
-test('visibleItems: 해제 부적은 21층 전엔 빠지지만 개수 보존', () => {
-  const { inv } = make({ items: { defuse: 3 } });
-  assert.ok(!inv.visibleItems(20).includes('defuse'));
-  assert.ok(inv.visibleItems(21).includes('defuse'));
-  assert.equal(inv.count('defuse'), 3);
+test('없앤 아이템 접기: 세로 낫 -> 낫, 해제 부적 -> 망치(개수 합산, 장착 중복은 뒤 칸 비움, 지급도 접힘)', () => {
+  const { inv } = make({
+    items: { scythe_v: 3, scythe_h: 2, defuse: 4, hammer: 1 },
+    loadout: { hotbar: ['scythe_v', 'scythe_h', 'defuse', 'hammer'], pendingHotbar: ['defuse', null, null, null] },
+  });
+  assert.deepEqual(inv.data.items, { scythe_h: 5, hammer: 5 });
+  assert.deepEqual(inv.data.loadout.hotbar, ['scythe_h', null, 'hammer', null]);
+  assert.deepEqual(inv.data.loadout.pendingHotbar, ['hammer', null, null, null]);
+  inv.grant({ items: { scythe_v: 2, defuse: 1 } }, { src: 'mail', txId: 'mail:1' });
+  assert.deepEqual(inv.data.items, { scythe_h: 7, hammer: 6 });
 });
 
 // v1 저장 예(아이템·상점 작업이 만든 형식).

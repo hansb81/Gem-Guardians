@@ -4,7 +4,7 @@
   "qtyQuick": [1, 5, 10],
   "free": { "item": "dye", "count": 1 },
   "goldItems": [
-    { "group": "board", "items": ["hammer", "dye", "shuffle", "scythe_h", "scythe_v", "glove", "defuse", "rainbow"] },
+    { "group": "board", "items": ["hammer", "dye", "shuffle", "scythe_h", "glove", "rainbow"] },
     { "group": "battle", "items": ["repair", "hourglass", "barrier", "drum"] },
     { "group": "preFloor", "items": ["booster_line", "booster_bomb"] }
   ],
@@ -43,22 +43,6 @@
   ],
   "diaItems": ["gold_coin", "revive"],
   "slot4Dia": 300,
-  "itemBundles": [
-    { "item": "hammer", "count": 5, "dia": 20 },
-    { "item": "dye", "count": 5, "dia": 20 },
-    { "item": "shuffle", "count": 5, "dia": 15 },
-    { "item": "scythe_h", "count": 5, "dia": 35 },
-    { "item": "scythe_v", "count": 5, "dia": 35 },
-    { "item": "glove", "count": 5, "dia": 35 },
-    { "item": "rainbow", "count": 5, "dia": 60 },
-    { "item": "defuse", "count": 5, "dia": 30 },
-    { "item": "repair", "count": 5, "dia": 50 },
-    { "item": "hourglass", "count": 5, "dia": 50 },
-    { "item": "barrier", "count": 5, "dia": 50 },
-    { "item": "drum", "count": 5, "dia": 50 },
-    { "item": "booster_line", "count": 3, "dia": 30 },
-    { "item": "booster_bomb", "count": 3, "dia": 30 }
-  ],
   "packs": {
     "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
     "order": ["starter", "boss", "slot4", "weekly", "monthly", "chapter", "adfree"],

@@ -39,7 +39,7 @@ export function drawDexInfo(ctx, assets, r, cfg, id, own, nowMs) {
   frame(ctx, box, own ? SPIRIT_GRADE_COLOR[sp.grade] : C.outline);
   drawSpiritPortrait(ctx, assets, id, sp.element, box.x + 4, box.y + 4, 72, nowMs, own ? null : 'silhouette');
   const tx = box.x + box.width + 12;
-  const tw = r.x + r.width - P - tx;
+  const tw = r.x + r.width - P - tx - 40; // 오른쪽 위 닫기 X 자리(정령 탭)
   label(ctx, t(`spirit.name.${id}`), rect(tx, r.y + P, tw, 22), C.title, 16, true, 'left');
   label(ctx, `${t(`spirit.grade.${sp.grade}`)} · ${t(`spirit.element.${sp.element}`)} · ${t(`spirit.role.${sp.role}`)}`, rect(tx, r.y + P + 24, tw, 18), sp.grade === 'common' ? C.sub : SPIRIT_GRADE_COLOR[sp.grade], 12, true, 'left');
   label(ctx, own ? t('spirit.ownedLv', own) : t('spirit.notOwned'), rect(tx, r.y + P + 44, tw, 18), own ? C.owned : C.sub, 12, false, 'left');

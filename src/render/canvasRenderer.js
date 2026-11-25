@@ -25,8 +25,6 @@ import { fmt } from './shopText.js';
 
 const RAINBOW = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'];
 const DEFAULT_MAX_PARTICLES = 240;
-const BOARD_FLOAT_MS = 600; // 보드 위 데미지 폰트 숫자(해제 부적 +5) 수명
-const BOMB_BOUNCE_MS = 250; // 해제 부적 후 시한폭탄 숫자 튕김
 const BLEED_FILL = '#0d0a10'; // frame 밖 기본 블리드(배경 manifest에 bleedFill이 없을 때)
 // 특수 잼 조합(comboActivate)은 전용 소리가 아직 없다 - 섞인 두 종류의 소리를 같이 낸다
 // (assets/sfx/README.md "특수 보석끼리 조합은 ... 두 소리를 같이 재생").
@@ -159,8 +157,6 @@ export class CanvasRenderer {
     this.itemBar = new ItemBarRenderer();
     this.itemAssets = null;
     this._itemFx = []; // 망치 번쩍 / 낫 세그먼트 - { kind, cells, ageMs }
-    this._boardFloats = []; // 보드 위 데미지 폰트 숫자(해제 부적 "+5") - { row, col, text, variant, ageMs }
-    this._bombBounce = new Map(); // "row,col" -> ageMs - 시한폭탄 타이머 숫자 튕김(해제 부적)
     this.tutorial = new TutorialRenderer(); // 에셋은 main.js가 load()
   }
 
@@ -378,7 +374,6 @@ export class CanvasRenderer {
     this._drawScoreBar(layout.scoreBar, gameState, battleHud?.compScore ?? null);
     this._advanceAndDrawItemFx(layout.board, gameState.board, dtMs);
     if (itemUi?.items) this.itemBar.drawBoardOverlay(ctx, layout.board, layout.scoreBar, itemUi, itemUi.config.items, now);
-    this._advanceAndDrawBoardFloats(layout.board, dtMs);
     // 염료 색 고르기 - 칸을 고른 뒤 그 옆에 5색 팔레트(main.js가 lastLayout.dyePalette로 탭 판정).
     const dyeAim = itemUi?.aim?.first && itemUi.config.items[itemUi.aim.id]?.action === 'recolor' ? itemUi.aim : null;
     this.lastLayout.dyePalette = dyeAim
@@ -776,10 +771,7 @@ export class CanvasRenderer {
     const half = tileSize / 2;
     const w = glyphW + (text.length - 1) * 4;
     const ox = cx - half * s + (centerX - Math.floor(w / 2)) * s;
-    // 해제 부적 직후 한 번 튕김(위로 최대 3px x s, BOMB_BOUNCE_MS 동안 sin).
-    const bounceAge = this._bombBounce.get(`${row},${col}`);
-    const bounce = bounceAge != null ? Math.round(Math.sin(Math.min(1, bounceAge / BOMB_BOUNCE_MS) * Math.PI) * 3 * s) : 0;
-    const oy = cy - half * s + (centerY - Math.floor(glyphH / 2)) * s - bounce;
+    const oy = cy - half * s + (centerY - Math.floor(glyphH / 2)) * s;
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     [...text].forEach((ch, i) => {
@@ -1777,52 +1769,18 @@ export class CanvasRenderer {
     }
     // 낫: 시작 칸(왼쪽/위쪽 끝)부터 lineStepMs 간격으로 line 세그먼트. 색은 그 칸에서 지워지는
     // 잼 색(방해요소 칸은 앞 칸 색을 이어 쓴다).
-    const n = cfg.target === 'row' ? board.cols : board.rows;
+    const isRow = target.col == null; // 낫(target line): 가로 {row} / 세로 {col}
+    const n = isRow ? board.cols : board.rows;
     const cells = [];
     let colorId = GEM_TYPES[0].id;
     for (let i = 0; i < n; i++) {
-      const row = cfg.target === 'row' ? target.row : i;
-      const col = cfg.target === 'row' ? i : target.col;
+      const row = isRow ? target.row : i;
+      const col = isRow ? i : target.col;
       const idx = board.index(row, col);
       colorId = GEM_TYPES[board.cellStates[idx]?.value ?? board.grid[idx]]?.id ?? colorId;
       cells.push({ row, col, colorId, seg: i % 2 === 0 ? 'seg0' : 'seg1' });
     }
-    this._itemFx.push({ kind: 'scythe', axis: cfg.target === 'row' ? 'h' : 'v', cells, ageMs: 0 });
-  }
-
-  // 보드 위 데미지 폰트 숫자(README 추천 움직임: 0.6초 떠오르며 마지막 0.2초 사라짐) + 시한폭탄 숫자 튕김 수명.
-  _advanceAndDrawBoardFloats(rect, dtMs) {
-    for (const [key, age] of this._bombBounce) {
-      if (age + dtMs >= BOMB_BOUNCE_MS) this._bombBounce.delete(key);
-      else this._bombBounce.set(key, age + dtMs);
-    }
-    if (this._boardFloats.length === 0) return;
-    const { ctx } = this;
-    const fontMeta = this.assets?.uiFont;
-    const next = [];
-    for (const f of this._boardFloats) {
-      f.ageMs += dtMs;
-      if (f.ageMs >= BOARD_FLOAT_MS) continue;
-      next.push(f);
-      const t = f.ageMs / BOARD_FLOAT_MS;
-      const x = rect.x + (f.col + 0.5) * rect.cellSize;
-      const y = rect.y + (f.row + 0.3) * rect.cellSize - 18 * t;
-      const img = getUiFont(this.assets, f.variant);
-      ctx.save();
-      ctx.globalAlpha = t > 0.67 ? Math.max(0, 1 - (t - 0.67) / 0.33) : 1;
-      if (fontMeta?.chars && uiReady(img)) {
-        ctx.imageSmoothingEnabled = false;
-        drawDamage(ctx, img.img, fontMeta, f.text, x, Math.round(y - fontMeta.cellH), 2);
-      } else {
-        ctx.fillStyle = '#f2d264';
-        ctx.font = getFontString(12, true);
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        drawText(ctx, f.text, x, y);
-      }
-      ctx.restore();
-    }
-    this._boardFloats = next;
+    this._itemFx.push({ kind: 'scythe', axis: isRow ? 'h' : 'v', cells, ageMs: 0 });
   }
 
   _advanceAndDrawItemFx(rect, board, dtMs) {
@@ -2035,10 +1993,6 @@ export class CanvasRenderer {
       // 설정 유무와 무관하게 항상 재생 시도한다).
       if (effect.type === 'obstacleDamaged' || effect.type === 'obstacleDestroyed' || effect.type === 'obstacleExpire') {
         this._spawnObstacleFx(effect);
-      }
-      if (effect.type === 'timeBombTimerAdded') {
-        this._boardFloats.push({ row: effect.cell.row, col: effect.cell.col, text: `+${effect.add}`, variant: 'yellow', ageMs: 0 });
-        this._bombBounce.set(`${effect.cell.row},${effect.cell.col}`, 0);
       }
       // 잼 터짐 이펙트(assets/effects) - line/bomb/box(일반)/color 발동마다 스프라이트
       // 재생 일정을 만든다(설정 유무와 무관하게 항상 시도 - obstacleFx와 같은 이유).

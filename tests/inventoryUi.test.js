@@ -8,14 +8,12 @@ import { Inventory } from '../src/game/inventory.js';
 
 const ITEMS = JSON.parse(readFileSync(new URL('../config/items.json', import.meta.url), 'utf8'));
 
-test('보유 아이템 그룹: hotbar는 kind별, preFloor는 빠지고, 부활은 기타. 21층 전엔 해제 부적 없음', () => {
+test('보유 아이템 그룹: hotbar는 kind별, preFloor는 빠지고, 부활은 기타', () => {
   const inv = new Inventory(null, { config: ITEMS });
   const g20 = inventoryGroups(ITEMS, inv.visibleItems(20));
   assert.deepEqual(g20.other, ['revive']);
-  assert.ok(!g20.board.includes('defuse'));
   assert.ok(g20.battle.every((id) => ITEMS.items[id].kind === 'battle'));
   for (const id of ['booster_line', 'booster_bomb', 'gold_coin']) assert.ok(![...g20.board, ...g20.battle, ...g20.other].includes(id));
-  assert.ok(inventoryGroups(ITEMS, inv.visibleItems(21)).board.includes('defuse'));
 });
 
 test('rewardFromDelta: 받은 것만(buy 비용 음수·over 제외), 빈 지급은 null', () => {

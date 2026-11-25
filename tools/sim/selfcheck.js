@@ -9,11 +9,11 @@ import { skillArgsAtFor } from './skills.js';
 const c = loadConfigs();
 
 // S1 --set: 파일 접두어, 배열 id/item 찾기, 숫자 배열, 접두어 없음 = balance, 없는 키는 에러.
-applySets(c, 'shop.skills.special.lava.unlockGold=1.5;skills.colorEffects.red.radius=0.2;shop.goldExchange.small.floors=1;shop.itemBundles.hammer.dia=12;shop.skills.levelCost=[0.75,0.75,0.75,0.75];scaling.enemyHpMul=1.4');
+applySets(c, 'shop.skills.special.lava.unlockGold=1.5;skills.colorEffects.red.radius=0.2;shop.goldExchange.small.floors=1;shop.goldExchange.mid.dia=55;shop.skills.levelCost=[0.75,0.75,0.75,0.75];scaling.enemyHpMul=1.4');
 assert.equal(c.shop.skills.special.lava.unlockGold, 1.5);
 assert.equal(c.skills.colorEffects.red.radius, 0.2);
 assert.equal(c.shop.goldExchange.find((g) => g.id === 'small').floors, 1);
-assert.equal(c.shop.itemBundles.find((b) => b.item === 'hammer').dia, 12);
+assert.equal(c.shop.goldExchange.find((g) => g.id === 'mid').dia, 55);
 assert.deepEqual(c.shop.skills.levelCost, [0.75, 0.75, 0.75, 0.75]);
 assert.equal(c.balance.scaling.enemyHpMul, 1.4);
 assert.throws(() => applySets(c, 'shop.goldExchange.small.goldR=1'), /키 없음/);

@@ -129,7 +129,14 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
     playerState.tutorial = { ...playerState.tutorial, done: false };
     playerState.save();
   };
-  panel.append(floorInput, floorGo, goldBtn, itemsBtn, ...spiritBtns, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn, tutorialBtn);
+  const wipeBtn = document.createElement('button');
+  wipeBtn.textContent = '전체 데이터 초기화';
+  wipeBtn.onclick = async () => {
+    playerState.saveBlocked = true; // 지우는 사이 저장이 다시 쓰지 않게
+    await storage.removeAll();
+    location.reload();
+  };
+  panel.append(floorInput, floorGo, goldBtn, itemsBtn, ...spiritBtns, levelInput, levelGo, speedLabel, slowLabel, drumBtn, reviveBtn, logBtn, v1Btn, tutorialBtn, wipeBtn);
 
   // assets/effects 스프라이트 확인용 - 보드 가운데 칸에서 line/bomb/box/color 발동을
   // 하나씩 강제로 재생해본다(core 매치 규칙 없이, CanvasRenderer._spawnSpecialFx만 확인).

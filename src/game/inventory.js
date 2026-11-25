@@ -2,7 +2,7 @@
 // 이 파일의 grant/spend/buy와 장착·예약 함수뿐이다. 지갑(gold/diamonds)은 wallet(playerState)에 있고
 // 번들에 들어 있으면 여기서 넣고 뺀다. 저장은 save 콜백(playerState.save) 한 번.
 import {
-  ITEM_CAP, HOTBAR_LEN, LOG_MAX, normalizeInv, addCapped, nextSkillLevel, equipInto, swapInto,
+  ITEM_CAP, HOTBAR_LEN, LOG_MAX, normalizeInv, addCapped, nextSkillLevel, equipInto, swapInto, RETIRED_ITEMS,
 } from '../core/inventory/inventory.js';
 import { grantSpirit, levelUpCost, equipSpiritInto, ensureStartSpirit, bossSpiritBundle, bossSpiritTx, START_SPIRIT_TX } from '../core/spirits/spirits.js';
 
@@ -328,7 +328,8 @@ export class Inventory {
       d.diamonds = bundle.diamonds;
     }
     const firstTime = [];
-    for (const [id, n] of Object.entries(bundle.items ?? {})) {
+    for (const [raw, n] of Object.entries(bundle.items ?? {})) {
+      const id = RETIRED_ITEMS[raw] ?? raw; // 옛 우편·쿠폰의 없앤 아이템 id
       if (!(id in this.data.items)) firstTime.push(id);
       const { added, over } = addCapped(this.data.items, id, n);
       d[id] = (d[id] ?? 0) + added;

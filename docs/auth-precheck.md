@@ -85,7 +85,7 @@
 | 형식 예시 | 어디서 | 한 사람이 받는 횟수 | 날짜 있나 |
 |---|---|---|---|
 | `start:hammer`(15개) | playerState.initItems | 평생 1번(아이템마다) | ✗ |
-| `unlock:defuse` | playerState.initItems | 평생 1번(21층) | ✗ |
+| `unlock:defuse` | playerState.initItems(해제 부적 삭제 2026-11-24 - 옛 기록만 남음) | 평생 1번(21층) | ✗ |
 | `tutorial_complete` | src/tutorial/tutorial.js | 평생 1번 | ✗ |
 | `boss:10` … `boss:90` | battleController._grantFirstClearItems | 보스층 첫 클리어마다(최대 9~10) | ✗ |
 | `free:2026-11-13` | shop.js buyProduct `free` | 하루 1번 | ✓(기기 날짜 `localDay`) |

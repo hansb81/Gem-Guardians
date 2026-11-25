@@ -118,7 +118,7 @@ coupon_tries (player_id uuid, at timestamptz default now(), ok boolean)  -- 틀�
 ### 3-3. 지급 내용 검사 `coupon_bundle_ok(bundle)` (표 check 제약)
 - 키는 `diamonds`, `gold`, `items`만. **`flags`(광고 제거·4번째 슬롯)·`skills`는 쿠폰으로 못 줌** — 유료 상품을 쿠폰으로 실수로 뿌리는 걸 막음.
 - 숫자는 양의 정수, 상한: 다이아 ≤ 5,000, 골드 ≤ 1,000,000, 아이템 개당 ≤ 99.
-- 아이템 id는 `config/items.json`의 16종만(hammer, scythe_h, scythe_v, rainbow, glove, repair, hourglass, dye, shuffle, barrier, defuse, drum, booster_line, booster_bomb, gold_coin, revive). 서버 함수에 목록 복사 + 테스트가 config와 같은지 비교(출석표와 같은 방식).
+- 아이템 id는 `config/items.json`의 14종 + 없앤 아이템 2종(scythe_v·defuse - 클라이언트가 낫·망치로 접음, 2026-11-24)(hammer, scythe_h, scythe_v, rainbow, glove, repair, hourglass, dye, shuffle, barrier, defuse, drum, booster_line, booster_bomb, gold_coin, revive). 서버 함수에 목록 복사 + 테스트가 config와 같은지 비교(출석표와 같은 방식).
 - 오타(`"diamond": 100`)가 있으면 **쿠폰 만들 때 바로 에러** → 손님이 빈 보상 받는 사고 없음.
 
 ### 3-4. Edge Function `coupon-redeem`

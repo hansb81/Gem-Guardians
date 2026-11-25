@@ -5,7 +5,7 @@
 // env.towerBuy(--towerbuy): always(기본) = 층이 끝날 때마다(성공·실패) 스킬 구매 뒤 남은 골드로 탑을 올린다.
 // onfail = 실패했을 때만 탑을 올린다(v12-6까지의 방식, 참고용 - 실패가 적으면 골드를 쌓아 둔 채 낮은 레벨로 올라간다).
 import { runFloorAttempt } from '../floorSim.js';
-import { clearBonus, towerLevelCost, maxTowerLevelUps, normalFloorReward } from '../../../src/core/economy/economy.js';
+import { clearBonus, towerLevelCost, maxTowerLevelUps, normalFloorReward, itemPrice } from '../../../src/core/economy/economy.js';
 import { mineDay, newIdleMine } from '../idle.js';
 import { GEM_TYPES } from '../../../src/config/gems.js';
 import { getFloor } from '../../../src/core/balance/floorGen.js';
@@ -58,13 +58,20 @@ export function spendGold(strategy, balance, towerLevels, gold, colorUsage) {
 // itemPolicy(T6, docs/items.md 4장): none = 아이템 없음, boss = 보스층에서만 사서 씀, always = 모든 층.
 // 시작 지급(starter)·보스 첫 클리어 보상 2개·20층 4번째 슬롯은 게임(BattleController._grantFirstClearItems)과
 // 같은 규칙을 여기서 따른다(그 메서드는 playerState에 묶여 있어 import하지 못함).
-export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'none' } = {}) {
+// itemSet(v13-6 T9) = 아이템 하나(또는 묶음)만 쓰는 측정: 빈 가방에서 시작, 그 하단 아이템만 장착해 매 층 층당 한도까지 골드로 산다.
+// 시작 부스터는 매 층 1개 사서 예약, 황금 주화·부활 깃털(다이아 전용)은 매 도전 1개 공짜(상한 측정). 보스 보상 아이템·4번째 슬롯은 없음.
+export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'none', itemSet = null } = {}) {
   const { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, items: itemsCfg } = env.configs;
   const playerCfg = sim.players[player];
   const agg = newAgg();
+  if (itemSet) itemPolicy = 'always';
   const useItems = itemPolicy !== 'none';
-  const inventory = useItems ? Object.fromEntries(Object.keys(itemsCfg.items).map((id) => [id, itemsCfg.starter.count])) : {};
-  const equipped = useItems ? itemsCfg.starter.equipped.slice() : [];
+  const inventory = itemSet ? {} : useItems ? Object.fromEntries(Object.keys(itemsCfg.items).map((id) => [id, itemsCfg.starter.count])) : {};
+  const equipped = itemSet ? itemSet.filter((id) => itemsCfg.items[id].group === 'hotbar') : useItems ? itemsCfg.starter.equipped.slice() : [];
+  const boosters = itemSet ? itemSet.filter((id) => itemsCfg.items[id].action === 'starterSpecials') : [];
+  const coin = !!itemSet?.includes('gold_coin');
+  const feather = !!itemSet?.includes('revive');
+  const itemStat = { attempts: 0, uses: {}, usable: {}, unused: {}, bought: {}, revives: 0 }; // T9: 본 층 도전 기준
   let goldEarned = 0;
   let goldSpentItems = 0;
   let goldSpentLevels = 0;
@@ -196,7 +203,8 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   const always = env.towerBuy !== 'onfail';
   const tagOf = (f) => getFloor(balance, enemies, obstacles, floorsData, f).tag;
   const itemReserve = () =>
-    always && itemPolicy === 'boss' && tagOf(floor) === 'boss' ? buyItems(env.configs, { ...inventory }, equipped, Infinity, floor) : 0;
+    itemSet && always ? buyItems(env.configs, { ...inventory }, equipped, Infinity, floor) + boosters.reduce((t, id) => t + itemPrice(env.configs, itemsCfg, id, floor), 0) // T9: 다음 도전에 채울 아이템 값은 탑에 쓰지 않고 남긴다
+      : always && itemPolicy === 'boss' && tagOf(floor) === 'boss' ? buyItems(env.configs, { ...inventory }, equipped, Infinity, floor) : 0;
   const levelUp = () => {
     buySkills();
     if (buyUnlocks()) return;
@@ -259,12 +267,25 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     attempt++;
     const tag = tagOf(floor);
     const itemsHere = useItems && (itemPolicy === 'always' || tag === 'boss');
+    let starter = null;
     if (itemsHere) {
+      const before = itemSet ? { ...inventory } : null;
       const spent = buyItems(env.configs, inventory, equipped, gold, floor);
       gold -= spent;
       goldSpentItems += spent;
       bucketOf(floor).item += spent;
+      if (itemSet) for (const id of equipped) itemStat.bought[id] = (itemStat.bought[id] ?? 0) + (inventory[id] ?? 0) - (before[id] ?? 0);
+      for (const id of boosters) {
+        const price = itemPrice(env.configs, itemsCfg, id, floor);
+        if (gold < price) continue;
+        gold -= price;
+        goldSpentItems += price;
+        bucketOf(floor).item += price;
+        itemStat.bought[id] = (itemStat.bought[id] ?? 0) + 1;
+        (starter ??= []).push({ special: itemsCfg.items[id].special, count: itemsCfg.items[id].count });
+      }
     }
+    const gm = coin ? itemsCfg.items.gold_coin.mul : 1; // 황금 주화: 처치 골드·클리어 보너스 x mul(게임 BattleController.goldMul)
     let spiritsNow; // 이번 층 시작의 정령 5칸(prog), off면 undefined = runFloorAttempt 기본값
     const attemptFloor = (floorNumber, attemptSeed) => {
       if (sp) spiritsNow = tutorial ? null : spiritEquipBest(sp, colors, env.spiritEquip);
@@ -280,8 +301,9 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         playerCfg,
         modifierHooks: null,
         ...env.skillArgsAt(floor, skillLv ?? undefined),
-        itemBot: itemsHere && floorNumber === floor ? { config: itemsCfg, inventory, equipped } : null,
-        onFail: floorNumber === floor ? onFailFor(tag === 'boss') : null,
+        itemBot: itemsHere && floorNumber === floor && equipped.length ? { config: itemsCfg, inventory, equipped } : null,
+        onFail: floorNumber === floor ? (feather ? () => 'feather' : onFailFor(tag === 'boss')) : null,
+        starterSpecials: floorNumber === floor ? starter : null,
         reviveCfg,
         seed: attemptSeed,
         dt: sim.dt,
@@ -297,6 +319,18 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     };
     const result = attemptFloor(floor, seed * 100000 + attempt);
     const spiritsAtEntry = spiritsNow ?? null;
+    if (itemSet) {
+      itemStat.attempts++;
+      if (result.continueUsed) itemStat.revives++;
+      for (const id of equipped) {
+        const n = result.itemsUsed[id] ?? 0;
+        itemStat.uses[id] = (itemStat.uses[id] ?? 0) + n;
+        if (result.itemUsable[id]) {
+          itemStat.usable[id] = (itemStat.usable[id] ?? 0) + 1;
+          if (n === 0) itemStat.unused[id] = (itemStat.unused[id] ?? 0) + 1;
+        }
+      }
+    }
     cumulativeTimeSec += result.timeSec;
     floorTimeSec += result.timeSec;
     addResult(agg, result);
@@ -304,14 +338,15 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     for (const [color, count] of Object.entries(result.stats.colorCounts)) colorUsage[color] += count;
 
     if (result.status === 'cleared') {
-      const reward = result.killGoldTotal + result.spiritGold + clearBonus(balance, result.killGoldTotal, true);
-      const cg = comboGold(balance, reward, result.maxCombo); // 콤보 골드(기본 config, --combogold=off면 0)
+      const base = result.killGoldTotal + result.spiritGold + clearBonus(balance, result.killGoldTotal, true);
+      const reward = gm === 1 ? base : result.killGoldTotal * gm + result.spiritGold + clearBonus(balance, result.killGoldTotal, true) * gm;
+      const cg = comboGold(balance, base, result.maxCombo); // 콤보 골드(기본 config, --combogold=off면 0). 황금 주화 배율 전 기준(게임과 같음)
       gold += reward + cg;
       goldEarned += reward + cg;
       bucketOf(floor).first += reward;
       bucketOf(floor).combo += cg;
       comboByTag[result.tag] += cg;
-      if (useItems && tag === 'boss') {
+      if (useItems && !itemSet && tag === 'boss') {
         // 보스 첫 클리어 = 서로 다른 무작위 아이템 2개(층 번호 seed), 20층 = 4번째 슬롯(모래시계 장착).
         const ids = Object.keys(itemsCfg.items);
         const rng = createRng(floor);
@@ -331,9 +366,9 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
       if (always && floor <= env.floorsRange.to) levelUp();
       else buySkills();
     } else {
-      gold += result.killGoldTotal + result.spiritGold;
-      goldEarned += result.killGoldTotal + result.spiritGold;
-      bucketOf(floor).fail += result.killGoldTotal + result.spiritGold;
+      gold += result.killGoldTotal * gm + result.spiritGold;
+      goldEarned += result.killGoldTotal * gm + result.spiritGold;
+      bucketOf(floor).fail += result.killGoldTotal * gm + result.spiritGold;
       if (attempt >= HARD_STOP_RETRIES) {
         retriesByFloor.push({ floor, tag: result.tag, retries: attempt, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry });
         wallFloors.push(floor);
@@ -383,6 +418,7 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     unlockShareAt,
     itemsUsed: agg.itemsUsed,
     idle,
+    itemStat,
     spirit: sp ? { goldSpent: sp.goldSpent, levels: sp.levels, stonesGot: sp.stonesGot, stonesSpent: sp.stonesSpent, stonesLeft: sp.inv.data.perm.spiritStones, wealthGold: spiritGoldTotal, owned: { ...sp.inv.data.perm.spirits } } : null,
   };
 }

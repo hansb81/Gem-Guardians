@@ -213,57 +213,6 @@ test('결계: 동안 적 성벽 공격·시한폭탄 폭발 피해 0, 끝나면 
   assert.equal(bs.wallHealth, hp - 10);
 });
 
-// ---------------- 해제 부적 ----------------
-
-test('해제: 모든 시한폭탄 타이머 +5, 칸마다 timeBombTimerAdded 이펙트', () => {
-  const board = noMatchBoard7();
-  board.attachments[board.index(1, 1)] = BOMB();
-  board.attachments[board.index(5, 2)] = { ...BOMB(), timer: 2 };
-  const state = new GameState({ board, obstaclesConfig: OBSTACLES });
-  const player = makePlayer();
-  const ctrl = new ItemController({ config: ITEMS, player, gameState: state });
-  assert.deepEqual(ctrl.use('defuse'), { ok: true, reason: null });
-  assert.equal(board.attachments[board.index(1, 1)].timer, 10);
-  assert.equal(board.attachments[board.index(5, 2)].timer, 7);
-  state.update(0.02);
-  const fx = state.effects.filter((e) => e.type === 'timeBombTimerAdded');
-  assert.equal(fx.length, 2);
-  assert.ok(fx.every((e) => e.add === 5));
-  assert.equal(player.items.defuse, 2);
-});
-
-test('해제: 시한폭탄이 없으면 noTarget 실패(소모 없음), 21층 전엔 locked·목록에 없음', () => {
-  const state = new GameState({ board: noMatchBoard7(), obstaclesConfig: OBSTACLES });
-  const player = makePlayer();
-  const ctrl = new ItemController({ config: ITEMS, player, gameState: state });
-  assert.deepEqual(ctrl.use('defuse'), { ok: false, reason: 'noTarget' });
-  assert.equal(player.items.defuse, 3);
-  assert.equal(ctrl.cooldownLeft('defuse'), 0);
-
-  const early = new ItemController({ config: ITEMS, player: makePlayer({ bestFloor: 20 }), gameState: state });
-  assert.equal(early.isUnlocked('defuse'), false);
-  assert.equal(early.canUse('defuse').reason, 'locked');
-
-  // 지급: 최고 층 21 미만이면 키 자체가 없고, 21에 도달하면 3개.
-  const saved = { bestFloor: playerState.bestFloor, inventory: playerState.inventory };
-  playerState.inventory = new Inventory(null, { wallet: playerState }); // 새 플레이어
-  playerState.bestFloor = 20;
-  playerState.initItems(ITEMS);
-  assert.deepEqual(playerState.inventory.hotbar(), ITEMS.starter.equipped, '첫 실행 자동 장착');
-  assert.equal('defuse' in playerState.inventory.data.items, false);
-  assert.equal(playerState.inventory.data.items.booster_line, 2);
-  assert.equal(playerState.inventory.data.items.gold_coin, 1);
-  assert.equal(playerState.inventory.data.items.revive, 1);
-  assert.equal(playerState.inventory.data.items.dye, 3);
-  playerState.bestFloor = 21;
-  playerState.initItems(ITEMS);
-  assert.equal(playerState.inventory.data.items.defuse, 3);
-  playerState.initItems(ITEMS);
-  assert.equal(playerState.inventory.data.items.defuse, 3, '두 번 안 준다(txId unlock:defuse)');
-  assert.ok(playerState.inventory.data.grantedTx.includes('unlock:defuse'));
-  Object.assign(playerState, saved);
-});
-
 // ---------------- 분노의 북 ----------------
 
 test('북: 스왑 3번 동안 피해 x1.5, 3번째 스왑의 연쇄까지 적용, 그 뒤 원래대로, 쿨다운은 종료 후부터', () => {
@@ -463,7 +412,7 @@ test('결계 중 적 공격은 wallBlocked(같은 적 0.5초에 한 번)만 내�
 
 // ---------------- 공통: 보상 풀·가격·장착·예약 토글 ----------------
 
-test('보스 첫 클리어 보상 풀 = hotbar 중 골드 구매 가능·해금된 것만(21층 전 해제 부적 제외)', () => {
+test('보스 첫 클리어 보상 풀 = hotbar 중 골드 구매 가능·해금된 것만', () => {
   const controller = makeController();
   for (let f = 10; f <= 100; f += 10) {
     controller.devSetFloor(f);
@@ -473,12 +422,8 @@ test('보스 첫 클리어 보상 풀 = hotbar 중 골드 구매 가능·해금�
       const cfg = ITEMS.items[id];
       assert.equal(cfg.group, 'hotbar', `${f}층 ${id}`);
       assert.notEqual(cfg.goldBase, null);
-      if (f < 21) assert.notEqual(id, 'defuse');
     }
   }
-  // 20층 보상에 defuse가 절대 없는지 seed 전수 대신 풀 자체를 확인한다.
-  playerState.bestFloor = 20;
-  assert.equal(controller.items.isUnlocked('defuse'), false);
 });
 
 test('itemPrice: goldBase null(다이아 전용)이면 null, 다이아 값은 config에서', () => {

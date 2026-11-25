@@ -30,17 +30,37 @@ function fit(arr, len) {
 }
 const fitHotbar = (arr) => fit(arr, HOTBAR_LEN);
 
-// 저장된 inv에서 빠진 칸만 채운다(손상·부분 저장 대비). 값은 그대로 - 모르는 아이템 id도 보존.
+// 없앤 아이템 -> 대신 줄 아이템(2026-11-24): 세로 낫은 낫(scythe_h)으로 합침, 해제 부적은 망치로 바꿔 줌.
+// 불러올 때마다 접는다(여러 번 돌려도 같은 결과) - 옛 우편·쿠폰으로 늦게 들어온 옛 id도 다음 불러오기에 접힌다.
+export const RETIRED_ITEMS = { scythe_v: 'scythe_h', defuse: 'hammer' };
+
+function foldRetiredItems(items) {
+  for (const [from, to] of Object.entries(RETIRED_ITEMS)) {
+    if (!(from in items)) continue;
+    const n = Number(items[from]);
+    delete items[from];
+    if (n > 0) addCapped(items, to, n);
+  }
+  return items;
+}
+
+// 장착 칸의 옛 id를 새 id로, 같은 아이템이 두 칸이면 뒤 칸을 비운다.
+function foldRetiredHotbar(bar) {
+  const out = bar.map((id) => RETIRED_ITEMS[id] ?? id);
+  return out.map((id, i) => (id != null && out.indexOf(id) < i ? null : id));
+}
+
+// 저장된 inv에서 빠진 칸만 채운다(손상·부분 저장 대비). 값은 그대로 - 모르는 아이템 id도 보존(없앤 아이템만 접는다).
 export function normalizeInv(inv) {
   const def = defaultInv();
   if (!inv || typeof inv !== 'object') return def;
   const lo = inv.loadout ?? {};
   const pm = inv.perm ?? {};
   return {
-    items: { ...inv.items },
+    items: foldRetiredItems({ ...inv.items }),
     loadout: {
-      hotbar: fitHotbar(lo.hotbar),
-      pendingHotbar: Array.isArray(lo.pendingHotbar) ? fitHotbar(lo.pendingHotbar) : null,
+      hotbar: foldRetiredHotbar(fitHotbar(lo.hotbar)),
+      pendingHotbar: Array.isArray(lo.pendingHotbar) ? foldRetiredHotbar(fitHotbar(lo.pendingHotbar)) : null,
       preFloor: { ...lo.preFloor },
       spirits: fit(lo.spirits, SPIRIT_SLOTS),
       pendingSpirits: Array.isArray(lo.pendingSpirits) ? fit(lo.pendingSpirits, SPIRIT_SLOTS) : null,

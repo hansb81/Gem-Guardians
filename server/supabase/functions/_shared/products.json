@@ -7,8 +7,7 @@
       "diamonds": 300,
       "items": {
         "hammer": 5,
-        "scythe_h": 3,
-        "scythe_v": 3,
+        "scythe_h": 6,
         "repair": 3,
         "revive": 1
       }

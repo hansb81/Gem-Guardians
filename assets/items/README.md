@@ -3,8 +3,7 @@
 | 파일 | 아이템 (config/items.json id) | 쓰는 곳 |
 |---|---|---|
 | `hammer.png` | 망치 | hotbar |
-| `scythe_h.png` | 가로 낫 | hotbar |
-| `scythe_v.png` | 세로 낫 | hotbar |
+| `scythe_h.png` | 낫(가로·세로 합침) | hotbar |
 | `rainbow.png` | 무지개 결정 | hotbar |
 | `glove.png` | 교환 장갑 | hotbar |
 | `repair.png` | 수리 망치 | hotbar |
@@ -12,7 +11,6 @@
 | `dye.png` | 염료 | hotbar |
 | `shuffle.png` | 섞기 부적 | hotbar |
 | `barrier.png` | 결계 두루마리 | hotbar |
-| `defuse.png` | 해제 부적 | hotbar |
 | `drum.png` | 분노의 북 | hotbar |
 | `booster_line.png` | 시작 부스터: 라인 잼 | preFloor |
 | `booster_bomb.png` | 시작 부스터: 폭탄 잼 | preFloor |

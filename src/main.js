@@ -916,6 +916,7 @@ function playItemFx(id, target) {
 function tapItemSlot(slot) {
   if (aim?.slot === slot) {
     if (aim.confirm) useInstantItem(slot, aim.id);
+    else if (aim.axis) toggleAimAxis(); // 낫: 같은 슬롯을 다시 누르면 가로/세로 전환(취소는 보드 밖 탭).
     else cancelAim();
     return;
   }
@@ -932,7 +933,12 @@ function tapItemSlot(slot) {
   const cfg = controller.itemsConfig.items[id];
   // 즉시 사용(대상 없음) 아이템은 같은 슬롯을 한 번 더 눌러야 쓴다(확인). 다른 곳 탭 = 취소.
   const confirm = cfg.kind === 'battle' || cfg.target === 'none';
-  aim = { slot, id, hover: null, first: null, down: false, confirm };
+  aim = { slot, id, hover: null, first: null, down: false, confirm, axis: cfg.target === 'line' ? 'row' : null };
+  audio.play('ui_click');
+}
+
+function toggleAimAxis() {
+  aim.axis = aim.axis === 'row' ? 'col' : 'row';
   audio.play('ui_click');
 }
 
@@ -974,7 +980,7 @@ function aimPointerUp() {
     aim.hover = null; // 칸은 골랐다 - 팔레트 탭(useDyeColor)을 기다린다.
     return;
   } else {
-    target = cfg.target === 'row' ? { row: hover.row } : cfg.target === 'col' ? { col: hover.col } : hover;
+    target = cfg.target === 'line' ? (aim.axis === 'row' ? { row: hover.row } : { col: hover.col }) : hover;
   }
   const id = aim.id;
   const result = controller.items.use(id, target);

@@ -76,7 +76,7 @@ export class ItemController {
     return { ok: true, reason: null };
   }
 
-  // target: cell/rainbow = {row, col}, dye = {row, col, color}, row/col 낫 = {row} / {col},
+  // target: cell/rainbow = {row, col}, dye = {row, col, color}, line(낫) = 가로 {row} 또는 세로 {col},
   // pair = {a:{row,col}, b:{row,col}}, none/battle = 없음.
   // 실패하면 아무 것도 차감하지 않는다. 낫·망치·섞기(RESERVABLE)는 대상이 바쁘면 예약하고
   // { ok: true, pending: true }를 돌려준다 - 실제 실행·소모는 update()에서.
@@ -155,8 +155,7 @@ export class ItemController {
     if (cfg.target === 'none') return true;
     const { board } = this.gameState;
     const inRange = (v, n) => Number.isInteger(v) && v >= 0 && v < n;
-    if (cfg.target === 'row') return inRange(target?.row, board.rows);
-    if (cfg.target === 'col') return inRange(target?.col, board.cols);
+    if (cfg.target === 'line') return target?.col == null ? inRange(target?.row, board.rows) : target?.row == null && inRange(target.col, board.cols);
     if (cfg.target === 'pair') return !!target?.a && !!target?.b && board.inBounds(target.a.row, target.a.col) && board.inBounds(target.b.row, target.b.col);
     if (cfg.action === 'recolor' && !inRange(target?.color, board.typeCount)) return false;
     return !!target && board.inBounds(target.row, target.col);
@@ -194,8 +193,7 @@ export class ItemController {
     const bs = this.battleState;
     switch (cfg.action) {
       case 'destroy':
-        if (cfg.target === 'row') return gs.useScythe('row', target.row);
-        if (cfg.target === 'col') return gs.useScythe('col', target.col);
+        if (cfg.target === 'line') return target.col == null ? gs.useScythe('row', target.row) : gs.useScythe('col', target.col);
         return gs.useHammer(target.row, target.col);
       case 'transform':
         return gs.useRainbow(target.row, target.col);
@@ -207,8 +205,6 @@ export class ItemController {
       }
       case 'shuffle':
         return gs.useShuffle();
-      case 'timeBombTimer':
-        return gs.addTimeBombTimers(cfg.add) > 0 || 'noTarget';
       case 'wallHeal':
         return bs.healWall(cfg.pct);
       case 'freezeEnemies':

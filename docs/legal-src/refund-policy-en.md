@@ -21,7 +21,7 @@ Effective date: [YYYY-MM-DD]
 
 First-purchase bonus: reclaimed together with the base diamonds on refund, and not granted again on repurchase.
 
-Pass termination after claiming: refund = price × daily share × (remaining days ÷ total days) − 10% of price (rounded down to 10 KRW, minimum 0). Daily share: Weekly 89%, Monthly 91%. Example: Weekly Pass, 3 days claimed → 5,900 × 0.89 × 4/7 − 590 = 2,410 KRW. No fee for days missed because of our error.
+Pass termination after claiming: refund = price × daily share × (remaining days ÷ total days) − 10% of price (rounded down to 10 KRW, minimum 0). Daily share: Weekly 89%, Monthly 91%. Example: Weekly Pass, 3 days claimed → 5,900 × 0.89 × 4/7 − 590 = 2,410 KRW. No fee for days missed because of our error. Passes bought on the App Store cannot be partially refunded by us; request a refund from Apple, which decides whether and how much to refund.
 
 **5. How to request.**
 - Google Play: within 48 hours, request in Google Play (Payments & subscriptions > Budget & history); after that, email us.
@@ -32,7 +32,7 @@ Include your player ID (Settings > Game Info), store and order number, purchase 
 
 **6. Minors.** Purchases by users under 19 without guardian consent can be cancelled regardless of the 7-day limit or use. Send proof of guardianship (e.g. family relation certificate) and the guardian's ID with sensitive numbers masked. Cancellation may be refused if the minor used deception or spent within a permitted allowance.
 
-**7. Service termination.** Remaining pass days are refunded pro-rata without fee; unused paid diamonds/packs bought within [90] days before the announcement are refunded. Permanent products are usable until the termination date and are not refunded.
+**7. Service termination.** Remaining pass days are refunded pro-rata without fee; unused paid diamonds/packs bought within 90 days before the announcement are refunded. Permanent products are usable until the termination date and are not refunded.
 
 **8. Overcharges.** Duplicate charges or undelivered items are refunded in full or delivered. Try "Restore Purchases" first.
 

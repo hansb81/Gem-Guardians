@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { normalizeCoupon, CouponService } from '../src/net/services.js';
 import { Inventory } from '../src/game/inventory.js';
+import { RETIRED_ITEMS } from '../src/core/inventory/inventory.js';
 import { ko } from '../src/config/locales/ko.js';
 import { en } from '../src/config/locales/en.js';
 
@@ -150,8 +151,9 @@ test('문구: 모든 reason에 ko/en 문구가 있고, 모르는 reason은 err.e
   }
 });
 
-test('서버 _shared/coupon.ts ITEM_IDS == config/items.json items 키', () => {
+// 서버는 없앤 아이템 id(RETIRED_ITEMS)도 계속 받는다 - SQL 목록이 적용된 마이그레이션에 있고, 클라이언트가 받을 때 새 id로 접는다.
+test('서버 _shared/coupon.ts ITEM_IDS == config/items.json items 키 + 없앤 아이템', () => {
   const ts = readFileSync(new URL('../server/supabase/functions/_shared/coupon.ts', import.meta.url), 'utf8');
   const literal = ts.slice(ts.indexOf('['), ts.lastIndexOf(']') + 1);
-  assert.deepEqual(Function(`return ${literal}`)(), Object.keys(ITEMS.items));
+  assert.deepEqual(Function(`return ${literal}`)().sort(), [...Object.keys(ITEMS.items), ...Object.keys(RETIRED_ITEMS)].sort());
 });

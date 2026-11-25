@@ -535,22 +535,6 @@ export class GameState {
     return true;
   }
 
-  // 해제 부적(B4): 보드의 모든 시한폭탄 타이머 +add. 반환 = 시한폭탄 수(0이면 호출부가 noTarget 실패).
-  addTimeBombTimers(add) {
-    const { board } = this;
-    let n = 0;
-    this._withDeferredEffects(() => {
-      board.attachments.forEach((a, idx) => {
-        if (a?.type !== 'timeBomb') return;
-        a.timer += add;
-        n += 1;
-        const cell = { row: Math.floor(idx / board.cols), col: idx % board.cols };
-        this._pushEffect({ type: 'timeBombTimerAdded', cell, add, timer: a.timer, durationMs: 1 });
-      });
-    });
-    return n;
-  }
-
   // 시작 부스터(C1): 무작위 일반 잼(방해요소·시한폭탄 칸 제외) count개를 kind 특수 잼으로 바꾼다
   // (라인은 방향도 무작위). board.rng만 쓰므로 같은 seed면 같은 칸. 반환 = 바꾼 칸 목록.
   placeStarterSpecials(kind, count) {

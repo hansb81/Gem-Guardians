@@ -198,10 +198,6 @@ function railDia(ctx) {
   out.push(hdr('diaOnly'));
   for (const id of cfg.diaItems) out.push({ id: `dg.${id}`, kind: 'diaItem', item: id, cur: 'dia', price: itemsConfig.items[id].diamond, state: '' });
   out.push({ id: 'dg.slot4', kind: 'slot4', cur: 'dia', price: cfg.slot4Dia, state: player.inventory.isUnlocked('slot4') ? 'sold' : '' });
-  out.push(hdr('bundles'));
-  for (const b of cfg.itemBundles) {
-    out.push({ id: `dg.${b.item}.${b.count}`, kind: 'itemBundle', item: b.item, count: b.count, cur: 'dia', price: b.dia, state: itemLocked(ctx, b.item) ? 'locked' : '', lockFloor: itemsConfig.items[b.item].unlockFloor ?? 1 });
-  }
   out.push(hdr('goldex'));
   for (const g of cfg.goldExchange) out.push({ id: `goldex.${g.id}`, kind: 'goldEx', exId: g.id, cur: 'dia', price: g.dia, gold: goldOf(ctx, g.floors), floors: g.floors, stack: g.stack, state: '' });
   out.push({ legal: true }); // 현금 상품이 없는 마켓·빌드(웹)는 render가 이용약관 링크만 그린다.
@@ -303,7 +299,6 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       break;
     case 'diaItem': giveItem(p.item, 1); break;
     case 'slot4': giveFlag('slot4'); break;
-    case 'itemBundle': giveItem(p.item, p.count); break;
     case 'goldEx': bundle.gold = p.gold; break;
     default: return { ok: false, reason: 'locked', product: p };
   }

@@ -28,6 +28,8 @@ const NATIVE_W = 180;
 const NATIVE_H = 320;
 const DRAW_SCALE = 3;
 const BASIS_H = 960;
+const PRICE_ICON = 24; // 가격 버튼·합계 줄의 골드/다이아 아이콘(원본 16px 1:1)
+const PRICE_FONT = 18; // 가격 글자(굵게) - 화면 12px = Galmuri11 기본 크기
 
 // assets/gems/palette.hex에서 고른 UI 색(목업 :root와 같은 값).
 const C = {
@@ -213,19 +215,19 @@ export class ShopScreen {
     ctx.fillRect(offsetX + x * k, offsetY + y * k, w * k, h * k);
   }
 
-  _font(ctx, size) {
-    ctx.font = getFontString(size * this._transform.k);
+  _font(ctx, size, bold = false) {
+    ctx.font = getFontString(size * this._transform.k, bold);
   }
 
-  _measure(ctx, text, size) {
-    this._font(ctx, size);
+  _measure(ctx, text, size, bold = false) {
+    this._font(ctx, size, bold);
     return ctx.measureText(text).width / this._transform.k;
   }
 
   // y = 글자 가운데.
-  _text(ctx, text, x, y, size = 11, color = C.bone, align = 'left', outline = false) {
+  _text(ctx, text, x, y, size = 11, color = C.bone, align = 'left', outline = false, bold = false) {
     const { offsetX, offsetY, k } = this._transform;
-    this._font(ctx, size);
+    this._font(ctx, size, bold);
     ctx.textAlign = align;
     ctx.textBaseline = 'middle';
     ctx.fillStyle = color;
@@ -436,7 +438,6 @@ export class ShopScreen {
     if (p.item) {
       const state = this.env?.itemIcons?.()?.get(p.item);
       if (uiReady(state)) this._drawState(ctx, state, x + 8, y + 8, 28, 28);
-      if (p.kind === 'itemBundle') this._text(ctx, `×${p.count}`, x + 42, y + 36, 11, C.bone, 'right', true);
       return;
     }
     let path = null;
@@ -527,15 +528,17 @@ export class ShopScreen {
   _drawPrice(ctx, p, tx, x, y, w, h, pressed = false) {
     const cy = y + h / 2 - 1 + (pressed ? 2 : 0);
     const cx = x + w / 2;
+    // 가격 글자 18 굵게(= 화면 12px, Galmuri11 기본 크기), 재화 아이콘 24(원본 16px 1:1) - 13 미니 실측(2026-11-24).
     const content = (iconPath, iconSize, label, size, color) => {
-      const lw = this._measure(ctx, label, size);
+      const bold = size === PRICE_FONT;
+      const lw = this._measure(ctx, label, size, bold);
       const total = (iconPath ? iconSize + 6 : 0) + lw;
       let sx = cx - total / 2;
       if (iconPath) {
         this._img(ctx, iconPath, sx, cy - iconSize / 2, iconSize, iconSize);
         sx += iconSize + 6;
       }
-      this._text(ctx, label, sx, cy, size, color);
+      this._text(ctx, label, sx, cy, size, color, 'left', false, bold);
     };
     const btn = (name) => this._nine(ctx, `${name}${pressed && name.startsWith('buttons/') ? '_pressed' : ''}.png`, x, y, w, h);
     if (p.state === 'locked') {
@@ -555,17 +558,17 @@ export class ShopScreen {
     }
     if (p.cur === 'claim') {
       btn('buttons/btn_primary');
-      content('icons/diamond.png', 32, tx.label, 11, C.bone);
+      content('icons/diamond.png', PRICE_ICON, tx.label, 11, C.bone);
       return;
     }
     if (p.cur === 'krw') {
       btn('buttons/btn_gold');
-      content(null, 0, `₩${fmt(p.price)}`, 22, C.outline);
+      content(null, 0, `₩${fmt(p.price)}`, PRICE_FONT, C.outline);
       return;
     }
     const poor = walletOf(this.env.player, p.cur) < p.price;
     btn(poor ? 'upgrade/btn_disabled' : p.cur === 'gold' ? 'buttons/btn_gold' : 'buttons/btn_primary');
-    content(p.cur === 'gold' ? 'icons/gold.png' : 'icons/diamond.png', 32, fmt(p.price), 22, poor ? C.redL : p.cur === 'gold' ? C.outline : C.bone);
+    content(p.cur === 'gold' ? 'icons/gold.png' : 'icons/diamond.png', PRICE_ICON, fmt(p.price), PRICE_FONT, poor ? C.redL : p.cur === 'gold' ? C.outline : C.bone);
     if (tx.prefix) this._text(ctx, tx.prefix, cx, y - 12, 11, C.goldL, 'center');
   }
 
@@ -692,12 +695,12 @@ export class ShopScreen {
       } else if (r.type === 'total') {
         this._nine(ctx, 'panels/panel_inset.png', innerX, ry, innerW, 48);
         this._text(ctx, t(p.cur === 'krw' ? 'shop.popup.price' : 'shop.popup.total'), innerX + 16, ry + 24, 11);
-        if (p.cur === 'krw') this._text(ctx, `₩${fmt(p.price)}`, innerX + innerW - 16, ry + 24, 22, C.bone, 'right');
+        if (p.cur === 'krw') this._text(ctx, `₩${fmt(p.price)}`, innerX + innerW - 16, ry + 24, PRICE_FONT, C.bone, 'right', false, true);
         else {
           const s = fmt(total);
-          const sw = this._measure(ctx, s, 22);
-          this._img(ctx, p.cur === 'gold' ? 'icons/gold.png' : 'icons/diamond.png', innerX + innerW - 16 - sw - 38, ry + 8, 32, 32);
-          this._text(ctx, s, innerX + innerW - 16, ry + 24, 22, poor ? C.redL : C.bone, 'right');
+          const sw = this._measure(ctx, s, PRICE_FONT, true);
+          this._img(ctx, p.cur === 'gold' ? 'icons/gold.png' : 'icons/diamond.png', innerX + innerW - 16 - sw - PRICE_ICON - 6, ry + 24 - PRICE_ICON / 2, PRICE_ICON, PRICE_ICON);
+          this._text(ctx, s, innerX + innerW - 16, ry + 24, PRICE_FONT, poor ? C.redL : C.bone, 'right', false, true);
         }
       } else if (r.type === 'acts') {
         if (btns.ok) this._button(ctx, 'buttons/btn_primary', btns.ok, t('shop.popup.ok'), 22, 'ok');

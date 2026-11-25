@@ -122,12 +122,12 @@ export function parseArgs(argv, sim) {
   const idleDayHours = Number(args.idleDayHours ?? 1);
   const idleRMul = args.idleRMul == null ? null : Number(args.idleRMul);
   if (!(Number.isInteger(idle) && idle >= 0) || !(idleDayHours > 0) || (idleRMul != null && !(idleRMul >= 0))) throw new Error('--idle=0|2|3, --idleDayHours=1|2, --idleRMul=숫자');
-  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip };
+  return { idle, idleDayHours, idleRMul, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).
 // 첫 칸이 파일 이름(balance/shop/skills/items/enemies/obstacles/sim)이면 그 config, 아니면 balance.json.
-// 배열은 번호 또는 원소의 id/item 값으로 찾는다(shop.goldExchange.small.floors, shop.itemBundles.hammer.dia).
+// 배열은 번호 또는 원소의 id/item 값으로 찾는다(shop.goldExchange.small.floors, shop.diaBundles.0.bonus).
 // 값 = 숫자 또는 숫자 배열(JSON, 예: shop.skills.levelCost=[0.75,0.75,0.75,0.75]). 없는 경로·키는 에러.
 // HP 배율(enemyHpMul, bossMul.hpMulByFloor)은 unitStats가 매번 balance에서 읽어 floors.json 재생성 없이 반영된다.
 // shortcut: hpGrowth처럼 floors.json에 미리 계산된 값은 1~100층에 반영 안 됨 - 그런 키는 T5 withBalanceOverride 방식 필요.

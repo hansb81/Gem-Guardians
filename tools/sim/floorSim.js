@@ -53,6 +53,8 @@ export function runFloorAttempt({
   endless = null,
   // 정령 5칸(null 또는 { id, lv, star }) - 이름이 spirits면 ...configs(config/spirits.json)와 겹친다. 기본 = simRules.spirits(--spirits 고정 목록). --spirits=prog는 진행 테스트가 층마다 넘긴다.
   spiritSlots = simRules.spirits,
+  // 시작 부스터(v13-6 T9): [{ special, count }] - 게임(BattleController.beginFloor -> ItemController.applyStarterSpecials)처럼 보드 준비 뒤 placeStarterSpecials.
+  starterSpecials = null,
 }) {
   const ew = endless ? endlessFloor({ balance, enemies, obstacles }, endless.cfg, endless.seed) : null;
   const floor = ew ? ew.floor : getFloor(balance, enemies, obstacles, floorsData, floorNumber);
@@ -99,6 +101,7 @@ export function runFloorAttempt({
   gameState.shuffleBoard();
   // 퍼즐 쪽 보조 정령(시계태엽·해체·물감) - 게임(BattleController._applySpirits)과 같은 주입.
   if (spiritList) gameState.setSpiritMods(supportMods(spiritList, towersData.map((t) => t.color)), deriveSeed(seed, floorNumber, 4));
+  for (const s of starterSpecials ?? []) gameState.placeStarterSpecials(s.special, s.count);
   const inFlight = []; // shotFlight: { event, left(초) }
   const bridge = new SimBridge(battleState, shotFlight ? (event) => {
     // 쏠 때 이미 "예약 피해로 죽을 적"이었는지(_pickTarget 폴백 = 모두 죽을 예정이라 맨 앞 적).
@@ -197,6 +200,7 @@ export function runFloorAttempt({
       })
     : null;
   const itemsUsed = {};
+  const itemUsable = {}; // v13-6: 결정 틱에 canUse가 ok였던 적이 있는 아이템(장착분만) - "쓸 수 있었는데 안 쓴" 비율용
 
   let timeSec = 0;
   let moveTimer = 0;
@@ -230,6 +234,7 @@ export function runFloorAttempt({
   while (battleState.status === 'active' && timeSec < maxFloorSeconds) {
     if (moveTimer <= 0) {
       if (itemCtl) {
+        for (const id of itemBot.equipped) if (!itemUsable[id] && itemCtl.canUse(id).ok) itemUsable[id] = true;
         const use = pickItemUse(itemCtl, gameState, battleState);
         if (use) {
           const res = itemCtl.use(use.id, use.target);
@@ -382,6 +387,7 @@ export function runFloorAttempt({
     skillCasts,
     blockedWall,
     itemsUsed,
+    itemUsable,
     waste,
     swapsBeforeFirstEnemy: swapsBeforeFirstEnemy ?? swapCount,
     firstEnemySec: firstEnemySec ?? timeSec,

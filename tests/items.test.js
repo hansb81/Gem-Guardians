@@ -294,6 +294,22 @@ test('층당 횟수 초과 시 perFloor, resetFloor(층 전환) 후 다시 가�
   assert.equal(ctrl.canUse('scythe_h').ok, true);
 });
 
+test('낫(target line): 가로 {row} 또는 세로 {col} 하나만, 둘 다·범위 밖은 invalidTarget(소모 없음)', () => {
+  const { ctrl, gameState } = makeController();
+  const calls = [];
+  gameState.useScythe = (axis, i) => calls.push([axis, i]) > 0;
+  const before = ctrl.inv.count('scythe_h');
+  assert.deepEqual(ctrl.use('scythe_h', { row: 0, col: 0 }), { ok: false, reason: 'invalidTarget' });
+  assert.deepEqual(ctrl.use('scythe_h', { col: 99 }), { ok: false, reason: 'invalidTarget' });
+  assert.deepEqual(ctrl.use('scythe_h', {}), { ok: false, reason: 'invalidTarget' });
+  assert.equal(ctrl.inv.count('scythe_h'), before);
+  assert.equal(ctrl.use('scythe_h', { col: 2 }).ok, true);
+  gameState.validSwapCount += 4;
+  assert.equal(ctrl.use('scythe_h', { row: 1 }).ok, true);
+  assert.equal(ctrl.inv.count('scythe_h'), before - 2);
+  assert.deepEqual(calls, [['col', 2], ['row', 1]]);
+});
+
 test('재고 없음 noStock, 미장착 notEquipped, 무지개가 바빠 실패하면 차감도 쿨다운도 없음', () => {
   const { ctrl, player, gameState } = makeController({ hammer: 0, hourglass: 3 });
   assert.equal(ctrl.canUse('hammer').reason, 'noStock');

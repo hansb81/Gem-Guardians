@@ -22,6 +22,7 @@ const TOP_H = 28;
 const ROW_H = 44;
 const ROW_GAP = 4;
 const FILTER_H = 40;
+const FILTER_FONT = Math.round(22 * 0.8); // 필터 버튼 글자(basis) - 본문 22의 80%
 const HEAD_H = 16; // "보유 n / 30" 줄
 const SLOT_SLICE = [5, 5, 5, 5]; // items/slot_selected(22x22, 틀 두께 4 + 그림자 1)을 9-slice로
 const COLS = 5;
@@ -126,7 +127,7 @@ function filterText(kind, sel) {
   return sel.ownedOnly ? t('spirit.filter.ownedOnly') : t('spirit.filter.all');
 }
 
-// 같은 폭 버튼 3개(간격 4). 전체가 아닌 값이면 slot_selected 틀. 글자 = 본문 22 기준, 안 들어가면 줄이되 화면 11px 아래로는 안 내린다.
+// 같은 폭 버튼 3개(간격 4). 전체가 아닌 값이면 slot_selected 틀. 글자 = FILTER_FONT(본문 22의 80%), 안 들어가면 줄이되 화면 11px 아래로는 안 내린다.
 function drawFilters(ctx, assets, a, sel, hits, uiScale) {
   const w = (a.width - 8) / 3;
   const minSize = Math.ceil(11 / uiScale);
@@ -139,7 +140,7 @@ function drawFilters(ctx, assets, a, sel, hits, uiScale) {
     else nine(ctx, assets, active ? 'upgrade/card_selected.png' : 'menu/inset.png', r, active ? HUD_CONFIG.popup.ghost : C.outline);
     const text = filterText(kind, sel);
     const icon = kind === 'element' && sel.element ? 24 : 0; // 그 속성 잼(몸통 32 -> 24)
-    let size = 22;
+    let size = FILTER_FONT;
     ctx.font = getFontString(size, true);
     while (size > minSize && ctx.measureText(text).width + icon + (icon ? 6 : 0) > r.width - PAD * 2) ctx.font = getFontString(--size, true);
     const tw = Math.min(r.width - PAD * 2 - icon - (icon ? 6 : 0), ctx.measureText(text).width);
@@ -203,15 +204,18 @@ function drawList(ctx, assets, a, view, sel, hits, nowMs) {
   });
 }
 
-// 안 가진 정령: 도감 설명(이름·등급·속성·역할·1레벨 기준 효과). 레벨업·장착 없음, "목록"으로 돌아가기만.
+// 상세·설명 칸 오른쪽 위 닫기 X(그림 16x16 x2, 터치 44x44) - 누르면 목록으로.
+function drawClose(ctx, assets, a, hits) {
+  const r = rect(a.x + a.width - 46, a.y + 2, 44, 44);
+  drawFixedImage(ctx, assets, 'upgrade/btn_close.png', r.x + 22, r.y + 22, 2);
+  hits.push({ r, hit: { type: 'spiritBack' } });
+}
+
+// 안 가진 정령: 도감 설명(이름·등급·속성·역할·1레벨 기준 효과). 레벨업·장착 없음, 오른쪽 위 X로 닫기만.
 function drawInfo(ctx, assets, a, view, sel, hits, nowMs) {
   nine(ctx, assets, 'menu/inset.png', a, C.outline);
   drawDexInfo(ctx, assets, a, view.cfg, sel.detail, null, nowMs);
-  const P = 10;
-  const back = rect(a.x + a.width - P - 64, a.y + a.height - P - 40, 64, 40);
-  const bm = nine(ctx, assets, 'buttons/btn_secondary.png', back, HUD_CONFIG.popup.ghost);
-  label(ctx, t('spirit.back'), back, bm?.textColor ?? C.text, 13, true, 'center');
-  hits.push({ r: back, hit: { type: 'spiritBack' } });
+  drawClose(ctx, assets, a, hits);
 }
 
 function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
@@ -229,7 +233,7 @@ function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
   drawSpiritPortrait(ctx, assets, id, sp.element, box.x + 4, box.y + 4, 72, nowMs);
 
   const tx = box.x + box.width + 12;
-  const tw = a.x + a.width - P - tx;
+  const tw = a.x + a.width - P - tx - 40; // 오른쪽 위 X 자리
   label(ctx, t(`spirit.name.${id}`), rect(tx, a.y + P, tw, 22), C.title, 16, true, 'left');
   label(ctx, `${t(`spirit.grade.${sp.grade}`)} · ${t(`spirit.element.${sp.element}`)} · ${t(`spirit.role.${sp.role}`)}`, rect(tx, a.y + P + 24, tw, 18), SPIRIT_GRADE_COLOR[sp.grade] === '#655a74' ? C.sub : SPIRIT_GRADE_COLOR[sp.grade], 12, true, 'left');
   label(ctx, `Lv.${own.lv} / ${cfg.levelMax}`, rect(tx, a.y + P + 44, 90, 18), C.text, 13, true, 'left');
@@ -247,15 +251,13 @@ function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
   line(t('spirit.now'), spiritEffectText(cfg, id, own, color), C.text);
   if (!maxed) line(t('spirit.next'), spiritEffectText(cfg, id, { ...own, lv: own.lv + 1 }, color), C.green);
 
-  // 아래 버튼: 레벨업(골드 + 정령석) / 장착·해제 / 목록
+  // 아래 버튼: 레벨업(골드 + 정령석) / 장착·해제. 닫기는 오른쪽 위 X.
   const bh = 40;
   const by = a.y + a.height - P - bh;
   const bw = a.width - P * 2;
-  const backW = 64;
   const eqW = 84;
-  const up = rect(a.x + P, by, bw - backW - eqW - 12, bh);
+  const up = rect(a.x + P, by, bw - eqW - 6, bh);
   const eq = rect(up.x + up.width + 6, by, eqW, bh);
-  const back = rect(eq.x + eqW + 6, by, backW, bh);
   if (maxed) {
     nine(ctx, assets, 'upgrade/btn_disabled.png', up, HUD_CONFIG.popup.disabled);
     label(ctx, t('popup.prep.max'), up, C.sub, 14, true, 'center');
@@ -285,9 +287,7 @@ function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
   const em = nine(ctx, assets, 'buttons/btn_primary.png', eq, HUD_CONFIG.popup.primary);
   label(ctx, t(equipped ? 'spirit.unequip' : 'spirit.equip'), eq, em?.textColor ?? C.text, 13, true, 'center');
   hits.push({ r: eq, hit: { type: 'spiritEquip', id: equipped ? null : id } });
-  const bm = nine(ctx, assets, 'buttons/btn_secondary.png', back, HUD_CONFIG.popup.ghost);
-  label(ctx, t('spirit.back'), back, bm?.textColor ?? C.text, 13, true, 'center');
-  hits.push({ r: back, hit: { type: 'spiritBack' } });
+  drawClose(ctx, assets, a, hits);
 }
 
 export function hitSpiritTab(hits, bx, by) {

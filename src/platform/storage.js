@@ -48,6 +48,11 @@ export const storage = {
     dirty.delete(key);
     return backend ? backend.remove(key).catch(() => {}) : Promise.resolve();
   },
+  // 개발 패널 '전체 데이터 초기화' - 서버 세션(gemGuardians.auth)·기기 ID까지 지워 새 게스트로. 개발 토글은 남긴다.
+  removeAll() {
+    const keys = [...KEYS, 'gemGuardians.auth', 'platformUserId'].filter((k) => k !== 'devServer' && k !== 'devCheats');
+    return Promise.all(keys.map((k) => storage.remove(k)));
+  },
   // 쓰기 실패(용량 초과, 프라이버시 모드 등)는 어댑터가 삼킨다 - 진행은 메모리상으로 계속된다.
   flush() {
     clearTimeout(timer);
