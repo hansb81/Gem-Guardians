@@ -355,7 +355,7 @@ export function runFloorAttempt({
     }
     if (battleState.status === 'failed' && onFail && reviveCfg && !continueUsed) {
       const how = onFail();
-      if (how && battleState.revive(reviveCfg.pct, reviveCfg.freezeSec, reviveCfg.bossMul)) continueUsed = how;
+      if (how && battleState.revive(reviveCfg.pct, reviveCfg.knockSec ?? reviveCfg.freezeSec, reviveCfg.bossMul, reviveCfg)) continueUsed = how;
     }
 
     timeSec += dt;

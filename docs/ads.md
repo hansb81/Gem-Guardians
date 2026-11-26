@@ -28,7 +28,7 @@
 
 ## 2. 패배 → 광고 보고 이어하기
 
-**효과 = 불사조 깃털과 동일**: 성벽 HP 50% + 모든 적 2초 정지(보스 x0.5). `battleState.revive(pct, freezeSec, bossMul)` 재사용, 값은 `config/items.json` revive에서 읽음.
+**효과 = 불사조 깃털과 동일**: 성벽 HP 50% + 충격파 넉백(속도×4초, 보스×0.5) + 경직 0.4초. 성벽에서 오른쪽으로 밀어내며(0.18초 ease-out 미끄러짐, 스폰 지점에서 멈추고 남은 거리 버림), 성벽에 붙어 있던 적도 떨어진다. 연출 = 성벽 높이 wall_block + wall_block 소리 + 강한 흔들림 + 적마다 피격 번쩍. `battleState.revive(pct, knockSec, bossMul, cfg)` 재사용, 값은 `config/items.json` revive(pct·knockSec·bossMul·slideMs·staggerSec·shake)에서 읽음. 모래시계(5초 정지)와는 별개.
 
 **횟수(추천, config로 조절)**
 - **층당 이어하기 1회 공유** - 깃털이든 광고든 한 층에 한 번. (둘 다 따로 주면 깃털 50다이아 가치가 사라짐)
@@ -105,7 +105,7 @@
 ### 규칙 (config/items.json `adContinue`)
 `{ enabled: true, dailyCap: 5, sharePerFloorWithRevive: true, competitive: false, loadTimeoutMs: 8000 }`
 - 판정은 `src/game/adContinue.js` `continueOptions` 하나(깃털·광고 버튼 둘 다). 테스트 `tests/adContinue.test.js`, `tests/items2.test.js`.
-- 효과 = `items.revive`의 pct/freezeSec/bossMul로 `battleState.revive()`. 깃털 차감 없음(`ItemController.continueFree`).
+- 효과 = `items.revive`의 pct/knockSec/bossMul(+slideMs·staggerSec·shake)로 `battleState.revive()`. 옛 freezeSec는 knockSec로 읽음. 깃털 차감 없음(`ItemController.continueFree`).
 - 층당 1회 공유 = ItemController `_usesThisFloor.revive` 같은 칸 → `resetFloor()`(층 전환·재도전)에서 같이 리셋.
 - 하루 dailyCap: 저장 키 `adContinue` = `{ day(KST 일 번호), count }`, `storage.js` KEYS에 등록(DATA_EPOCH 초기화 대상).
 - 광고 제거(`adFree`) 보유자: 광고 없이 "무료 이어하기", 횟수 규칙 같음.

@@ -99,8 +99,10 @@ export function setupDevPanel(controller, { setTimeScale, getTimeScale, triggerS
   reviveBtn.onclick = () => {
     const bs = controller.battleState;
     const cfg = controller.itemsConfig?.items.revive;
-    bs._pushEvent('wallRevived', { amount: bs.wallHealth, remainingHealth: bs.wallHealth });
-    bs.freezeEnemies(cfg?.freezeSec ?? 2, cfg?.bossMul ?? 1);
+    if (!cfg) return;
+    const status = bs.status;
+    bs.status = 'failed'; // 실제 revive를 그대로 태운다(HP는 pct로 맞춰짐)
+    if (!bs.revive(cfg.pct, cfg.knockSec ?? cfg.freezeSec, cfg.bossMul, cfg)) bs.status = status;
   };
 
   // 인벤토리(docs/inventory.md) - 최근 지급·차감 로그 50건 보기, 저장을 v1 형식으로 되돌린 뒤 새로고침해 마이그레이션 재실행.

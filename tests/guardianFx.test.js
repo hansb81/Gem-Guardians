@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { fxTier, outlineMask, lookGrade, lookAnimKey } from '../src/render/guardianFx.js';
+import { fxTier, outlineMask, lookGrade, lookAnimKey, glowPhase } from '../src/render/guardianFx.js';
+
+test('guardianFx: 외곽선 글로우는 주기마다 잠깐만(어두운 색-네온-어두운 색), 슬롯마다 300ms 늦게, 발사 프레임엔 네온', () => {
+  assert.deepEqual([0, 89, 90, 269, 270, 359, 360, 2399, 2400].map((t) => glowPhase(t, 0)), ['dim', 'dim', 'bright', 'bright', 'dim', 'dim', null, null, 'dim']);
+  assert.deepEqual([0, 299, 300, 390].map((t) => glowPhase(t, 1)), [null, null, 'dim', 'bright']);
+  assert.equal(glowPhase(1000, 0, true), 'bright');
+});
 
 test('guardianFx: 모습 등급 = 1 + 구간 수, 없는 등급 시트는 낮은 등급 -> 기본', () => {
   const tiers = [20, 35, 50];

@@ -69,7 +69,7 @@
    },
    "yellow": {
     "dim": "#c28a20",
-    "bright": "#ffe14a"
+    "bright": "#f2d264"
    }
   }
  },
@@ -82,7 +82,7 @@
   "fromTier": 4,
   "orbit": {
    "count": 3,
-   "rx": 14,
+   "rx": 11,
    "ry": 4,
    "centerY": -12,
    "periodMs": 1800

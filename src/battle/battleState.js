@@ -205,13 +205,27 @@ export class BattleState {
     this._pushEvent('atkBuffOff', {});
   }
 
-  // 부활(C3) - 실패 직후에만. 성벽 HP = 최대 x pct, 모든 적 freezeSec초 정지(보스는 x bossMul), 다시 active.
-  revive(pct, freezeSec, bossMul = 1) {
+  // 부활(C3, 깃털·광고 이어하기 공통) - 실패 직후에만. 성벽 HP = 최대 x pct, 다시 active.
+  // 충격파 넉백: 살아 있는 적마다 progress -= 속도 x knockSec(보스 x bossMul) - 예전 knockSec초 정지와 같은 시간 이득.
+  // 스폰 지점(progress 0)에서 멈추고 남은 거리는 버린다. 넉백 면역 무시. 밀린 뒤 slideMs(미끄러짐) + staggerSec 동안
+  // 경직(이동·성벽 공격 정지, 옐로우 면역·쿨 무시). 렌더는 wallRevived.knocked로 미끄러짐을, shake(effects.json shakePresets 키)로 흔들림을 그린다.
+  revive(pct, knockSec, bossMul = 1, { slideMs = 0, staggerSec = 0, shake = null } = {}) {
     if (this.status !== 'failed') return false;
     this.status = 'active';
     this.wallHealth = Math.round(this.wallMaxHealth * pct);
-    this._pushEvent('wallRevived', { amount: this.wallHealth, remainingHealth: this.wallHealth });
-    this.freezeEnemies(freezeSec, bossMul);
+    const knocked = [];
+    for (const e of this.enemies) {
+      if (e.state !== 'alive') continue;
+      const before = e.progress;
+      e.progress = Math.max(0, before - e.speed * knockSec * (e.rank === 'boss' ? bossMul : 1));
+      if (e.progress < 1) {
+        e._reachedLine = false;
+        e._attackTimer = 0;
+      }
+      e.effects.stun.time = Math.max(e.effects.stun.time, slideMs / 1000 + staggerSec);
+      knocked.push({ enemyId: e.id, dist: before - e.progress });
+    }
+    this._pushEvent('wallRevived', { amount: this.wallHealth, remainingHealth: this.wallHealth, knocked, slideMs, shake });
     return true;
   }
 
@@ -1035,7 +1049,12 @@ export class BattleState {
     for (const enemy of this.enemies) {
       if (enemy.state !== 'alive') continue;
 
-      const moveMul = this.skills ? this._tickEffects(enemy, dtSec) : 1;
+      let moveMul = 1;
+      if (this.skills) moveMul = this._tickEffects(enemy, dtSec);
+      else if (enemy.effects.stun.time > 1e-9) {
+        enemy.effects.stun.time -= dtSec; // 기술 없는 전투에서도 부활 경직은 돈다
+        moveMul = 0;
+      }
       if (enemy.state !== 'alive' || this.status !== 'active') continue; // 독으로 죽음/클리어.
       if (enemy.spiritFreeze > 0) {
         enemy.spiritFreeze -= dtSec; // 서리 고래 빙결 - 이 적만 이동·성벽 공격 정지(둔화·경직보다 우선)

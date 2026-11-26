@@ -127,12 +127,13 @@ export class MonsterFx {
 
   // 석상 투사체가 닿은 순간(battleRenderer._drawTowerProjectiles).
   // 성벽 타격(wall_hit_s/_l, wall_block) - startMs는 돌진 가운데(now + wall.hitAtMs).
-  wallHit(key, x, y, startMs) {
-    this._sprites.push({ key, x, y, startMs });
+  // scale = 이 스프라이트만의 배율(부활 충격파처럼 크게), 없으면 drawSprites의 기본 배율.
+  wallHit(key, x, y, startMs, scale = 0) {
+    this._sprites.push({ key, x, y, startMs, scale });
   }
 
   hit(color, x, y, now) {
-    this._sprites.push({ key: `hit_${color}`, x, y, startMs: now });
+    this._sprites.push({ key: `hit_${color}`, x, y, startMs: now, scale: 0 });
   }
 
   // HP 0 순간 1번. g = { id, img(그리던 프레임 원본), flip, scale, sx, sy(왼쪽 위), footX, footY, bodyY, big }.
@@ -190,8 +191,8 @@ export class MonsterFx {
       this._sprites[n++] = s;
       if (el < 0 || !a.state?.loaded || a.state.failed) continue; // 아직(연기·영혼 예약) / 로드 실패
       const f = frameAt(a, el);
-      const w = a.frameW * scale;
-      const h = a.frameH * scale;
+      const w = a.frameW * (s.scale || scale);
+      const h = a.frameH * (s.scale || scale);
       const x = Math.round(s.x - w / 2);
       const y = Math.round(a.anchor === 'center' ? s.y - h / 2 : s.y - h); // bottom-center
       drawImageSnapped(ctx, a.state.img, f * a.frameW, 0, a.frameW, a.frameH, x, y, w, h);

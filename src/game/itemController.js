@@ -170,7 +170,7 @@ export class ItemController {
   // 깃털 없이 revive 효과만(값은 items.revive). failed 상태 + 층당 남았을 때만.
   continueFree(share) {
     const c = this.config.items.revive;
-    if (!c || this.continueLeft(share) === 0 || !this.battleState?.revive(c.pct, c.freezeSec, c.bossMul)) return false;
+    if (!c || this.continueLeft(share) === 0 || !this.battleState?.revive(c.pct, c.knockSec ?? c.freezeSec, c.bossMul, c)) return false;
     const key = share ? 'revive' : 'adContinue';
     this._usesThisFloor[key] = (this._usesThisFloor[key] ?? 0) + 1;
     return true;
@@ -214,7 +214,7 @@ export class ItemController {
       case 'atkBuff':
         return bs.setAtkBuff(cfg.mul);
       case 'revive':
-        return bs.revive(cfg.pct, cfg.freezeSec, cfg.bossMul);
+        return bs.revive(cfg.pct, cfg.knockSec ?? cfg.freezeSec, cfg.bossMul, cfg); // freezeSec = 옛 이름
       default:
         return false;
     }

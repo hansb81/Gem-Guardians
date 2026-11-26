@@ -52,21 +52,23 @@ export class SkillFx {
   enemyState(enemy) {
     let s = this._enemy.get(enemy);
     if (!s) {
-      s = { bodyX: 0, bodyY: 0, footX: 0, footY: 0, headY: 0, kbPx: 0, kbStartMs: 0, slowAcc: 0, poisonAcc: 0, lastMark: 0, stunNow: null };
+      s = { bodyX: 0, bodyY: 0, footX: 0, footY: 0, headY: 0, kbPx: 0, kbStartMs: 0, kbMs: 0, flashUntil: 0, slowAcc: 0, poisonAcc: 0, lastMark: 0, stunNow: null };
       this._enemy.set(enemy, s);
     }
     return s;
   }
 
   // 넉백 렌더 오프셋: core progress는 명중 순간 이미 뒤로 갔으므로 -kbPx에서 0으로 보간(오른쪽으로 밀림).
+  // kbMs가 있으면(부활 충격파) 그 시간 동안 ease-out, 없으면 가시 넉백 ms 동안 선형.
   knockOffset(st, now, ms) {
     if (st.kbPx === 0) return 0;
-    const k = (now - st.kbStartMs) / ms;
+    const k = (now - st.kbStartMs) / (st.kbMs || ms);
     if (k >= 1) {
       st.kbPx = 0;
+      st.kbMs = 0;
       return 0;
     }
-    return -st.kbPx * (1 - k);
+    return -st.kbPx * (st.kbMs ? (1 - k) * (1 - k) : 1 - k);
   }
 
   // 탑 직격이 레드면 fx_splash(직격 적 중심). resolveTowerAttack 직전에 부른다.
@@ -97,6 +99,7 @@ export class SkillFx {
       const st = this.enemyState(e);
       st.kbPx = (before - e.progress) * this.trackWidth;
       st.kbStartMs = now;
+      st.kbMs = 0;
     }
     if (event.color === 'red' && event.skill !== 'color') this._redSplash(bs, e, now);
   }

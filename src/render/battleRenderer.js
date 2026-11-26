@@ -34,6 +34,17 @@ const RANK_OUTLINE = {
 };
 
 const ENEMY_LANE_COUNT = 3;
+// 같은 줄 안에서 적마다 발 y를 위아래로 흩는 범위(원본 px, 그리기 배율을 곱함). boss = 대형 보스 포함(데이터에 따로 구분 없음).
+// 줄(lane)과 마찬가지로 렌더 전용 - core·판정·시뮬·리플레이엔 y가 없다. ?jitter=0 / ?jitter=8 로 바꿔 비교(main.js).
+export const LANE_JITTER = { enabled: true, normal: 5, elite: 3, boss: 0 };
+const byFootY = (a, b) => a.footY - b.footY || a.enemy.id - b.enemy.id;
+// 적 id -> [0,1) 고정값. 게임 RNG를 건드리지 않는 별도 해시라 스폰·드롭 순서와 무관하고, 같은 판이면 매번 같다.
+function jitter01(id) {
+  let h = Math.imul((id >>> 0) ^ 0x1a2e5f3d, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b);
+  h ^= h >>> 13;
+  return (h >>> 0) / 4294967296;
+}
 // 지속 피해 틱(enemyHit.source) - 밀림 없이 번쩍임만. 화상 같은 새 지속 피해가 생기면 여기에 추가.
 const DOT_SOURCES = new Set(['poison']);
 // 정령(docs/spirits.md 7장): 수호자 발에서 SPIRIT_FLOAT_PX(원본 px) 위에 띄우고 ±1px 둥실(SPIRIT_BOB_MS 주기, 수호자마다 위상 다르게).
@@ -150,6 +161,10 @@ export class BattleRenderer {
     this._frame = 0; // 결계 테두리 2프레임 교대용 카운터
     this._brightProjectiles = new Map(); // 색(또는 공격 연출 시트 키) -> 한 단계 밝은 투사체 시트(캔버스), 북 버프 중 사용
     this._brightSheetFn = (key, img) => this._brightSheet(key, img);
+    this._enemyScale = 2; // 적 그리기 배율(_drawEnemies가 매 프레임 갱신)
+    this._enemyOrder = []; // 그리기 순서용 재사용 배열(_laneCache 항목)
+    this._laneCache = new Map(); // 적 id -> { enemy, lane, u, range, off, footY, seen }
+    this._laneFrame = 0;
     this._seenRevives = new WeakSet(); // 이미 파편을 뿌린 wallRevived 이벤트
     this._seenWallHits = new WeakSet(); // 이미 타격 이펙트·소리를 낸 wallDamaged/wallBlocked 이벤트
     this._wallRng = createRng(0x5a11); // 성벽 타격 높이 흔들기·음높이(Math.random 금지)
@@ -215,6 +230,7 @@ export class BattleRenderer {
 
     this._drawFloorLabel(ctx, layout.floorLabel, hud, assets);
     this._drawWallHealthBar(ctx, layout.wallBar, battleState, assets);
+    this._spawnReviveParticles(layout.track, battleState, assets, now); // 넉백 오프셋을 적 그리기 전에 걸어 첫 프레임 튐 방지
     this._drawEnemies(ctx, layout.track, battleState.enemies || [], battleState.events || [], towers, assets, now, battleState, paused);
     this._skillFx.update(battleState, layout.track, assets, now, this.particles, this.shake);
     this._skillFx.draw(ctx, battleState, layout.track, assets, now, rect);
@@ -222,7 +238,6 @@ export class BattleRenderer {
       this._drawWallShield(ctx, layout.track, battleState.events || []);
       this._drawStatusIcon(ctx, layout.wallBar, itemIcons, 'barrier', String(Math.ceil(battleState.wallShieldSec)), frozen ? 1 : 0, assets);
     }
-    this._spawnReviveParticles(layout.track, battleState.events || []);
     if (frozen) {
       // 회색 틴트 - 불투명 픽셀 체커 디더(반투명 알파 없음), 적이 걷는 길 위.
       ctx.fillStyle = ditherPattern(ctx, '#6a6672');
@@ -308,11 +323,12 @@ export class BattleRenderer {
 
   // 부활(docs/items.md C3) - 새 wallRevived 이벤트마다 한 번, 성벽(방어선) 앞에 금색 빛 파편(#f2d264/#c28a20, 흰색 없음).
   // 이벤트는 입력(팝업 탭) 시점에 생겨 렌더 전에 이미 한 틱 늙어 있으므로 elapsedMs 대신 WeakSet으로 "처음 본" 것을 가린다.
-  _spawnReviveParticles(track, events) {
+  _spawnReviveParticles(track, battleState, assets, now) {
     if (!this.particles) return;
-    for (const e of events) {
+    for (const e of battleState.events || []) {
       if ((e.type !== 'wallRevived' && !e.phoenix) || this._seenRevives.has(e)) continue; // 부활 아이템 / 불사조 정령 회복(같은 금색 파편)
       this._seenRevives.add(e);
+      if (e.knocked) this._reviveShockwave(track, battleState, e, assets, now);
       const n = 36;
       for (let i = 0; i < n; i++) {
         const angle = (i / n) * Math.PI * 2;
@@ -815,7 +831,7 @@ export class BattleRenderer {
           // 시트에 drawScale이 있으면(수호자 20x26) 그 배율로, 없으면 높이를 칸에 맞춘다. 폭은 시트 비율대로.
           const drawH = animData.drawScale ? animData.frameH * animData.drawScale : frameH;
           const drawW = animData.frameW * (drawH / animData.frameH);
-          if (tier) drawGuardianOutline(ctx, assets, animData, tier, frame, -drawW / 2, foot.y - drawH, s, fxT);
+          if (tier) drawGuardianOutline(ctx, assets, animData, tier, frame, -drawW / 2, foot.y - drawH, s, fxNow, i, isAttackAnim && frame === animData.fireFrame);
           if (flash) {
             ctx.shadowColor = '#ffe066';
             ctx.shadowBlur = frameW * 0.6;
@@ -1190,9 +1206,33 @@ export class BattleRenderer {
   _enemyPixelPos(track, enemy) {
     const progress = clamp(enemy.progress ?? 0, 0, 1);
     const x = track.x + track.width * (1 - progress);
-    const lane = hashLane(String(enemy.id), ENEMY_LANE_COUNT);
-    const y = track.y + (lane + 0.5) * (track.height / ENEMY_LANE_COUNT);
-    return { x, y };
+    return { x, y: this._enemyFootY(track, enemy) };
+  }
+
+  // 적 id별 줄 번호·흩기(원본 px) 캐시 - 처음 볼 때 한 번만 해시. 흩기 범위가 바뀌면(디버그 토글) 그 값만 다시 계산.
+  _laneEntry(enemy) {
+    let c = this._laneCache.get(enemy.id);
+    if (!c) {
+      c = { enemy, lane: hashLane(String(enemy.id), ENEMY_LANE_COUNT), u: jitter01(enemy.id), range: -1, off: 0, footY: 0, seen: 0 };
+      this._laneCache.set(enemy.id, c);
+    }
+    c.enemy = enemy;
+    const range = LANE_JITTER.enabled ? LANE_JITTER[enemy.rank] ?? LANE_JITTER.normal : 0;
+    if (c.range !== range) {
+      c.range = range;
+      c.off = range > 0 ? Math.round((c.u * 2 - 1) * range) : 0;
+    }
+    return c;
+  }
+
+  // 적 발 y(정수 px) = 줄 가운데 + 적마다 고정 흩기. 그리기·투사체·FX·데미지 숫자·성벽 타격이 전부 이 값을 쓴다.
+  _enemyFootY(track, enemy) {
+    const c = this._laneEntry(enemy);
+    const laneSize = track.height / ENEMY_LANE_COUNT;
+    const y = track.y + (c.lane + 0.5) * laneSize;
+    if (c.off === 0) return Math.round(y);
+    const lim = Math.max(0, Math.floor(laneSize / 2) - 1); // 자기 줄 칸 안에서만(이웃 줄·전투 영역 밖으로 안 나감)
+    return Math.round(y + clamp(c.off * this._enemyScale, -lim, lim));
   }
 
   // enemy.rank별 그리기 배율. 엘리트는 늘 spriteRules.eliteScale, 보스는 "이미지가 작으면만
@@ -1205,6 +1245,26 @@ export class BattleRenderer {
       return 1;
     }
     return 1;
+  }
+
+  // 부활 충격파(docs/ads.md) - 성벽 전체 높이 wall_block + 소리 + 강한 흔들림, 밀린 적마다 slideMs ease-out 미끄러짐과 피격 번쩍 1회.
+  _reviveShockwave(track, battleState, e, assets, now) {
+    const frameH = assets?.monsterFxAnims?.get('wall_block')?.frameH ?? 32;
+    this._monsterFx.wallHit('wall_block', track.x, track.y + track.height / 2, now, track.height / frameH);
+    audio.play('wall_block');
+    const fxCfg = assets?.effectsConfig;
+    const shake = fxCfg?.shakePresets?.[e.shake];
+    if (shake && fxCfg.settings?.screenShake !== false) this.shake?.(shake.amount * (fxCfg.settings?.intensity ?? 1), shake.life);
+    const flashMs = assets?.monsterFxManifest?.hit?.flashMs ?? 70;
+    for (const k of e.knocked) {
+      const enemy = battleState.enemies.find((x) => x.id === k.enemyId);
+      if (!enemy) continue;
+      const st = this._skillFx.enemyState(enemy);
+      st.kbPx = k.dist * track.width;
+      st.kbStartMs = now;
+      st.kbMs = e.slideMs || 1;
+      st.flashUntil = now + flashMs;
+    }
   }
 
   // 성벽 타격(monster manifest.wall) - 이 적이 낸 새 wallDamaged/wallBlocked마다 한 번, 방어선(x)·몸 가운데(y ± jitterY)에
@@ -1239,11 +1299,29 @@ export class BattleRenderer {
     const flashMs = hitFx.flashMs ?? 70;
     const hitKnockMs = hitFx.knockbackMs ?? 80;
     const hitKnockPx = (hitFx.knockbackPx ?? 1) * displayScale; // 원본 1px = 화면 배율만큼
+    this._enemyScale = displayScale; // _enemyPixelPos의 흩기 배율
+
+    // 프레임 시작에 발 y를 캐시 항목에 한 번 계산해 두고, 그 값(같으면 스폰 순서)으로만 정렬 - 아래 적이 앞.
+    // 이번 프레임 enemies에 없는 id는 캐시에서 지운다. 배열·항목은 매 프레임 재사용.
+    const frame = ++this._laneFrame;
+    const order = this._enemyOrder;
+    order.length = 0;
+    for (const e of enemies) {
+      const c = this._laneEntry(e);
+      c.footY = this._enemyFootY(track, e);
+      c.seen = frame;
+      order.push(c);
+    }
+    if (this._laneCache.size > order.length) {
+      for (const [id, c] of this._laneCache) if (c.seen !== frame) this._laneCache.delete(id); // 사라진 적이 있을 때만 훑는다
+    }
+    order.sort(byFootY);
 
     this._atkFx.drawResidues(ctx, assets, now); // 바닥 잔상 - 몬스터 뒤, 바닥 위
     this._monsterFx.drawDying(ctx, assets, now); // 죽어 가는 몸은 살아 있는 몬스터 뒤에
 
-    for (const enemy of enemies) {
+    for (const entry of order) {
+      const enemy = entry.enemy;
       const pos = this._enemyPixelPos(track, enemy);
       const outline = RANK_OUTLINE[enemy.rank];
 
@@ -1317,7 +1395,7 @@ export class BattleRenderer {
           ctx.translate(snapPx(drawX), snapPx(pos.y));
           if (flip) ctx.scale(-1, 1);
           // 맞은 직후 flashMs 동안 번쩍 버전(flashMap, 프레임별 캐시).
-          const img = hitEvent && hitEvent.elapsedMs < flashMs ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
+          const img = (hitEvent && hitEvent.elapsedMs < flashMs) || fxState.flashUntil > now ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
           drawImageSnapped(ctx, img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
           // 서리 고래 빙결 - 이 적 한 마리에만 모래시계와 같은 회색 체커 디더(빙결 시간 동안).
           if (enemy.spiritFreeze > 0) {

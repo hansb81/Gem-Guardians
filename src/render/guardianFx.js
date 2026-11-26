@@ -4,6 +4,16 @@ import { storage } from '../platform/storage.js';
 import { drawImageSnapped, snapPx } from './screenFit.js';
 
 export const FX_SLOT_STAGGER_MS = 170; // 다섯이 똑같이 움직이지 않게 슬롯마다 어긋남
+// 외곽선 글로우(tier 3+) - 평소엔 안 그리고 periodMs마다 onMs 동안만 깜빡인다(어두운 색 1/4, 네온 2/4, 어두운 색 1/4).
+// 슬롯마다 staggerMs씩 어긋나 차례로 지나간다. mode는 개발용 ?glow=always|pulse|off (always = 예전 방식, 계속 켜고 색만 교대).
+export const GLOW = { periodMs: 2400, onMs: 360, staggerMs: 300, onFire: true, mode: 'pulse' };
+// 지금 그릴 글로우 단계: null(안 그림) | 'dim' | 'bright'. firing = 발사 프레임을 그리는 중.
+export function glowPhase(t, slot, firing = false) {
+  if (firing && GLOW.onFire) return 'bright';
+  const p = (((t - slot * GLOW.staggerMs) % GLOW.periodMs) + GLOW.periodMs) % GLOW.periodMs;
+  if (p >= GLOW.onMs) return null;
+  return p < GLOW.onMs / 4 || p >= (GLOW.onMs * 3) / 4 ? 'dim' : 'bright';
+}
 const MIN_BLOB = 12; // 이보다 작은 8방향 덩어리(떠다니는 점)는 윤곽 계산에서 뺀다
 
 export function fxTier(level, tiers) {
@@ -175,11 +185,14 @@ export function drawGuardianFxFront(ctx, assets, color, tier, x0, footY, s, t) {
 }
 
 // 윤곽(3+) - 수호자와 같은 반전 변환 안에서 호출. drawX0/drawY0 = 수호자 프레임 왼쪽 위.
-export function drawGuardianOutline(ctx, assets, animData, tier, frame, drawX0, drawY0, s, t) {
+// t = 슬롯 어긋남을 더하지 않은 이펙트 시계, slot = 수호자 칸 번호.
+export function drawGuardianOutline(ctx, assets, animData, tier, frame, drawX0, drawY0, s, t, slot = 0, firing = false) {
   const m = assets.guardianFxManifest;
   const sheets = animData.outline;
-  if (!sheets || !m.outline || tier < m.outline.fromTier) return;
-  const img = Math.floor(t / m.outline.pulseMs) % 2 === 0 ? sheets.bright : sheets.dim;
+  if (!sheets || !m.outline || tier < m.outline.fromTier || GLOW.mode === 'off') return;
+  const phase = GLOW.mode === 'always' ? (Math.floor(t / m.outline.pulseMs) % 2 === 0 ? 'bright' : 'dim') : glowPhase(t, slot, firing);
+  if (!phase) return;
+  const img = sheets[phase];
   const W = animData.frameW + 2;
   const H = animData.frameH + 2;
   drawImageSnapped(ctx, img, frame * W, 0, W, H, drawX0 - s, drawY0 - s, W * s, H * s);

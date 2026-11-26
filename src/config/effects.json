@@ -12,6 +12,8 @@
   },
   "_note_reduceMotion": "settings.reduceMotion - true면 셔플 연출이 소용돌이/정렬 대신 전체 페이드아웃->페이드인(shuffleAnim.reducedMotion)으로 대체된다. main.js가 GameState.setReduceEffects로 넘겨 core의 effect 길이도 같이 줄인다(§설정 '흔들림/연출 줄이기').",
   "_note_legacyClearParticles": "false면 일반 매치 제거의 옛 파편 파티클(events.clear.particles)을 끈다 - pop_{색} 스프라이트(assets/effects)가 이미 번쩍임/산산조각/파편을 그린다. true로 다시 켤 수 있다.",
+  "_note_shakePresets": "이름 붙은 화면 흔들림 - config/items.json revive.shake 같은 곳에서 키로 고른다(부활 충격파 = strong, 폭탄 4·무지개 10보다 강하게).",
+  "shakePresets": { "strong": { "amount": 12, "life": 520 } },
   "cascade": { "scalePerStep": 0.1, "maxScale": 1.6 },
   "events": {
     "clear": { "particles": { "count": 5, "life": 350, "speed": 140, "size": 4 } },

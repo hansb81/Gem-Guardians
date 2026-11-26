@@ -280,6 +280,7 @@ export class CanvasRenderer {
   drawShop(shopScreen, now) {
     const { ctx, cssWidth: width, cssHeight: height } = this;
     this.drawBleed();
+    this._drawBleedWall(); // frame 밖이 비어 보이지 않게 - 전투 화면과 같은 벽
     shopScreen.draw(ctx, width, height, now, this.assets);
   }
 

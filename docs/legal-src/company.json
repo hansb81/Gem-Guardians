@@ -1,13 +1,13 @@
 {
   "_doc": "이용약관·환불 안내(docs/terms.html, docs/refund.html)의 회사 정보 한 곳. 값을 채우고 node tools/legal_fill.mjs. 빈 값은 노란 빈칸으로 남는다. _en = 영어 쪽.",
-  "name": "",
-  "name_en": "",
-  "ceo": "",
-  "ceo_en": "",
-  "bizNo": "",
+  "name": "한칸스튜디오",
+  "name_en": "Hankan Studio",
+  "ceo": "한승범",
+  "ceo_en": "Seungbeom Han",
+  "bizNo": "752-08-03477",
   "mailOrderNo": "",
-  "address": "",
-  "address_en": "",
-  "email": "",
+  "address": "경기도 안양시 동안구 경수대로 715-4 평촌아트빌라 303",
+  "address_en": "303, 715-4, Gyeongsu-daero, Dongan-gu, Anyang-si, Gyeonggi-do",
+  "email": "hankan.studio81@gmail.com",
   "phone": ""
 }

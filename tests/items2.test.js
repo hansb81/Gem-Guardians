@@ -314,7 +314,7 @@ test('황금 주화: 층 골드(처치 + 클리어 보너스) 정확히 2배', (
 
 // ---------------- 부활 ----------------
 
-test('부활: HP 0 -> 부활 -> HP 50%, 적 2초 정지, 이어서 진행. 층당 1회, 두 번째 HP 0은 그대로 실패', () => {
+test('부활: HP 0 -> 부활 -> HP 50%, 충격파 넉백, 이어서 진행. 층당 1회, 두 번째 HP 0은 그대로 실패', () => {
   const controller = makeController();
   controller.devSetFloor(1);
   playerState.inventory.data.items.revive = 1;
@@ -327,12 +327,10 @@ test('부활: HP 0 -> 부활 -> HP 50%, 적 2초 정지, 이어서 진행. 층�
   assert.equal(controller.revive(), true);
   assert.equal(bs.status, 'active');
   assert.equal(bs.wallHealth, Math.round(bs.wallMaxHealth * ITEMS.items.revive.pct));
-  assert.equal(bs._freeze.normal, ITEMS.items.revive.freezeSec);
-  assert.equal(bs._freeze.boss, ITEMS.items.revive.freezeSec * ITEMS.items.revive.bossMul, '보스는 1초');
-  assert.ok(bs.events.some((e) => e.type === 'wallRevived'));
+  assert.equal(bs.frozen, false, '정지 대신 넉백');
+  assert.ok(bs.events.some((e) => e.type === 'wallRevived' && e.knocked));
   assert.equal(playerState.inventory.data.items.revive, 0);
   for (let i = 0; i < 25; i++) bs.update(0.1);
-  assert.equal(bs.frozen, false);
 
   playerState.inventory.data.items.revive = 1; // 보유해도 층당 1회
   bs.applyObstacleWallDamage(1);
@@ -347,20 +345,29 @@ test('부활: HP 0 -> 부활 -> HP 50%, 적 2초 정지, 이어서 진행. 층�
   assert.equal(controller.canRevive(), false, '보유 0개면 숨김');
 });
 
-test('부활 정지: 보스는 freezeSec x bossMul(1초)만 멈추고 일반 적은 2초', () => {
-  const bs = makeBattle([stat('normal'), stat('boss')]);
+test('부활 넉백: 속도 x knockSec(보스 x bossMul), 스폰 지점에서 멈춤, 성벽 공격 해제 + 경직', () => {
+  const bs = makeBattle([stat('normal'), stat('boss'), stat('normal')]);
   for (let i = 0; i < 3; i++) bs.update(0.1);
-  const [normal, boss] = bs.enemies;
+  const [normal, boss, atWall] = bs.enemies;
+  normal.progress = 0.5;
+  boss.progress = 0.5;
+  atWall.progress = 1;
+  atWall._reachedLine = true;
+  atWall.speed = 1; // 1 x 2초 = 2 -> 스폰 지점(0)에서 멈춤
   bs.wallHealth = 0;
   bs.status = 'failed';
-  const { pct, freezeSec, bossMul } = ITEMS.items.revive;
-  assert.equal(bs.revive(pct, freezeSec, bossMul), true);
-  const p = [normal.progress, boss.progress];
-  for (let i = 0; i < 13; i++) bs.update(0.1); // 1.3초 - 보스(1초)만 풀림(0.1 누적 오차 여유)
-  assert.equal(normal.progress, p[0]);
-  assert.ok(boss.progress > p[1]);
-  for (let i = 0; i < 10; i++) bs.update(0.1); // 2.3초
-  assert.ok(normal.progress > p[0]);
+  const c = ITEMS.items.revive;
+  assert.equal(bs.revive(c.pct, c.knockSec, c.bossMul, c), true);
+  assert.ok(Math.abs(normal.progress - (0.5 - normal.speed * c.knockSec)) < 1e-9);
+  assert.ok(Math.abs(boss.progress - (0.5 - boss.speed * c.knockSec * c.bossMul)) < 1e-9);
+  assert.equal(atWall.progress, 0);
+  assert.equal(atWall._reachedLine, false);
+  const p = normal.progress;
+  const hold = c.slideMs / 1000 + c.staggerSec;
+  for (let i = 0; i < Math.floor(hold / 0.1) - 1; i++) bs.update(0.1);
+  assert.equal(normal.progress, p, '미끄러짐 + 경직 동안 정지');
+  for (let i = 0; i < 3; i++) bs.update(0.1);
+  assert.ok(normal.progress > p);
 });
 
 test('메뉴로 나가기(retryFloor)만 하면 예약 유지, 전투가 시작(첫 update)돼야 소모', () => {
@@ -465,7 +472,7 @@ test('광고 이어하기: 깃털 없이 같은 효과, 층당 1회를 깃털과
   assert.equal(controller.adContinue(), true);
   assert.equal(bs.status, 'active');
   assert.equal(bs.wallHealth, Math.round(bs.wallMaxHealth * ITEMS.items.revive.pct));
-  assert.equal(bs._freeze.normal, ITEMS.items.revive.freezeSec);
+  assert.ok(bs.events.some((e) => e.type === 'wallRevived' && e.knocked), '깃털과 같은 revive');
   assert.equal(playerState.inventory.data.items.revive, 1, '깃털은 차감 안 함');
   bs.applyObstacleWallDamage(1);
   assert.equal(controller.canRevive(), false, '광고로 이어했으면 깃털도 숨김');
