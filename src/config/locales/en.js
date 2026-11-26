@@ -14,7 +14,7 @@ export const en = {
   menu: {
     play: 'Play',
     inventory: 'Vault',
-    prep: 'Prepare',
+    prep: 'Altar',
     ranking: 'Ranking',
     icon: { attendance: 'Attend', event: 'Event', mail: 'Mail', settings: 'Settings', shop: 'Shop', mine: 'Mine' },
     mode: { title: 'Select Mode', normal: 'Normal Mode', competitive: 'Competitive Mode', locked: 'Unlocks at F20' },
@@ -197,15 +197,15 @@ export const en = {
         ] },
         { title: "Growth and Currency", body: [
           "Gold: earned by defeating enemies and clearing floors. First clears give an extra reward.",
-          "Guardian upgrades: tap a guardian in battle or use the prep screen to level up with gold. Each level raises attack.",
+          "Guardian upgrades: tap a guardian in battle or use the Altar of Guardians to level up with gold. Each level raises attack.",
           "Diamonds: spend them in the shop on items, gem skills and packages.",
           "Spirit Stones: used to level up spirits. Earned from first boss clears, the mine refinery, the shop and attendance.",
-          "Prepare: tap the altar to upgrade guardians and manage spirits.",
+          "Altar of Guardians: tap the altar to upgrade guardians and manage spirits.",
           "Vault: tap the treasure chest next to the altar in the main menu to view your items and equip them to slots.",
           "Ranking: tap the crystal in the middle of the main menu to see best floor rankings.",
         ] },
         { title: "Spirits", body: [
-          "Spirits are companions that help your guardians. Equip one per guardian in Prepare > Spirits.",
+          "Spirits are companions that help your guardians. Equip one per guardian in Altar of Guardians > Spirits.",
           "Defeat a boss (every 10th floor) for the first time to get a spirit. Grades are Common, Rare, Epic and Legend.",
           "Getting a spirit you already own adds a star (up to 5). Once the stars are full, you get Spirit Stones instead.",
           "Roles include Attack, Element, Amplify, Guard, Wealth, Support and Unique. Tap a spirit to see its effect.",
@@ -318,7 +318,7 @@ export const en = {
     win: { title: 'FLOOR CLEAR', desc: 'All enemies on this floor defeated.', descGold: '+{total} Gold!', clearGold: 'Clear Gold', firstClear: 'First Clear ×{mul}!', comboGold: 'Combo Bonus (max combo {max})' },
     lose: { title: 'DEFEATED', desc: 'The wall has fallen.', adFail: "Couldn't load the ad" },
     prep: {
-      title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Prepare', vault: 'Vault' },
+      title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Altar of Guardians', vault: 'Vault' },
       status: { floorClear: 'Get ready for the next floor', defeat: 'Get ready to retry', village: 'Best: Floor {best}' },
       tab: { statue: 'Guardians', spirit: 'Spirits', vault: 'Vault' },
       next: 'To Floor {n} ▶',
