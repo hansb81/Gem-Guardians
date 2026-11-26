@@ -525,7 +525,6 @@ export const ko = {
     reward: { diamonds: '다이아', gold: '골드' },
     rewards: { title: '경쟁 보상', sub: '{week}주차 · 매주 월요일 00:00 정산 · 참가 {total}명', mine: '◀ 나', note: '순위·비율이 겹치면 더 좋은 쪽 하나만 · 1~3위 왕관 테두리, 4~10위 금 테두리는 다음 시즌 동안' },
     history: { title: '최근 8주 기록', week: '{week}주차', empty: '아직 기록이 없어요' },
-    result: { title: '{week}주차 시즌 결과', rankPct: '{rank}위 · 상위 {pct}%', tierLine: '{tier} 구간 · {n} P', claim: '받기', claimLater: '서버 연결 후 지급' },
     nick: {
       title: '랭킹에 쓸 이름', titleEdit: '이름 바꾸기', label: '닉네임', rule: '2~10자 · 한글·영문·숫자', statue: '대표 수호자', save: '저장',
       placeholder: '이름 입력', errShort: '2자 이상 써 주세요', errLong: '10자까지 쓸 수 있어요', errChar: '한글·영문·숫자만 쓸 수 있어요',

@@ -516,7 +516,6 @@ export const en = {
     reward: { diamonds: 'Gems', gold: 'Gold' },
     rewards: { title: 'Rewards', sub: 'Week {week} · settles Mondays 00:00 KST · {total} players', mine: '◀ Me', note: 'Rank and percent tiers: best one only · #1~3 crown frame, #4~10 gold frame for next season' },
     history: { title: 'Last 8 weeks', week: 'W{week}', empty: 'No records yet' },
-    result: { title: 'Week {week} results', rankPct: '#{rank} · Top {pct}%', tierLine: '{tier} tier · {n} P', claim: 'Claim', claimLater: 'Paid after server launch' },
     nick: {
       title: 'Your ranking name', titleEdit: 'Change name', label: 'Nickname', rule: '2~10 letters/digits', statue: 'Guardian', save: 'Save',
       placeholder: 'Enter name', errShort: 'At least 2 characters', errLong: 'Up to 10 characters', errChar: 'Letters and digits only',

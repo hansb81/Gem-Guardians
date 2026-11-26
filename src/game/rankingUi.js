@@ -1,5 +1,5 @@
 // 랭킹 팝업 상태·입력(docs/ranking.md 2~6장). 그리기는 src/render/ui/rankingPopup.js, 데이터는 RankingService만 부른다.
-// 메인 메뉴에서만 열린다: 봉인 원석(crystal) -> open(), 메뉴에 들어올 때 tick()이 지난 시즌 정산 -> 결과 팝업.
+// 메인 메뉴에서만 열린다: 봉인 원석(crystal) -> open(). 경쟁 주간 보상은 서버 정산이 우편으로 보낸다.
 // 닉네임 입력은 캔버스 위에 HTML input을 잠깐 겹친다(모바일 키보드) - 팝업을 닫거나 저장하면 지운다.
 import { createRankingService } from '../ranking/rankingService.js';
 import { ServerRankingService } from '../ranking/serverRankingService.js';
@@ -46,11 +46,6 @@ export class RankingUi {
     return this.state != null;
   }
 
-  // 메뉴 이름판 빨간 점 = 받기 전 시즌 보상이 있을 때만.
-  hasRewardBadge() {
-    return !!this.service?.hasClaimableReward();
-  }
-
   // ---------- 열기·닫기 ----------
   open() {
     if (!this.service) return;
@@ -93,23 +88,13 @@ export class RankingUi {
     if (this.service.nickResetReason && st.sub == null) this._openNick(true);
   }
 
-  // 매 프레임(메뉴). 1초마다 시즌 넘김 확인 -> 새 결과가 있으면 결과 팝업(아직 안 본 것만).
-  tick(nowMs, menuIdle) {
+  // 매 프레임(메뉴). 1초마다 시즌 넘김 확인 -> 넘어갔으면 다시 받기. 지난 시즌 보상은 서버가 우편으로 보낸다.
+  tick(nowMs) {
     if (!this.service || nowMs - this._lastTick < TICK_MS) return;
     this._lastTick = nowMs;
     const before = this.player.ranking.comp.seasonId;
     this.service.syncSeason();
     if (this.state && before !== this.player.ranking.comp.seasonId) this.refresh();
-    const p = this.player.ranking.comp.pending;
-    if (p && !p.seen && (menuIdle || this.state) && this.state?.sub == null) this.showResult();
-  }
-
-  showResult() {
-    if (!this.player.ranking.comp.pending) return;
-    if (!this.state) this.state = this._newState(false, this.player.ranking.lastTab);
-    this._removeInput();
-    this.state.sub = 'result';
-    this.service.markPendingSeen();
   }
 
   // ---------- 그리기 값 ----------
@@ -132,8 +117,6 @@ export class RankingUi {
     st.offlineText = d.offlineAt ? t('ranking.offlineAgo', { n: Math.max(0, Math.floor((Date.now() - d.offlineAt) / 60e3)) }) : null;
     st.me = d.me ?? null;
     st.history = r.comp.history;
-    st.pending = r.comp.pending;
-    st.rewardsEnabled = !!this.config.rewardsEnabled;
     st.tiers = this.config.tiers;
     st.floorGold = this.service.floorGold();
     st.myName = r.profile.nickname;
@@ -220,17 +203,6 @@ export class RankingUi {
           this._closeSub();
         }
         return null;
-      case 'claim': {
-        if (!this.config.rewardsEnabled) {
-          audio.play('gem_swap_fail');
-          return null;
-        }
-        // 지금은 지급만. rewardsEnabled를 켤 때 res.delta를 공통 획득 팝업(main.js rewardPopup, rewardFromDelta)에 넘긴다.
-        const res = this.service.claim();
-        audio.play(res.ok ? 'ui_click' : 'gem_swap_fail');
-        if (!this.player.ranking.comp.pending) this._closeSub();
-        return null;
-      }
       case 'pick':
         audio.play('ui_click');
         st.nick.statue = hit.statue;
@@ -340,11 +312,6 @@ export class RankingUi {
   dev() {
     const ui = this;
     return {
-      toggleFake() {
-        ui.config.fakeBoard = !ui.config.fakeBoard;
-        ui.refresh();
-        return ui.config.fakeBoard;
-      },
       setCompState(n) {
         ui.devCompState = Number(n) || 0;
         ui.refresh();
@@ -357,11 +324,6 @@ export class RankingUi {
         ui.service.devOffsetMs += Math.max(0, target - now);
         ui._lastTick = 0;
         ui.refresh();
-      },
-      showLastResult() {
-        ui.service.syncSeason();
-        if (!ui.service.devFakePending()) return;
-        ui.showResult();
       },
       resetNickname() {
         Object.assign(ui.player.ranking.profile, { nickname: '', statue: '' });

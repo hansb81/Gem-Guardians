@@ -1,11 +1,11 @@
-// 랭킹(docs/ranking.md 5·7장): 시즌 id, 보상 구간, 다음 구간까지, 동점, 가짜 명단, 저장 마이그레이션, submit, 받기 txId.
+// 랭킹(docs/ranking.md 5·7장): 시즌 id, 보상 구간, 다음 구간까지, 동점, 저장 마이그레이션, submit, 시즌 넘김.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { seasonAt, seasonFromId, prevSeason, isSettling } from '../src/ranking/season.js';
 import { tierOf, nextTierGap, compareEntries, rewardBundle } from '../src/ranking/tiers.js';
 import { normalizeRanking, isValidNickname } from '../src/ranking/rankingSave.js';
-import { LocalRankingService, fakeBoard } from '../src/ranking/rankingService.js';
+import { LocalRankingService } from '../src/ranking/rankingService.js';
 import { migrateSave, SAVE_VERSION } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
 
@@ -63,15 +63,6 @@ test('동점: 먼저 낸 쪽이 위', () => {
   assert.deepEqual(list.map((e) => e.at), [9, 3, 5]);
 });
 
-test('가짜 명단: 같은 시즌 id면 항상 같음, 다르면 다름', () => {
-  const a = fakeBoard('comp', '2026-W45', 200, 0);
-  const b = fakeBoard('comp', '2026-W45', 200, 0);
-  const c = fakeBoard('comp', '2026-W46', 200, 0);
-  assert.deepEqual(a, b);
-  assert.notDeepEqual(a, c);
-  assert.ok(a.every((e) => e.nickname.length >= 2 && e.nickname.length <= 10 && e.value > 0));
-});
-
 test('save 마이그레이션 v2 -> v3: 랭킹 블록, 일반 기록 = 최고 도달 층 - 1, inv 그대로', () => {
   const v2 = { saveVersion: 2, gold: 5, bestFloor: 13, inv: { items: { hammer: 2 }, grantedTx: ['start:hammer'] } };
   const out = migrateSave(structuredClone(v2), 1000);
@@ -112,45 +103,33 @@ test('submit: 더 낮은 기록으로 덮어쓰지 않음, 도달 시각 기록'
   assert.equal(player.ranking.comp.runs, 2);
 });
 
-test('top/me: 내 줄 포함, 100위까지, fakeBoard false면 목록 없음', async () => {
+test('top/me(서버 없음): 순위표 없음, 내 기록만(순위 없음)', async () => {
   const { svc } = makeService();
+  assert.equal((await svc.top('normal', {})).unavailable, true);
+  assert.equal(await svc.me('normal', {}), null);
   await svc.submit('normal', { floor: 40, at: 1 });
-  const top = await svc.top('normal', {});
-  assert.equal(top.entries.length, 100);
-  assert.equal(top.total, CFG.fakeCount + 1);
   const me = await svc.me('normal', {});
-  assert.ok(me.rank >= 1 && me.pct >= 1);
-  const off = makeService({ ...CFG, fakeBoard: false }).svc;
-  assert.equal((await off.top('normal', {})).unavailable, true);
+  assert.deepEqual([me.value, me.rank, me.me], [40, null, true]);
 });
 
-test('시즌 넘김 -> 정산·pending, 받기 txId 중복 지급 없음', async () => {
-  const { svc, player, now } = makeService({ ...CFG, rewardsEnabled: true });
+test('시즌 넘김: 이번 주 기록만 새로 시작, 기기는 정산·지급 안 함(보상은 서버 우편)', async () => {
+  const { svc, player, now } = makeService();
   svc.syncSeason();
   const s = svc.currentSeason();
   await svc.submit('comp', { value: 9000, floor: 30, at: s.start + 1000, seasonId: s.id });
-  now.t = s.end + 1000;
-  const res = svc.syncSeason();
-  assert.equal(res.seasonId, s.id);
-  assert.equal(player.ranking.comp.pending.seasonId, s.id);
-  assert.equal(player.ranking.comp.history[0].seasonId, s.id);
-  assert.equal(player.ranking.comp.best.points, 0);
   const dia0 = player.diamonds;
-  assert.equal(svc.claim().ok, true);
-  assert.ok(player.diamonds > dia0);
-  const after = player.diamonds;
-  player.ranking.comp.pending = { ...res }; // 같은 시즌을 다시 받으려 해도
-  assert.equal(svc.claim().reason, 'duplicate');
-  assert.equal(player.diamonds, after);
-  assert.equal(player.ranking.comp.pending, null);
+  now.t = s.end + 1000;
+  svc.syncSeason();
+  assert.notEqual(player.ranking.comp.seasonId, s.id);
+  assert.equal(player.ranking.comp.best.points, 0);
+  assert.equal(player.diamonds, dia0);
+  assert.equal('pending' in player.ranking.comp, false);
 });
 
-test('rewardsEnabled false: 받기 안 됨, 빨간 점 없음', () => {
-  const { svc } = makeService();
-  svc.syncSeason();
-  assert.ok(svc.devFakePending());
-  assert.equal(svc.hasClaimableReward(), false);
-  assert.equal(svc.claim().reason, 'disabled');
+test('예전 save의 pending·가짜 정산 기록은 버림', () => {
+  const r = normalizeRanking({ comp: { pending: { seasonId: '2026-W40' }, history: [{ seasonId: '2026-W40', rank: 3 }] } });
+  assert.equal('pending' in r.comp, false);
+  assert.deepEqual(r.comp.history, []);
 });
 
 test('참여 보상 골드 = 층 기준가 x 3', () => {

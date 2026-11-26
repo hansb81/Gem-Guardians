@@ -95,7 +95,7 @@
 | `att:2026-11-13` | 마이그레이션 s1 `att_claim` `'att:'‖to_char(KST날짜)` | 하루 1번 | ✓(KST) |
 | `mail:123` | s1 `mail_claim` | 우편마다(운영 빈도) | ✗ |
 | `coupon:{campaign}` | coupons 마이그레이션 | 캠페인마다 1번 | ✗ |
-| `rank:2026-W46` | s4 `rank_claim`, rankingService.claim | 주 1번(지금은 `rewardsEnabled:false`, `compUnlocked:false`라 0) | 주 번호(날짜 아님) |
+| (지움) `rank:{시즌}` | 경쟁 주간 보상은 2026-11-26부터 우편(`mail:{id}`) - docs/ranking.md 5-4 | - | - |
 | `ad:chest:2026-11-13:1` | s4 `ad_claim` `'ad:'‖배치‖':'‖날짜‖':'‖n` | 배치×하루 한도 | ✓ — **`AD_PLACEMENTS = {}`라 지금은 0** |
 
 - 서버 `claims-pending`은 위 서버 txId(`att`, `mail`, `coupon`, `rank`, `ad`)를 그대로 내려 줄 뿐 새 형식을 만들지 않는다.

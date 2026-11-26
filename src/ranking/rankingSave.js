@@ -3,7 +3,7 @@ export const STATUE_COLORS = ['red', 'blue', 'yellow', 'green', 'purple'];
 export const NICKNAME_RE = /^[가-힣A-Za-z0-9]{2,10}$/;
 export const isValidNickname = (s) => typeof s === 'string' && NICKNAME_RE.test(s);
 
-export function defaultRanking() {
+function defaultRanking() {
   return {
     profile: { playerId: '', nickname: '', statue: '' },
     normal: { bestFloor: 0, reachedAt: 0 }, // 클리어한 가장 높은 층 + 그 층에 처음 닿은 시각(ms)
@@ -11,7 +11,6 @@ export function defaultRanking() {
       seasonId: '',
       best: { points: 0, floor: 0, at: 0 }, // 이번 주 최고 1판
       runs: 0,
-      pending: null, // 받기 전 결과 { seasonId, rank, pct, tierId, points, rewards, seen }
       history: [], // 최근 8개 { seasonId, points, rank, pct, tierId }
     },
     lastTab: 'normal',
@@ -43,8 +42,8 @@ export function normalizeRanking(r, { bestFloor = 1, nowMs = 0 } = {}) {
       seasonId: typeof c.seasonId === 'string' ? c.seasonId : '',
       best: { points: num(c.best?.points), floor: num(c.best?.floor), at: num(c.best?.at) },
       runs: num(c.runs),
-      pending: c.pending && typeof c.pending === 'object' ? { ...c.pending } : null,
-      history: Array.isArray(c.history) ? c.history.slice(0, 8) : [],
+      // shortcut: 예전 기록은 기기 가짜 명단 정산이라 버린다. 서버 season_results를 받아 오는 길이 생기면 그걸로 채운다.
+      history: [],
     },
     lastTab: r.lastTab === 'comp' ? 'comp' : 'normal',
   };

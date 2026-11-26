@@ -48,7 +48,8 @@ async function toss() {
 }
 
 async function settle() {
-  const { data, error } = await db.rpc("comp_settle_due", { p_tiers: RANKING.tiers, p_floor_gold: FLOOR_GOLD.gold });
+  // 보상은 우편으로(p_mail = rewardsEnabled) - 기기는 우편함에서 받는다.
+  const { data, error } = await db.rpc("comp_settle_due", { p_tiers: RANKING.tiers, p_floor_gold: FLOOR_GOLD.gold, p_mail: RANKING.rewardsEnabled });
   if (error) throw new Error(JSON.stringify(error));
   return data;
 }

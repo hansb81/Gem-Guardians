@@ -279,7 +279,7 @@ export class MainMenuScreen {
     this.itemIcons = () => null; // main.js: renderer.itemAssets.icons(아이템 팩, 하단 바와 같은 그림)
     this._toast = null; // { text, until, game } 메뉴 한 줄 알림 - until은 처음 그려질 때 정한다. game = 전투 scene 위에도 그린다
     this.mine = () => null; // main.js: 광산 입구 { locked, badge, floor } | null(설정 없음 - 버튼 안 그림)
-    this.rankingBadge = () => false; // main.js가 랭킹 서비스에 연결(받기 전 시즌 보상이 있으면 빨간 점)
+    this.normalFloor = () => null; // main.js: 일반 모드로 들어가면 이어 할 층(버튼 둘째 줄)
     this.compStatus = null; // main.js compStatus() - 경쟁 모드 버튼(열림·남은 입장·잠김 이유)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
@@ -474,7 +474,7 @@ export class MainMenuScreen {
     this._drawPlate(ctx, this._altar().plate_screenPx, 'altar', 'menu.prep', false);
     // 빨간 점: 새 아이템 / 빈 칸에 넣을 아이템.
     this._drawPlate(ctx, this._chest().plate_screenPx, 'chest', 'menu.inventory', !!inv && (inv.hasUnseenItems(floor) || inv.hasFillableSlot(floor)));
-    this._drawPlate(ctx, RANKING_PLATE, 'crystal', 'menu.ranking', this.rankingBadge());
+    this._drawPlate(ctx, RANKING_PLATE, 'crystal', 'menu.ranking', false);
   }
 
   // 이름판(정비·보관함·랭킹 공통): plate 9-slice + 글자 18 + 오른쪽 위 빨간 점. 누르는 동안 이름판만 1px 아래로.
@@ -1460,7 +1460,9 @@ export class MainMenuScreen {
     const nRect = [cx + normal[0], cy + normal[1], normal[2], normal[3]];
     if (!this._nine(ctx, `menu/mode_normal${down ? '_pressed' : ''}.png`, nRect)) this._panel(ctx, nRect, COLORS.purple, HUD_CONFIG.text.title);
     this._sprite(ctx, 'menu/icon_mode_normal.png', nRect[0] + 12, nRect[1] + nRect[3] / 2 - 20);
-    this._text(ctx, t('menu.mode.normal'), nRect[0] + 70, nRect[1] + nRect[3] / 2, { size: 22 });
+    const nFloor = this.normalFloor();
+    this._text(ctx, t('menu.mode.normal'), nRect[0] + 70, nRect[1] + nRect[3] / 2 - (nFloor ? 8 : 0), { size: 22 });
+    if (nFloor) this._text(ctx, t('battle.floor', { floor: nFloor }), nRect[0] + 70, nRect[1] + nRect[3] / 2 + 16, { size: 13, color: HUD_CONFIG.text.title });
 
     // 경쟁 모드(main.js compStatus): 열렸으면 일반 모드와 같은 버튼 + 오늘 남은 입장, 아니면 잠김 모양 + 눌렀을 때 이유.
     const st = this.compStatus?.() ?? { open: false, hint: t('menu.mode.locked') };

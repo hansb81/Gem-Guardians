@@ -88,7 +88,7 @@
 - 웨이브별 최대 처치 점수는 시드 100개 중 최대 × 1.25 - 표 `_shared/comp_limits.json`(웨이브 200까지, `node tools/gen_comp_limits.mjs`로 만듦, 표 밖은 마지막 칸 차이로 늘림). config(comp·balance·enemies)를 바꾸면 다시 돌린다(tests/comp.test.js가 표가 최신인지 본다).
 - 웨이브 하나에 최소 5초(그보다 빠른 판은 보류). 넘으면 기록만 하고 순위에 안 넣는다(verified=false).
 - 예: 웨이브 17 상한 39,378, 웨이브 24 상한 57,405(시뮬 normal P90 42,251), 웨이브 29 상한 71,669(시뮬 fast P90 53,627).
-- 남은 일(보고): 정산 참여 보상 골드(`goldFloorMul` × 층 기준가)는 `comp_best.floor`를 층으로 읽는데, 이제 그 칸이 도달 웨이브다. 보상이 꺼져 있어(`rewardsEnabled: false`) 지금은 영향 없음 - 보상을 켜기 전에 "본편 최고 층 기준"으로 바꿀지 정해야 한다.
+- 정산 참여 보상 골드(`goldFloorMul` × 층 기준가)는 `comp_best.floor`(= 도달 웨이브)를 층으로 읽는다 - 그대로 두기로 함(5-4).
 
 **판 흐름**: 메뉴 > 모드 선택 > 경쟁 모드(오늘 남은 입장 표시) → `rank-comp-start`(남은 입장 `left`, 시즌, 시드) → 판 → 패배 팝업 "결과 보기" 또는 일시정지·뒤로가기 "포기하고 나가기" = 그때 점수로 `rank-comp-finish` → 메뉴에서 결과 팝업(점수·웨이브). 본편 층·골드·가방·장착은 그대로. **앱을 강제로 끄면 제출되지 않는다**(입장 1회는 이미 씀).
 
@@ -116,9 +116,10 @@
 
 ### 5-4. 지난 시즌 결과
 
-- 초기화 후 처음 메뉴에 들어오면(또는 랭킹을 열면) **시즌 결과 팝업**: `44주차 시즌 결과 · 128위 · 상위 7%` + 구간 배지 + 보상 아이콘 + `받기`.
-- 받기 = 인벤토리 `grant` (txId `rank:2026-W44`로 한 번만). 받기 전까지 메뉴 이름판에 빨간 점.
-- 경쟁 탭 맨 위에 `지난 시즌 128위` 한 줄(눌러서 최근 8주 기록).
+- **보상 = 우편**(2026-11-26 결정). 서버 cron `settle`(일 15:31 UTC = 월 00:31 KST)이 지난 시즌을 정산해 `season_results`에 넣고, 보상이 있는 사람마다 내 우편 1통(`경쟁 모드 44주차 보상 · 128위`, 30일)을 보낸다(`comp_settle_due(tiers, floor_gold, p_mail = rewardsEnabled)`). 받기는 다른 우편과 같은 `mail_claim`(`mail:{id}`) - 우편함 빨간 점이 알려 준다.
+- 기기는 정산·지급하지 않는다. 예전 랭킹 팝업 결과 화면·`받기`·랭킹 이름판 빨간 점·`rank_claim`(txId `rank:{시즌}`)은 지웠다.
+- 경쟁 탭 맨 위 `지난 시즌 128위`·최근 8주 기록: 지금은 비어 있다(서버 `season_results`를 받아 오는 길이 아직 없음).
+- 참여 보상 골드(`goldFloorMul`)의 층 = 그 시즌 최고 판의 **도달 웨이브**(웨이브 N = N층 기준가) 그대로 둔다(2026-11-26 결정).
 
 ## 6. 프로필 (닉네임·대표 석상)
 
@@ -162,8 +163,8 @@ RankingService = {
 }
 ```
 
-- **LocalRankingService** (지금): 내 기록은 save에서, 다른 사람은 **시즌 id를 씨앗으로 만든 가짜 200명**(닉네임·점수 분포 고정). 개발·목업용이라 설정 `config/ranking.json`의 `fakeBoard: true`일 때만. 보상도 가짜 순위로 계산해서 흐름 전체를 시험할 수 있게.
-- **ServerRankingService** (나중): 같은 함수 그대로. 바꾸는 곳은 서비스 1개.
+- **LocalRankingService** (서버 없을 때): 내 기록만 save에서 - 순위표·순위 없음. 가짜 명단(`fakeBoard`)과 기기 정산(`settle`·`claim`)은 2026-11-26에 지웠다.
+- **ServerRankingService** (지금): 순위표·내 순위는 서버. 주간 보상은 서버 정산 → 우편(5-4).
 - 시즌 계산·보상 구간 표는 `config/ranking.json`에 (`resetDay: 1, resetHourKst: 0, tiers: [...]`).
 
 ## 8. 서버 단계 (나중, 메모만)
@@ -256,8 +257,7 @@ season_results (season_id, player_id, rank int, pct numeric, tier_id text,
 | `POST /rank/comp/finish` {runId, points, floor, log} | 점수 상한 검사 → comp_best 갱신, 이상하면 verified=false로 보류 |
 | `GET /rank/top?mode&season&limit=100` | 1~100위 (60초 캐시) |
 | `GET /rank/me?mode&season` | 내 순위·비율·구간·다음 구간까지 |
-| `GET /rank/result?season` | 지난 시즌 결과 + 받기 전 보상 |
-| `POST /rank/claim` {seasonId} | 보상 지급 기록 (한 번만), 클라이언트는 `grant(txId rank:{seasonId})` |
+| (지움) `rank-claim` | 보상은 정산 때 우편으로(5-4) - 받기는 `mail-claim` |
 
 ### 13-4. 정산
 

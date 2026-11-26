@@ -119,24 +119,37 @@ Deno.test("경쟁: 시즌 끝 30분 지난 판은 seasonClosed", async () => {
   assertEquals((await one(db, "select public.comp_finish($1, '00000000-0000-0000-0000-0000000000f1', 100, 5, null, true) r", [A])).reason, "seasonClosed");
 });
 
-Deno.test("정산: 구간·보상, 닉네임 없는 사람 제외, 한 번만, 보상 받기 한 번", async () => {
+Deno.test("정산: 구간·보상, 닉네임 없는 사람 제외, 한 번만, 보상 = 내 우편 1통(받기 한 번)", async () => {
   const db = await setup();
   for (const [who, pts, at] of [[A, 800, "2026-10-01"], [B, 800, "2026-10-02"], [C, 999, "2026-10-01"]]) {
     await db.query("insert into public.comp_best values ('2026-W40', $1, $2, 12, $3, null)", [who, pts, at]);
   }
   const tiers = JSON.stringify(RANKING.tiers);
   const gold = JSON.stringify(FLOOR_GOLD.gold);
-  const res = await one(db, "select public.comp_settle_due($1, $2) r", [tiers, gold]);
+  const res = await one(db, "select public.comp_settle_due($1, $2, true) r", [tiers, gold]);
   assertEquals(res.settled, ["2026-W40"]);
-  assertEquals((await one(db, "select public.comp_settle_due($1, $2) r", [tiers, gold])).settled, []);
+  assertEquals((await one(db, "select public.comp_settle_due($1, $2, true) r", [tiers, gold])).settled, []);
   const rows = (await db.query<R>("select player_id, rank, pct, tier_id, rewards from public.season_results order by rank")).rows;
   assertEquals(rows.map((r) => [r.player_id, r.rank, r.pct, r.tier_id]), [[A, 1, 50, "r1"], [B, 2, 100, "r2"]]); // 동점 = 먼저 낸 A
   assertEquals(rows[0].rewards, { diamonds: 500, items: { rainbow: 5 } });
-  const c1 = await one(db, "select public.rank_claim($1, '2026-W40') r", [A]);
-  assertEquals([c1.ok, c1.txId], [true, "rank:2026-W40"]);
-  assertEquals((await one(db, "select public.rank_claim($1, '2026-W40') r", [A])).reason, "already");
-  assertEquals((await one(db, "select public.rank_claim($1, '2026-W40') r", [C])).reason, "none");
-  assertEquals((await db.query<R>("select kind, bundle from public.claims")).rows, [{ kind: "rank", bundle: { diamonds: 500, items: { rainbow: 5 } } }]);
+  const mail = (await db.query<R>("select id, player_id, title_ko, title_en, bundle, expires_at is not null exp from public.mail order by id")).rows;
+  assertEquals(mail.map((m) => [m.player_id, m.title_ko, m.title_en, m.exp]), [
+    [A, "경쟁 모드 40주차 보상 · 1위", "Competitive W40 reward · #1", true],
+    [B, "경쟁 모드 40주차 보상 · 2위", "Competitive W40 reward · #2", true],
+  ]); // 다시 정산해도 우편은 그대로 2통, C(닉네임 없음)는 없음
+  assertEquals(mail[0].bundle, rows[0].rewards);
+  const mc = (who: string, id: unknown) => one(db, "select public.mail_claim($1, $2) r", [who, id]);
+  assertEquals((await mc(A, mail[0].id)).txId, `mail:${mail[0].id}`);
+  assertEquals((await mc(A, mail[0].id)).reason, "already");
+  assertEquals((await mc(A, mail[1].id)).reason, "notFound"); // 남의 우편
+});
+
+Deno.test("정산: rewardsEnabled false(p_mail false)면 순위만 기록하고 우편 없음", async () => {
+  const db = await setup();
+  await db.query("insert into public.comp_best values ('2026-W40', $1, 800, 12, '2026-10-01', null)", [A]);
+  await one(db, "select public.comp_settle_due($1, $2, false) r", [JSON.stringify(RANKING.tiers), JSON.stringify(FLOOR_GOLD.gold)]);
+  assertEquals((await db.query<R>("select count(*)::int n from public.season_results")).rows[0].n, 1);
+  assertEquals((await db.query<R>("select count(*)::int n from public.mail")).rows[0].n, 0);
 });
 
 Deno.test("구간 계산: TS tierOf == SQL comp_tier, 참여 구간 골드 배수는 서버 bundle에서 빠짐", async () => {
@@ -156,7 +169,7 @@ Deno.test("정산 참여 보상 골드 = goldFloorMul x 층 기준가(그 판 �
   const db = await setup();
   await db.query("insert into public.comp_best values ('2026-W40', $1, 900, 12, '2026-10-01', null), ('2026-W40', $2, 500, 999, '2026-10-01', null)", [A, B]);
   const tiers = JSON.stringify([{ id: "part", pct: 100, rewards: { diamonds: 10, goldFloorMul: 3 } }]);
-  await one(db, "select public.comp_settle_due($1, $2) r", [tiers, JSON.stringify(FLOOR_GOLD.gold)]);
+  await one(db, "select public.comp_settle_due($1, $2, true) r", [tiers, JSON.stringify(FLOOR_GOLD.gold)]);
   const rows = (await db.query<R>("select rewards from public.season_results order by rank")).rows;
   assertEquals(rows[0].rewards, { diamonds: 10, gold: Math.round(3 * FLOOR_GOLD.gold[11]) });
   assertEquals(rows[1].rewards, { diamonds: 10, gold: Math.round(3 * FLOOR_GOLD.gold.at(-1)!) });

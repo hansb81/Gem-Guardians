@@ -293,9 +293,6 @@ function appendRankingDev(panel, ranking) {
     panel.append(b);
     return b;
   };
-  btn('랭킹 가짜명단 끄기', (b) => {
-    b.textContent = ranking.toggleFake() ? '랭킹 가짜명단 끄기' : '랭킹 가짜명단 켜기';
-  });
   const state = document.createElement('select');
   [['0', '경쟁탭 자동'], ['1', '1 평소'], ['2', '2 정산 대기'], ['3', '3 잠김'], ['4', '4 기록 없음']].forEach(([v, l]) => state.append(new Option(l, v)));
   state.onchange = () => ranking.setCompState(state.value);
@@ -303,6 +300,5 @@ function appendRankingDev(panel, ranking) {
   btn('시각 +1시간', () => ranking.advance(3600e3));
   btn('정산 대기로', () => ranking.advance('settle'));
   btn('시즌 초기화 5초 전', () => ranking.advance('reset'));
-  btn('지난 시즌 결과', () => ranking.showLastResult());
   btn('닉네임 초기화', () => ranking.resetNickname());
 }

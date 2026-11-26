@@ -5,7 +5,7 @@
 //   drawRankingPopup   = 그리기만
 //   hitRankingPopup    = 화면 좌표 -> { type, ... }
 // st(src/game/rankingUi.js) = { sheet, tab, compState, sub, scroll, entries, unavailable, me, total, history,
-//   season, nowMs, timerText, blinkAt, nick: { draft, statue, err, first }, pending, rewardsEnabled, tiers, floorGold }
+//   season, nowMs, timerText, blinkAt, nick: { draft, statue, err, first }, tiers, floorGold }
 import { drawNine, drawText, drawFixedImage, getUi, getUiMeta, uiReady } from '../uiKit.js';
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
@@ -142,18 +142,6 @@ function layoutSub(st, H) {
     s.rows = Array.from({ length: n }, (_, i) => rect(s.card.x + 28, s.card.y + 68 + i * 48, s.card.width - 56, 48));
     return s;
   }
-  if (st.sub === 'result') {
-    const card = center(420, 380);
-    const s = { card, close: st.rewardsEnabled ? null : rect(card.x + card.width - 52, card.y + 8, 44, 44) };
-    const cx = card.x + card.width / 2;
-    s.ribbon = rect(cx - 130, card.y + 28, 260, 40);
-    s.badge = { cx, cy: card.y + 120 };
-    s.rankLine = rect(card.x + 32, card.y + 164, card.width - 64, 26);
-    s.tierLine = rect(card.x + 32, card.y + 196, card.width - 64, 16);
-    s.rewards = rect(card.x + 32, card.y + 220, card.width - 64, 40);
-    s.claim = rect(card.x + 32, card.y + card.height - 32 - 52, card.width - 64, 52);
-    return s;
-  }
   // nick
   const s = withClose(center(460, 420));
   const { card } = s;
@@ -178,7 +166,6 @@ export function hitRankingPopup(L, x, y, st) {
   const s = L.sub;
   if (s) {
     if (inside(bx, by, s.close)) return { type: 'subClose' };
-    if (st.sub === 'result' && inside(bx, by, s.claim)) return { type: 'claim' };
     if (st.sub === 'nick') {
       for (const p of s.picks) if (inside(bx, by, p.rect)) return { type: 'pick', statue: p.color };
       if (inside(bx, by, s.save)) return { type: 'saveNick' };
@@ -239,7 +226,6 @@ export function drawRankingPopup(ctx, assets, st, L) {
     fillDither(ctx, fullBasis(L));
     if (st.sub === 'rewards') drawRewards(ctx, assets, st, L.sub);
     else if (st.sub === 'history') drawHistory(ctx, assets, st, L.sub);
-    else if (st.sub === 'result') drawResult(ctx, assets, st, L.sub);
     else drawNick(ctx, assets, st, L.sub);
   }
   ctx.restore();
@@ -497,23 +483,6 @@ function drawHistory(ctx, assets, st, s) {
     label(ctx, t('ranking.topPct', { n: h.pct }), rect(r.x + 212, r.y, 90, r.height), C.bone, 11, 'left');
     label(ctx, t('ranking.points', { n: fmt(h.points) }), rect(r.x + 300, r.y, r.width - 300, r.height), C.dim, 11, 'right');
   });
-}
-
-function drawResult(ctx, assets, st, s) {
-  const p = st.pending;
-  subFrame(ctx, assets, s, null);
-  nine(ctx, assets, 'ranking/ribbon.png', s.ribbon, C.redM);
-  label(ctx, t('ranking.result.title', { week: weekOf(p.seasonId) }), s.ribbon, C.bone, 11, 'center');
-  if (!drawFixedImage(ctx, assets, `ranking/tier_${p.tierId}.png`, s.badge.cx, s.badge.cy, 4)) {
-    ctx.fillStyle = C.bg3;
-    ctx.fillRect(s.badge.cx - 32, s.badge.cy - 32, 64, 64);
-  }
-  label(ctx, t('ranking.result.rankPct', { rank: p.rank, pct: p.pct }), s.rankLine, C.goldL, 22, 'center');
-  label(ctx, t('ranking.result.tierLine', { tier: tierLabel(p.tierId), n: fmt(p.points) }), s.tierLine, C.bone, 11, 'center');
-  const tier = st.tiers.find((x) => x.id === p.tierId);
-  rewardIcons(ctx, assets, tier, st, s.rewards.x + s.rewards.width / 2, s.rewards.y + s.rewards.height / 2, 22, 'center', p.rewards);
-  if (st.rewardsEnabled) button(ctx, assets, 'buttons/btn_gold.png', s.claim, t('ranking.result.claim'), C.outline, 22, false);
-  else button(ctx, assets, 'upgrade/btn_disabled.png', s.claim, t('ranking.result.claimLater'), C.dim, 11);
 }
 
 function drawNick(ctx, assets, st, s) {

@@ -104,8 +104,8 @@ const ranking = new RankingUi({
     return towers[best]?.color ?? 'red';
   },
 });
-mainMenuScreen.rankingBadge = () => ranking.hasRewardBadge();
 mainMenuScreen.compStatus = () => compStatus();
+mainMenuScreen.normalFloor = () => playerState.floor; // controller.floor는 경쟁·튜토리얼 판이면 다른 값
 mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
 // 이벤트 팝업 광고 칸(docs/ads.md 3장) - 배너를 띄울 수 있고 광고 제거가 없을 때만 칸을 그린다.
 mainMenuScreen.popupAd = () => platform.caps.popupBanner && !playerState.inventory.isUnlocked('adFree');
@@ -1834,8 +1834,8 @@ function loop(now) {
     }
     if (vaultOpenAt == null && !prep) mainMenuScreen.chestOpenAt = null;
     drawPrep(now);
-    // 메뉴에 있는 동안 1초마다 시즌 넘김 확인 -> 지난 시즌 결과 팝업(다른 팝업이 없을 때).
-    ranking.tick(now, !prep && !mainMenuScreen.popup && !fade);
+    // 메뉴에 있는 동안 1초마다 시즌 넘김 확인(지난 시즌 보상은 서버가 우편으로).
+    ranking.tick(now);
     // 계정 전환 중 고르기(onPick)는 계정 팝업 위로 바로.
     const popupFree = !mainMenuScreen.popup || (cloudConflict?.onPick && mainMenuScreen.popup === 'account');
     if (cloudConflict && !prep && popupFree && !fade && !ranking.isOpen && !rewardPopup.active) {

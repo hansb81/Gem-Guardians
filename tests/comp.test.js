@@ -98,9 +98,8 @@ test('서버 점수 상한 표(comp_limits.json)가 지금 config로 만든 표�
 
 test('compLock: compUnlocked가 false면 층·연결과 상관없이 잠김, true면 층 -> 연결 순으로 본다(메뉴 버튼·랭킹 탭 공통)', () => {
   const cfg = load('config/ranking.json');
-  assert.equal(cfg.compUnlocked, false, '출시 전 - 지금 설정은 잠김');
   const floor = cfg.comp.unlockBestFloor;
-  assert.deepEqual(compLock(cfg, 999, true), { hint: 'comp.soon', params: null });
+  assert.deepEqual(compLock({ ...cfg, compUnlocked: false }, 999, true), { hint: 'comp.soon', params: null });
   assert.deepEqual(compLock(null, 999, true), { hint: 'comp.soon', params: null });
   const on = { ...cfg, compUnlocked: true };
   assert.deepEqual(compLock(on, floor - 1, true), { hint: 'comp.lockedFloor', params: { floor } });

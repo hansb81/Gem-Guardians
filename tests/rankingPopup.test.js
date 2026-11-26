@@ -70,8 +70,8 @@ test('판정: 탭·닫기·잠김 덮개는 목록을 막음·작은 팝업은 �
   assert.equal(hitRankingPopup(L1, ...at(L1.list), open).type, 'list');
   assert.equal(hitRankingPopup(L1, ...at(L1.edit), open).type, 'edit');
   assert.equal(hitRankingPopup(L1, L1.mine.x + 20, L1.mine.y + 20, open).type, 'mine');
-  for (const sub of ['rewards', 'history', 'result', 'nick']) {
-    const s2 = { ...open, sub, tiers: CFG.tiers, history: [], rewardsEnabled: false };
+  for (const sub of ['rewards', 'history', 'nick']) {
+    const s2 = { ...open, sub, tiers: CFG.tiers, history: [] };
     const L2 = layoutRankingPopup(540, 960, s2);
     assert.ok(within(L2.sub.card, { x: 0, y: 0, width: 540, height: 960 }), sub);
     assert.equal(hitRankingPopup(L2, 5, 5, s2).type, 'subOutside');
