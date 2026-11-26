@@ -11,6 +11,7 @@
 - `menu_bg.png`: 정지 전체 그림(v1 8번 프레임). 로딩 전/저사양 대체용.
 - 미리보기는 `art/menu/`: `preview.gif`(이 구조로 합성한 결과), `preview_with_ui.png`(시안 A UI 자리를 겹침).
 - `manifest.json` `layoutA_screenPx`: 시안 A UI 위치(화면 px).
+- `manifest.json` `vaultChest`: 신단 옆 보물상자 = 보관함 입구. `menu_chest_idle.png`(28x28 x 8)는 배경 조각과 같은 시계로 pieces 끝에, `menu_chest_open.png`(28x28 x 4)는 누른 뒤 열기 연출로 코드가 그 위에 덮어 그린다(docs/inventory.md 5-3).
 
 그리기 순서는 타이틀과 같다: 베이스 → 각 piece의 현재 프레임(`f = floor(now/200) % 32`, `k = seq[f % periodFrames]`) → 입자 → UI.
 합성 결과는 v1 시트와 픽셀 단위로 동일(검증 완료).

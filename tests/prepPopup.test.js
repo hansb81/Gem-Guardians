@@ -1,12 +1,12 @@
-// 정비 팝업(docs/upgrade-popup.md): 상황 4종 x 탭 3종 레이아웃(팝업 안·안 겹침·터치 크기), 석상 버튼 상태, 정령 잠김, 처음 탭.
+// 정비 팝업(docs/upgrade-popup.md): 상황 5종 x 그 상황의 탭(신단 2개, 상자는 탭 줄 없이 보관함만) 레이아웃(팝업 안·안 겹침·터치 크기), 석상 버튼 상태, 정령 잠김, 처음 탭.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layoutPrepPopup, hitPrepPopup, statueRowInfo, openPrepState, rememberTab, PREP_TABS } from '../src/render/ui/prepPopup.js';
+import { layoutPrepPopup, hitPrepPopup, statueRowInfo, openPrepState, rememberTab, PREP_TABS, prepTabs } from '../src/render/ui/prepPopup.js';
 import { towerLevelCost } from '../src/core/economy/economy.js';
 
 const BALANCE = JSON.parse(readFileSync(new URL('../config/balance.json', import.meta.url), 'utf8'));
-const CONTEXTS = ['floorClear', 'defeat', 'village', 'towerTap'];
+const CONTEXTS = ['floorClear', 'defeat', 'village', 'vault', 'towerTap'];
 const SCREENS = [
   [540, 960],
   [540, 1170],
@@ -25,16 +25,18 @@ function checkGroup(rects, outer, label) {
 
 for (const [w, h] of SCREENS) {
   for (const context of CONTEXTS) {
-    for (const tab of PREP_TABS) {
+    const keys = prepTabs(context);
+    for (const tab of context === 'vault' ? ['vault'] : keys) {
       test(`${w}x${h} ${context}/${tab}: 모든 사각형이 팝업 안, 서로 안 겹침, 터치 크기`, () => {
         const L = layoutPrepPopup(w, h, context, tab);
-        const top = [L.title, L.status, L.goldChip, ...PREP_TABS.map((k) => L.tabs[k]), L.body, ...L.actions.map((a) => a.rect)];
+        assert.deepEqual(Object.keys(L.tabs), keys);
+        const top = [L.title, L.status, L.goldChip, ...keys.map((k) => L.tabs[k]), L.body, ...L.actions.map((a) => a.rect)].filter(Boolean);
         if (L.close) top.push(L.close);
         checkGroup(top, L.sheet, 'top');
         assert.ok(L.sheet.x === 12 && L.sheet.y === 96 && L.sheet.x + L.sheet.width === 528 && L.sheet.y + L.sheet.height === h - 48);
         assert.ok(within(L.content, L.body));
 
-        for (const k of PREP_TABS) assert.ok(L.tabs[k].height >= 36, '탭 터치 36 이상');
+        for (const k of keys) assert.ok(L.tabs[k].height >= 36, '탭 터치 36 이상');
         for (const a of L.actions) assert.ok(a.rect.height >= 44, '아래 버튼 44 이상');
         if (L.close) assert.ok(L.close.width >= 44 && L.close.height >= 44);
 
@@ -59,8 +61,36 @@ for (const [w, h] of SCREENS) {
   }
 }
 
-test('마을에선 아래 버튼 없음(X 있음), 층 클리어/패배에선 X 없음(아래 버튼만), 마을 본문이 더 길다', () => {
-  const v = layoutPrepPopup(540, 960, 'village', 'vault');
+test('상자(vault): 탭 줄·상황 줄·골드 없음, 본문 윗변 = 시트 위 + 84, 격자가 층 클리어보다 길다', () => {
+  const L = layoutPrepPopup(540, 960, 'vault', 'vault');
+  assert.deepEqual(L.tabs, {});
+  assert.equal(L.status, null);
+  assert.equal(L.goldChip, null);
+  assert.equal(L.body.y, L.sheet.y + 84);
+  assert.ok(L.title.y + L.title.height <= L.body.y);
+  assert.ok(L.close);
+  assert.equal(L.actions.length, 0);
+  const tabbed = layoutPrepPopup(540, 960, 'towerTap', 'vault'); // 탭 줄이 있고 아래 버튼이 없는 같은 본문
+  assert.equal(L.vault.own.height - tabbed.vault.own.height, 62, '탭 줄·상황 줄이 빠진 만큼(146 - 84) 격자가 길어진다');
+  // 탭 줄이 있던 자리를 눌러도 탭으로 판정하지 않는다.
+  for (const k of PREP_TABS) assert.equal(hitPrepPopup(L, tabbed.tabs[k].x + 4, tabbed.tabs[k].y + 4), null);
+});
+
+test('신단(village): 탭 2개(수호자·정령), 폭 = (안쪽 폭 - 6) / 2, 보관함 탭을 누를 수 없다', () => {
+  const L = layoutPrepPopup(540, 960, 'village', 'statue');
+  assert.deepEqual(Object.keys(L.tabs), ['statue', 'spirit']);
+  const iw = L.sheet.width - 52;
+  assert.equal(L.tabs.statue.width, (iw - 6) / 2);
+  assert.equal(L.tabs.spirit.x + L.tabs.spirit.width, L.sheet.x + 26 + iw, '오른쪽 끝까지');
+  const y = L.tabs.statue.y + 4;
+  for (let x = 0; x < 540; x += 2) assert.notEqual(hitPrepPopup(L, x, y)?.tab, 'vault');
+  assert.deepEqual(hitPrepPopup(L, L.tabs.spirit.x + L.tabs.spirit.width - 2, y), { type: 'tab', tab: 'spirit' });
+  // 다른 상황은 3탭 그대로.
+  for (const c of ['floorClear', 'defeat', 'towerTap']) assert.deepEqual(Object.keys(layoutPrepPopup(540, 960, c, 'statue').tabs), PREP_TABS);
+});
+
+test('마을·상자에선 아래 버튼 없음(X 있음), 층 클리어/패배에선 X 없음(아래 버튼만), 상자 본문이 더 길다', () => {
+  const v = layoutPrepPopup(540, 960, 'vault', 'vault');
   assert.equal(v.actions.length, 0);
   assert.ok(v.close);
   const fc = layoutPrepPopup(540, 960, 'floorClear', 'vault');
@@ -98,8 +128,10 @@ test('석상: 골드 부족 / 최대 레벨 / MAX +N', () => {
   assert.equal(statueRowInfo(BALANCE, top - 1, 1e12).maxUps, 1);
 });
 
-test('처음 탭: 마을 = 보관함, 층 클리어/패배 = 같은 판 마지막 탭(없으면 석상), 석상 탭 = 석상', () => {
-  assert.equal(openPrepState('village', 'statue').tab, 'vault');
+test('처음 탭: 마을(신단) = 수호자, 상자 = 보관함, 층 클리어/패배 = 같은 판 마지막 탭(없으면 석상), 석상 탭 = 석상', () => {
+  assert.equal(openPrepState('village').tab, 'statue');
+  assert.equal(openPrepState('village', 'vault').tab, 'statue', '기억한 탭이 보관함이어도 신단은 수호자');
+  assert.equal(openPrepState('vault', 'statue').tab, 'vault');
   assert.equal(openPrepState('floorClear', null).tab, 'statue');
   assert.equal(openPrepState('defeat', 'vault').tab, 'vault');
   assert.equal(openPrepState('towerTap', 'vault', 3).tab, 'statue');

@@ -16,6 +16,7 @@ export const ko = {
   menu: {
     play: '플레이',
     inventory: '보관함',
+    prep: '정비',
     ranking: '랭킹',
     icon: { attendance: '출석', event: '이벤트', mail: '우편', settings: '설정', shop: '상점', mine: '광산' },
     mode: { title: '모드 선택', normal: '일반 모드', competitive: '경쟁 모드', locked: '20층 도달 시 해금' },
@@ -200,7 +201,8 @@ export const ko = {
           "골드: 적을 쓰러뜨리고 층을 깨면 얻어요. 처음 깬 층은 클리어 보상을 더 줘요.",
           "수호자 강화: 전투 중 수호자를 누르거나 정비 화면에서 골드로 레벨을 올려요. 레벨이 오를 때마다 공격력이 세져요.",
           "다이아: 상점에서 아이템, 젬 스킬, 패키지를 살 때 써요.",
-          "보관함: 메인 메뉴의 신단 받침대를 누르면 가진 아이템을 보고 아이템 칸에 장착할 수 있어요.",
+          "정비: 신단을 누르면 수호자 강화와 정령을 관리해요.",
+          "보관함: 메인 메뉴 신단 옆 보물상자를 누르면 가진 아이템을 보고 아이템 칸에 장착할 수 있어요.",
           "랭킹: 메인 메뉴 가운데 원석을 누르면 최고 도달 층 순위를 볼 수 있어요.",
         ] },
         { title: "저주받은 수정 광산", body: [
@@ -302,7 +304,7 @@ export const ko = {
     win: { title: '층 클리어', desc: '층의 적을 모두 처치했습니다.', descGold: '골드 {total} 획득!', clearGold: '클리어 골드', firstClear: '첫 클리어 ×{mul}!', comboGold: '콤보 보너스 (최대 콤보 {max})' },
     lose: { title: 'DEFEATED', desc: '성벽이 무너졌습니다.', adFail: '광고를 불러오지 못했어요' },
     prep: {
-      title: { floorClear: '{n}층 클리어', defeat: '{n}층 실패', village: '정비' },
+      title: { floorClear: '{n}층 클리어', defeat: '{n}층 실패', village: '정비', vault: '보관함' },
       status: { floorClear: '다음 층 준비', defeat: '재도전 준비', village: '최고 기록 {best}층' },
       tab: { statue: '수호자', spirit: '정령', vault: '보관함' },
       next: '{n}층으로 ▶',

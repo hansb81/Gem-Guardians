@@ -57,8 +57,15 @@ const DEFAULT_LAYOUT = {
   mine: [472, 156, 48, 48], // 광산(docs/mine.md 15-3) - 글자 라벨 없음
   playButton: [90, 760, 360, 64],
 };
-// 신단 받침대 = 보관함 입구(manifest.altarInventory). 떠 있는 결정(crystalReserved) = 랭킹 입구(docs/ranking.md 2장).
+// 신단 받침대 = 정비 입구(manifest.altarInventory). 떠 있는 결정(crystalReserved) = 랭킹 입구(docs/ranking.md 2장).
 const DEFAULT_ALTAR = { hitArea_screenPx: [174, 510, 192, 174], plate_screenPx: [214, 648, 112, 36], crystalReserved_screenPx: [204, 270, 132, 234] };
+// 신단 옆 보물상자 = 보관함 입구(manifest.vaultChest, docs/inventory.md 5-3). idle은 네이티브 좌표(x3).
+const DEFAULT_CHEST = {
+  idle: { x: 141, y: 201, w: 28, h: 28 },
+  open: { file: 'menu_chest_open.png', frameMs: [0, 90, 90, 160] },
+  hitArea_screenPx: [408, 600, 116, 118],
+  plate_screenPx: [417, 678, 96, 36],
+};
 // 랭킹 이름판 - 원석 영역 아래쪽(목업 mockups/ranking 시안 1). 받침대 영역과 겹치지 않는다.
 const RANKING_PLATE = [214, 466, 112, 36];
 
@@ -238,7 +245,7 @@ export class MainMenuScreen {
     this._transform = null; // 최근 draw()의 {offsetX, offsetY, k} - 포인터 판정에 그대로 쓴다.
     this._assets = null; // CanvasRenderer.assets(uiImages/uiManifest) - draw()마다 받는다.
 
-    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' | 'coupon' | 'saveConflict' (보관함은 main.js의 정비 팝업)
+    this.popup = null; // null | 'mode' | 'settings' | 'help' | 'about' | 'attendance' | 'event' | 'mail' | 'exit' | 'coupon' | 'saveConflict' (정비·보관함은 main.js의 정비 팝업)
     this.account = null; // main.js: { state(), cloud(), googleOn(), busy, msg, confirm } - 서버 켜짐 + caps.login 있을 때만
     this._googleG = null;
     loadImage('assets/ui/auth/google_g_light_square.png').then((st) => (this._googleG = st));
@@ -249,6 +256,9 @@ export class MainMenuScreen {
     this.dispatch = () => false; // serverUi: 메뉴 action 처리(쿠폰 입력 칸 Enter = 받기)
     this._modeLockHint = false;
     this._pressed = null; // 누르고 있는 버튼 id - _pressed 그림으로 바꿔 그린다.
+    // 상자 열기 연출을 시작한 시각(ms). null이 아닌 동안 상자는 열린 그림이고 메뉴 입력을 안 받는다 - 보관함 팝업이 닫히면 main.js가 null로.
+    this.chestOpenAt = null;
+    this._chestOpenImg = null;
     this._drag = null; // 설정 슬라이더를 끌고 있는 중 - { channel, rect } | null.
     this._helpPage = 0;
     this._helpWrap = null; // { key, lines } - 쪽·배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
@@ -275,9 +285,12 @@ export class MainMenuScreen {
     fetchJson('assets/menu/manifest.json').then((m) => {
       this.manifest = m;
       // 받침대 반복 조각은 배경 조각과 같은 시계·규칙이라 pieces 끝에 붙인다(배경 조각 다음, sparks 전).
-      const idle = m?.altarInventory?.idle;
-      if (idle && m.background) m.background.pieces = [...(m.background.pieces ?? []), idle];
+      const idles = [m?.altarInventory?.idle, m?.vaultChest?.idle].filter(Boolean);
+      if (m?.background) m.background.pieces = [...(m.background.pieces ?? []), ...idles];
       this.bgLayers.setManifest(m?.background);
+      loadImage(`assets/menu/${this._chest().open.file}`).then((s) => {
+        this._chestOpenImg = s;
+      });
     });
     loadImage('assets/menu/menu_bg.png').then((s) => {
       this.bg = s;
@@ -290,6 +303,24 @@ export class MainMenuScreen {
 
   _altar() {
     return this.manifest?.altarInventory ?? DEFAULT_ALTAR;
+  }
+
+  _chest() {
+    return this.manifest?.vaultChest ?? DEFAULT_CHEST;
+  }
+
+  // 열기 연출 길이(ms) - 이만큼 지나면 main.js가 보관함 팝업을 연다.
+  chestOpenMs() {
+    return this._chest().open.frameMs.reduce((a, b) => a + b, 0);
+  }
+
+  // 열기 연출 프레임(1→2→3, 끝나면 3에 머문다)을 idle 조각 위에 덮어 그린다.
+  _drawChestOpen(ctx, offsetX, offsetY, scale, nowMs) {
+    if (this.chestOpenAt == null || !ready(this._chestOpenImg)) return;
+    const { idle, open } = this._chest();
+    let frame = 1;
+    for (let left = nowMs - this.chestOpenAt; frame < open.frameMs.length - 1 && left >= open.frameMs[frame]; frame++) left -= open.frameMs[frame];
+    ctx.drawImage(this._chestOpenImg.img, frame * idle.w, 0, idle.w, idle.h, offsetX + idle.x * scale, offsetY + idle.y * scale, idle.w * scale, idle.h * scale);
   }
 
   _crystal() {
@@ -314,6 +345,7 @@ export class MainMenuScreen {
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     this._drawBackground(ctx, offsetX, offsetY, scale, nowMs);
+    this._drawChestOpen(ctx, offsetX, offsetY, scale, nowMs);
     this._drawUi(ctx, playerState);
     this._drawToast(ctx, nowMs);
     if (this.popup) this._drawPopup(ctx, width, height);
@@ -437,28 +469,20 @@ export class MainMenuScreen {
       if (mine.locked) this._sprite(ctx, 'icons/lock.png', layout.mine[0] + 22, layout.mine[1] + 22); // 잠김: 오른쪽 아래에 자물쇠
     }
     this._drawPlayButton(ctx);
-    this._drawAltarPlate(ctx, playerState);
-    this._drawRankingPlate(ctx);
-  }
-
-  // 원석 아래 이름판 "랭킹" + 빨간 점(받기 전 시즌 보상). 보관함 이름판과 같은 모양·글자·눌림(1px).
-  _drawRankingPlate(ctx) {
-    const [x, y0, w, h] = RANKING_PLATE;
-    const y = y0 + (this._pressed === 'crystal' ? 1 : 0);
-    if (!this._nine(ctx, 'menu/plate.png', [x, y, w, h])) this._panel(ctx, [x, y, w, h], COLORS.bg2, COLORS.bg3);
-    this._text(ctx, t('menu.ranking'), x + w / 2, y + h / 2, { size: 18, align: 'center' });
-    if (this.rankingBadge()) this._sprite(ctx, 'menu/badge.png', x + w - 10, y0 - 6);
-  }
-
-  // 받침대 이름판 "보관함" + 빨간 점(새 아이템 / 빈 칸에 넣을 아이템). 누르는 동안 이름판만 1px 아래로.
-  _drawAltarPlate(ctx, playerState) {
-    const [x, y0, w, h] = this._altar().plate_screenPx;
-    const y = y0 + (this._pressed === 'altar' ? 1 : 0);
-    if (!this._nine(ctx, 'menu/plate.png', [x, y, w, h])) this._panel(ctx, [x, y, w, h], COLORS.bg2, COLORS.bg3);
-    this._text(ctx, t('menu.inventory'), x + w / 2, y + h / 2, { size: 18, align: 'center' });
     const inv = playerState?.inventory;
     const floor = playerState?.bestFloor ?? 1;
-    if (inv && (inv.hasUnseenItems(floor) || inv.hasFillableSlot(floor))) this._sprite(ctx, 'menu/badge.png', x + w - 10, y0 - 6);
+    this._drawPlate(ctx, this._altar().plate_screenPx, 'altar', 'menu.prep', false);
+    // 빨간 점: 새 아이템 / 빈 칸에 넣을 아이템.
+    this._drawPlate(ctx, this._chest().plate_screenPx, 'chest', 'menu.inventory', !!inv && (inv.hasUnseenItems(floor) || inv.hasFillableSlot(floor)));
+    this._drawPlate(ctx, RANKING_PLATE, 'crystal', 'menu.ranking', this.rankingBadge());
+  }
+
+  // 이름판(정비·보관함·랭킹 공통): plate 9-slice + 글자 18 + 오른쪽 위 빨간 점. 누르는 동안 이름판만 1px 아래로.
+  _drawPlate(ctx, [x, y0, w, h], id, key, badge) {
+    const y = y0 + (this._pressed === id ? 1 : 0);
+    if (!this._nine(ctx, 'menu/plate.png', [x, y, w, h])) this._panel(ctx, [x, y, w, h], COLORS.bg2, COLORS.bg3);
+    this._text(ctx, t(key), x + w / 2, y + h / 2, { size: 18, align: 'center' });
+    if (badge) this._sprite(ctx, 'menu/badge.png', x + w - 10, y0 - 6);
   }
 
   _drawCurrencyBar(ctx, playerState) {
@@ -1467,6 +1491,7 @@ export class MainMenuScreen {
     if (!this._transform) return null;
 
     if (this.popup) return this._handlePopupPointerDown(x, y);
+    if (this.chestOpenAt != null) return null; // 상자 열기 연출 중 - 두 번 열리지 않게
 
     const layout = this._layout();
     if (pressButton(x, y, this._toScreen(layout.playButton))) {
@@ -1499,8 +1524,9 @@ export class MainMenuScreen {
       // 서버가 켜져 있으면 main.js가 출석 상태·우편 목록을 새로 받는다.
       return this.server?.[id === 'attendance' ? 'att' : id] ? `open:${id}` : null;
     }
-    // 받침대·원석은 누를 때 소리·연출 없이 눌림만 - 영역 안에서 떼야 열린다(handlePointerUp). 두 영역은 안 겹친다.
+    // 받침대·상자·원석은 누를 때 소리·연출 없이 눌림만 - 영역 안에서 떼야 열린다(handlePointerUp). 세 영역은 안 겹친다.
     if (pointInRect(x, y, this._toScreen(this._altar().hitArea_screenPx))) this._pressed = 'altar';
+    else if (pointInRect(x, y, this._toScreen(this._chest().hitArea_screenPx))) this._pressed = 'chest';
     else if (pointInRect(x, y, this._toScreen(this._crystal()))) this._pressed = 'crystal';
     return null;
   }
@@ -1723,20 +1749,23 @@ export class MainMenuScreen {
     else this._applySliderAt(x, this._drag.geom);
   }
 
-  // (x, y)가 없으면(pointercancel) 누름만 푼다. 받침대를 영역 안에서 떼면 'openInventory'(main.js가 정비 팝업을 연다),
-  // 원석이면 'openRanking'(main.js가 랭킹 팝업을 연다).
+  // (x, y)가 없으면(pointercancel) 누름만 푼다. 영역 안에서 떼면 받침대 'openPrep'(정비 팝업), 원석 'openRanking'(랭킹 팝업),
+  // 상자 'openVault'(열기 연출을 시작한다 - main.js가 chestOpenMs() 뒤에 보관함 팝업을 연다).
   handlePointerUp(x, y) {
     const up = this._transform && x != null;
-    const altar = up && this._pressed === 'altar' && pointInRect(x, y, this._toScreen(this._altar().hitArea_screenPx));
-    const crystal = up && this._pressed === 'crystal' && pointInRect(x, y, this._toScreen(this._crystal()));
+    const on = (id, r) => up && this._pressed === id && pointInRect(x, y, this._toScreen(r));
+    const altar = on('altar', this._altar().hitArea_screenPx);
+    const chest = on('chest', this._chest().hitArea_screenPx);
+    const crystal = on('crystal', this._crystal());
     // 게임 정보 본문을 끌지 않고 뗐으면(탭) 그 자리의 링크 버튼을 연다.
     const d = this._drag;
     if (up && this.popup === 'about' && d?.key === '_aboutScroll' && Math.abs(y - d.scrollFromY) < 8 * this._transform.k) this._openAboutLinkAt(y);
     this._pressed = null;
     this._drag = null;
-    if (!altar && !crystal) return null;
+    if (!altar && !chest && !crystal) return null;
     audio.play('ui_click');
-    return altar ? 'openInventory' : 'openRanking';
+    if (chest) this.chestOpenAt = performance.now();
+    return altar ? 'openPrep' : chest ? 'openVault' : 'openRanking';
   }
 }
 

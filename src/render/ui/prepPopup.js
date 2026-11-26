@@ -1,5 +1,5 @@
-// 정비 팝업(docs/upgrade-popup.md) - 석상 강화 / 정령(spiritTab.js) / 보관함 3탭. 층 클리어·패배·마을(받침대)·전투 중 석상 탭이
-// 모두 이 팝업 하나를 쓰고 상황(context)에 따라 제목·상황 줄·아래 버튼·X·처음 탭만 바뀐다.
+// 정비 팝업(docs/upgrade-popup.md) - 석상 강화 / 정령(spiritTab.js) / 보관함 3탭. 층 클리어·패배·마을(신단)·보관함(보물상자)·전투 중
+// 석상 탭이 모두 이 팝업 하나를 쓰고 상황(context)에 따라 제목·상황 줄·탭 줄·아래 버튼·X·처음 탭만 바뀐다.
 // 좌표는 전부 540 폭 기준(basis, 기획서의 "화면 px")이고 실제 캔버스엔 scale(= 화면 폭 / 540)을 곱해 그린다
 // (메인 메뉴와 같은 방식). 그림은 basis에서 원본 x2(보유 칸만 x3) 정수 배율, imageSmoothingEnabled=false.
 //   layoutPrepPopup = 사각형만 계산하는 순수 함수(tests/prepPopup.test.js)
@@ -15,6 +15,8 @@ import { drawSpiritTab, hitSpiritTab, newSpiritSel } from './spiritTab.js';
 import { fmt as fmtGold } from '../shopText.js'; // 골드 1,000 형식(메뉴 재화 바·상점과 같음)
 
 export const PREP_TABS = ['statue', 'spirit', 'vault'];
+// 상황별 탭 줄: 신단(village) = 수호자·정령, 보물상자(vault) = 탭 줄 없이 보관함 본문만, 나머지 = 3개.
+export const prepTabs = (context) => (context === 'village' ? ['statue', 'spirit'] : context === 'vault' ? [] : PREP_TABS);
 import { screen } from '../screenFit.js';
 const BASIS_W = 540;
 const K = 2;
@@ -43,9 +45,9 @@ const C = {
 const rect = (x, y, width, height) => ({ x, y, width, height });
 // 석상 이름 = 메뉴·상점 글자와 같은 단색 외곽선(#0d0a10, 기준 1.5px가 바깥에 보이게 선 3).
 const NAME_OUTLINE = { outlineColor: C.outline, outlineWidth: 3 };
-// 처음 열 때 상태. 층 클리어/패배는 같은 판에서 마지막에 본 탭(remembered), 마을은 항상 보관함.
+// 처음 열 때 상태. 층 클리어/패배는 같은 판에서 마지막에 본 탭(remembered), 신단·석상 탭은 수호자, 상자는 보관함.
 export function openPrepState(context, remembered = null, selectedTower = null) {
-  const tab = context === 'village' ? 'vault' : context === 'towerTap' ? 'statue' : remembered ?? 'statue';
+  const tab = context === 'vault' ? 'vault' : context === 'village' || context === 'towerTap' ? 'statue' : remembered ?? 'statue';
   return { context, tab, selectedTower, flash: null, spirit: newSpiritSel() };
 }
 
@@ -75,22 +77,24 @@ export function layoutPrepPopup(screenW, screenH, context, tab) {
   const sheet = rect(m.marginX, m.top, BASIS_W - m.marginX * 2, H - m.top - m.bottom);
   const ix = sheet.x + SIDE;
   const iw = sheet.width - SIDE * 2;
-  const hasClose = context === 'village' || context === 'towerTap';
+  const bare = context === 'vault'; // 상황 줄·골드·탭 줄 없음
+  const hasClose = context === 'village' || context === 'towerTap' || bare;
   const hasAction = context === 'floorClear' || context === 'defeat';
 
   const out = { scale, basisH: H, context, tab, sheet, emblem: { cx: sheet.x + sheet.width / 2, cy: sheet.y } };
   // 닫기 그림 16x16(화면 32), 터치 44x44.
   out.close = hasClose ? rect(sheet.x + sheet.width - 52, sheet.y + 8, 44, 44) : null;
   out.title = rect(ix + 48, sheet.y + 36, iw - 96, 32);
-  out.status = rect(ix, sheet.y + 72, iw - 132, 32);
-  out.goldChip = rect(ix + iw - 124, sheet.y + 72, 124, 32);
+  out.status = bare ? null : rect(ix, sheet.y + 72, iw - 132, 32);
+  out.goldChip = bare ? null : rect(ix + iw - 124, sheet.y + 72, 124, 32);
 
   const tabY = sheet.y + 108;
-  const tw = Math.floor((iw - 12) / 3);
+  const keys = prepTabs(context);
+  const tw = Math.floor((iw - 6 * (keys.length - 1)) / keys.length);
   out.tabs = {};
-  PREP_TABS.forEach((key, i) => (out.tabs[key] = rect(ix + i * (tw + 6), tabY, tw, TAB_HIT_H)));
+  keys.forEach((key, i) => (out.tabs[key] = rect(ix + i * (tw + 6), tabY, tw, TAB_HIT_H)));
 
-  const bodyY = tabY + TAB_HIT_H;
+  const bodyY = bare ? sheet.y + 84 : tabY + TAB_HIT_H;
   const actionY = sheet.y + sheet.height - BOTTOM - ACTION_H;
   const bodyBottom = hasAction ? actionY - 8 : sheet.y + sheet.height - BOTTOM;
   out.body = rect(ix, bodyY, iw, bodyBottom - bodyY);
@@ -145,7 +149,7 @@ export function hitPrepPopup(layout, x, y) {
   const bx = x / layout.scale;
   const by = y / layout.scale;
   if (inside(bx, by, layout.close)) return { type: 'close' };
-  for (const key of PREP_TABS) if (inside(bx, by, layout.tabs[key])) return { type: 'tab', tab: key };
+  for (const key in layout.tabs) if (inside(bx, by, layout.tabs[key])) return { type: 'tab', tab: key };
   for (const a of layout.actions) if (inside(bx, by, a.rect)) return { type: 'action', action: a.kind };
   if (layout.statue) {
     for (let i = 0; i < 5; i++) {
@@ -190,21 +194,23 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   ctx.fillRect(F.x / layout.scale, F.y / layout.scale, F.width / layout.scale, F.height / layout.scale);
 
   nine(ctx, assets, 'menu/popup_menu.png', sheet, '#221c2b');
-  drawFixedImage(ctx, assets, 'upgrade/emblem_upgrade.png', layout.emblem.cx, layout.emblem.cy, K);
+  drawFixedImage(ctx, assets, state.context === 'vault' ? 'upgrade/emblem_vault.png' : 'upgrade/emblem_upgrade.png', layout.emblem.cx, layout.emblem.cy, K);
   if (layout.close) drawFixedImage(ctx, assets, 'menu/btn_close.png', layout.close.x + 22, layout.close.y + 22, K);
 
   const n = view.floor;
   const titleKey = state.context === 'towerTap' ? 'village' : state.context;
   label(ctx, t(`popup.prep.title.${titleKey}`, { n }), layout.title, C.title, 22, true, 'center');
-  const statusText = state.context === 'towerTap' ? t('popup.pause.title') : t(`popup.prep.status.${state.context}`, { best: view.best });
-  label(ctx, statusText, layout.status, C.sub, 13, false, 'left');
-  drawGoldChip(ctx, assets, layout.goldChip, view.gold);
+  if (layout.status) {
+    const statusText = state.context === 'towerTap' ? t('popup.pause.title') : t(`popup.prep.status.${state.context}`, { best: view.best });
+    label(ctx, statusText, layout.status, C.sub, 13, false, 'left');
+    drawGoldChip(ctx, assets, layout.goldChip, view.gold);
+  }
 
   // 탭: 꺼진 탭 → 본문 → 켜진 탭(본문 윗변을 덮게).
   const body = layout.body;
-  for (const key of PREP_TABS) if (key !== state.tab) drawTab(ctx, assets, layout.tabs[key], key, false);
+  for (const key in layout.tabs) if (key !== state.tab) drawTab(ctx, assets, layout.tabs[key], key, false);
   nine(ctx, assets, 'upgrade/tab_body.png', body, '#15121c');
-  drawTab(ctx, assets, layout.tabs[state.tab], state.tab, true);
+  if (layout.tabs[state.tab]) drawTab(ctx, assets, layout.tabs[state.tab], state.tab, true);
 
   if (layout.statue) drawStatueTab(ctx, assets, state, layout.statue, view);
   else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStatue, view.nowMs, layout.scale) : null;

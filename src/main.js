@@ -42,6 +42,21 @@ import { net, call, sayHello, refreshSessionUser, authClient } from './net/api.j
 import { Account } from './net/account.js';
 import { pruneGrantedTx } from './core/inventory/inventory.js';
 import { GAME_INFO } from './config/gameInfo.js';
+import { LANE_JITTER } from './render/battleRenderer.js';
+import { GLOW } from './render/guardianFx.js';
+
+// ?jitter=0 끔 / ?jitter=8 일반 ±8(엘리트 0.6배) - 적 줄 안 흩기 비교용(개발 빌드만).
+if (DEV_ALLOWED) {
+  // ?glow=always|pulse|off - 수호자 외곽선 글로우 방식 비교용(개발 빌드만, 배포는 pulse 고정).
+  const glow = new URLSearchParams(location.search).get('glow');
+  if (glow === 'always' || glow === 'off') GLOW.mode = glow;
+  const j = new URLSearchParams(location.search).get('jitter');
+  if (j !== null && Number.isFinite(Number(j))) {
+    LANE_JITTER.enabled = Number(j) > 0;
+    LANE_JITTER.normal = Number(j);
+    LANE_JITTER.elite = Math.round(Number(j) * 0.6);
+  }
+}
 
 setLocale(storage.load('locale') ?? 'ko'); // 설정 팝업의 언어 버튼이 저장한 값.
 const canvas = document.getElementById('game-canvas');
@@ -247,8 +262,9 @@ function drawFade(rawDtMs) {
   }
 }
 // 정비 팝업(docs/upgrade-popup.md, src/render/ui/prepPopup.js) - null이 아니면 열려 있고 전투가 멈춘다.
-// { context: 'floorClear'|'defeat'|'village'|'towerTap', tab, selectedTower, flash, view }.
+// { context: 'floorClear'|'defeat'|'village'|'vault'|'towerTap', tab, selectedTower, flash, view }.
 let prep = null;
+let vaultOpenAt = null; // 메뉴 보물상자 열기 연출이 끝나 보관함 팝업을 열 시각(ms). 연출 중이 아니면 null.
 let spiritEnv = null; // { cfg: config/spirits.json, floorReward() } - 데이터 로드 뒤(정령 탭 view·레벨업 비용)
 let prepLastTab = null; // 층 클리어/패배끼리 같은 판에서 마지막에 본 탭.
 let upgradeHold = null;
@@ -793,6 +809,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       shopScreen,
       enterShop,
       titleScreen,
+      laneJitter: LANE_JITTER, // 적 줄 안 흩기 - 콘솔에서 바로 바꿔 비교(__gg.laneJitter.normal = 8)
       mainMenuScreen, // 예: __gg.mainMenuScreen.events = [{ id: 1, title: { ko: "테스트" } }]
     };
   }
@@ -1398,10 +1415,8 @@ window.addEventListener('pointerup', (e) => {
   sliderDrag = null;
   const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
   if (menuUp === 'openRanking') ranking.open();
-  if (menuUp === 'openInventory') {
-    openPrep('village');
-    playerState.inventory.markItemsSeen(playerState.bestFloor); // 빨간 점 1(새 아이템) 끔.
-  }
+  if (menuUp === 'openPrep') openPrep('village');
+  if (menuUp === 'openVault') vaultOpenAt = mainMenuScreen.chestOpenAt + mainMenuScreen.chestOpenMs();
   if (scene === 'shop') shopScreen.handlePointerUp();
   mineScreen.handlePointerUp(); // 강화 버튼 꾹 누르기 끝 + 미뤄 둔 저장
 });
@@ -1463,6 +1478,7 @@ const backHandlers = [
   },
   () => scene === 'menu' && ranking.isOpen && (ranking.close(), true),
   () => scene === 'menu' && prep != null && ((prep = null), (upgradeHold = null), true),
+  () => scene === 'menu' && vaultOpenAt != null, // 상자 열기 연출 중(0.34초)에는 뒤로가기도 받지 않는다.
   () => scene === 'menu' && mainMenuScreen.closePopup(),
   // 메뉴 맨 끝 = 종료 확인. 앱을 스스로 못 닫는 마켓(iOS·웹)은 처리 안 함(OS 기본 동작).
   () => scene === 'menu' && platform.caps.exit && openExitConfirm('app'),
@@ -1808,6 +1824,15 @@ function loop(now) {
     processUpgradeHold(now);
     processInventoryHold(now); // 보관함 장착 칸 길게 누르기 = 해제.
     renderer.drawMainMenu(mainMenuScreen, playerState, now, 1);
+    // 보물상자: 열기 연출이 끝나면 보관함 팝업(그 사이 다른 팝업이 떴으면 열지 않는다), 팝업이 닫히면 상자도 바로 닫힘.
+    if (vaultOpenAt != null && now >= vaultOpenAt) {
+      vaultOpenAt = null;
+      if (!mainMenuScreen.popup && !ranking.isOpen && !rewardPopup.active && !fade) {
+        openPrep('vault');
+        playerState.inventory.markItemsSeen(playerState.bestFloor); // 빨간 점 1(새 아이템) 끔.
+      }
+    }
+    if (vaultOpenAt == null && !prep) mainMenuScreen.chestOpenAt = null;
     drawPrep(now);
     // 메뉴에 있는 동안 1초마다 시즌 넘김 확인 -> 지난 시즌 결과 팝업(다른 팝업이 없을 때).
     ranking.tick(now, !prep && !mainMenuScreen.popup && !fade);

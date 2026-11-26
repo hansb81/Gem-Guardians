@@ -1,4 +1,4 @@
-// 메뉴 신단 받침대 = 보관함 입구(docs/inventory.md 5-3): 누르는 영역, 빨간 점 조건 2가지, 열면 새 아이템 표시 꺼짐.
+// 메뉴 신단 받침대 = 정비 입구, 신단 옆 보물상자 = 보관함 입구(docs/inventory.md 5-3): 누르는 영역, 빨간 점 조건 2가지, 열면 새 아이템 표시 꺼짐.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -17,12 +17,42 @@ function menu() {
   return m;
 }
 
-test('받침대 영역 안에서 누르고 떼면 보관함이 열린다', () => {
+test('받침대 영역 안에서 누르고 떼면 정비가 열린다', () => {
   const m = menu();
   assert.equal(m.handlePointerDown(270, 600), null);
   assert.equal(m.popup, null, '누르는 순간엔 안 열림');
-  assert.equal(m.handlePointerUp(280, 620), 'openInventory');
-  assert.equal(m.popup, null, '보관함은 main.js의 정비 팝업(village)이 연다 - 메뉴 팝업은 안 바뀜');
+  assert.equal(m.handlePointerUp(280, 620), 'openPrep');
+  assert.equal(m.popup, null, '정비는 main.js의 정비 팝업(village)이 연다 - 메뉴 팝업은 안 바뀜');
+  assert.equal(m.chestOpenAt, null);
+});
+
+test('상자 영역 안에서 누르고 떼면 openVault + 열기 연출 시작, 연출 중(팝업이 닫히기 전)에는 다시 안 열린다', () => {
+  const m = menu();
+  assert.equal(m.handlePointerDown(460, 650), null);
+  assert.equal(m.chestOpenAt, null, '누르는 순간엔 연출 없음');
+  assert.equal(m.handlePointerUp(470, 700), 'openVault'); // 이름판 [417,678,96,36] 위
+  assert.notEqual(m.chestOpenAt, null);
+  assert.equal(m.chestOpenMs(), 340);
+  m.handlePointerDown(460, 650);
+  assert.equal(m.handlePointerUp(460, 650), null);
+  m.handlePointerDown(270, 600); // 신단도 안 받는다
+  assert.equal(m.handlePointerUp(270, 600), null);
+  m.chestOpenAt = null; // main.js: 보관함 팝업이 닫힘
+  m.handlePointerDown(460, 650);
+  assert.equal(m.handlePointerUp(460, 650), 'openVault');
+});
+
+test('상자: 밖으로 끌고 나가서 떼거나 신단에서 눌러 상자에서 떼면 안 열린다, manifest가 없어도 같은 자리(DEFAULT_CHEST)', () => {
+  const m = menu();
+  m.handlePointerDown(460, 650);
+  assert.equal(m.handlePointerUp(460, 740), null);
+  m.handlePointerDown(270, 600);
+  assert.equal(m.handlePointerUp(460, 650), null);
+  assert.equal(m.chestOpenAt, null);
+  m.manifest = null;
+  m.handlePointerDown(460, 650);
+  assert.equal(m.handlePointerUp(460, 650), 'openVault');
+  assert.equal(m.chestOpenMs(), 340);
 });
 
 test('밖으로 끌고 나가서 떼거나 pointercancel이면 안 열린다', () => {
@@ -45,11 +75,29 @@ test('결정 자리(crystalReserved) = 랭킹 입구: 안에서 떼면 openRanki
   assert.equal(m.popup, null);
 });
 
-test('누르는 영역이 플레이 버튼·재화 바·모서리 아이콘·결정 자리와 겹치지 않는다', () => {
-  const [ax, ay, aw, ah] = MANIFEST.altarInventory.hitArea_screenPx;
+test('신단·상자의 누르는 영역이 플레이 버튼·재화 바·모서리 아이콘·결정 자리, 그리고 서로와 겹치지 않는다', () => {
+  const altar = MANIFEST.altarInventory.hitArea_screenPx;
+  const chest = MANIFEST.vaultChest.hitArea_screenPx;
   const L = MANIFEST.layoutA_screenPx;
-  const others = [L.playButton, L.currencyBar, L.attendance, L.event, L.settings, L.shop, MANIFEST.altarInventory.crystalReserved_screenPx];
-  for (const [x, y, w, h] of others) assert.ok(x >= ax + aw || x + w <= ax || y >= ay + ah || y + h <= ay, `${[x, y, w, h]}`);
+  const others = [L.playButton, L.currencyBar, L.attendance, L.event, L.mail, L.settings, L.shop, L.mine, MANIFEST.altarInventory.crystalReserved_screenPx].filter(Boolean);
+  for (const [ax, ay, aw, ah] of [altar, chest]) {
+    for (const [x, y, w, h] of [...others, altar, chest]) {
+      if (x === ax && y === ay) continue; // 자기 자신
+      assert.ok(x >= ax + aw || x + w <= ax || y >= ay + ah || y + h <= ay, `${[ax, ay, aw, ah]} x ${[x, y, w, h]}`);
+    }
+  }
+  assert.ok(chest[2] >= 44 && chest[3] >= 44 && chest[0] + chest[2] <= 540, '터치 44 이상, 화면 안');
+  // 이름판은 누르는 영역 안.
+  const [px, py, pw, ph] = MANIFEST.vaultChest.plate_screenPx;
+  assert.ok(px >= chest[0] && py >= chest[1] && px + pw <= chest[0] + chest[2] && py + ph <= chest[1] + chest[3]);
+});
+
+test('상자 idle 조각: 32프레임 순서, 금빛 훑기(1~6)가 신단 idle(프레임 0~15) 뒤쪽 반에만', () => {
+  const { idle, open } = MANIFEST.vaultChest;
+  assert.equal(idle.seq.length, idle.periodFrames);
+  assert.ok(idle.seq.every((k) => k >= 0 && k < idle.frames));
+  assert.deepEqual(idle.seq.slice(0, 8), [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.equal(open.frameMs.length, open.frames);
 });
 
 test('빨간 점 1: 새 아이템을 얻고 보관함을 안 열었을 때 - 열면(markItemsSeen) 꺼진다', () => {

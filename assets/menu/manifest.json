@@ -10,7 +10,12 @@
  "background": {
   "note": "static base + animated pieces; draw base, then each piece's current frame at (x,y), then particles, then UI. All native px (x3). menu_bg.png = full static fallback (frame 8).",
   "base": "menu_base.png",
-  "bleed": { "file": "menu_bleed.png", "w": 300, "h": 448, "note": "frame 밖 띠용(가운데 180x320 = base). tools/make_bleed.py로 base에서 생성 - base를 바꾸면 다시 돌린다." },
+  "bleed": {
+   "file": "menu_bleed.png",
+   "w": 300,
+   "h": 448,
+   "note": "frame 밖 띠용(가운데 180x320 = base). tools/make_bleed.py로 base에서 생성 - base를 바꾸면 다시 돌린다."
+  },
   "frameMs": 200,
   "loopFrames": 32,
   "loopMs": 6400,
@@ -271,7 +276,7 @@
   ]
  },
  "altarInventory": {
-  "note": "신단 = 보관함(인벤토리) 입구. idle 조각을 배경 루프와 같은 시계(frameMs 200, 32프레임)로 배경 조각 다음·sparks 전에 그린다. 켜진 픽셀만 불투명(알파 0/255). 누를 때 연출 없음(이름판만 1px 눌림), 손을 떼면 바로 열기.",
+  "note": "신단 = 정비(수호자·정령) 입구. idle 조각을 배경 루프와 같은 시계(frameMs 200, 32프레임)로 배경 조각 다음·sparks 전에 그린다. 켜진 픽셀만 불투명(알파 0/255). 누를 때 연출 없음(이름판만 1px 눌림), 손을 떼면 바로 열기.",
   "idle": {
    "file": "menu_altar_idle.png",
    "x": 64,
@@ -336,7 +341,81 @@
    112,
    36
   ],
-  "plate": "ui/menu/plate.png 9-slice [8,8,8,8] x2, text '보관함' (i18n menu.inventory) #e8dcc0 + #0d0a10 outline",
+  "plate": "ui/menu/plate.png 9-slice [8,8,8,8] x2, text '정비' (i18n menu.prep) #e8dcc0 + #0d0a10 outline",
+  "badge": "없음(빨간 점은 vaultChest 이름판으로 옮김)"
+ },
+ "vaultChest": {
+  "note": "보물상자 = 아이템 보관함 입구. idle 조각은 altarInventory.idle처럼 배경 루프와 같은 시계로 pieces 끝에 붙인다. 열기 연출은 코드가 open 시트로 그 위에 덮어 그린다.",
+  "idle": {
+   "file": "menu_chest_idle.png",
+   "x": 141,
+   "y": 201,
+   "w": 28,
+   "h": 28,
+   "frames": 8,
+   "cols": 8,
+   "periodFrames": 32,
+   "seq": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    7,
+    7,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ],
+   "coords": "native (x3)",
+   "frameMs": 200
+  },
+  "open": {
+   "file": "menu_chest_open.png",
+   "frames": 4,
+   "cols": 4,
+   "frameMs": [
+    0,
+    90,
+    90,
+    160
+   ]
+  },
+  "hitArea_screenPx": [
+   408,
+   600,
+   116,
+   118
+  ],
+  "plate_screenPx": [
+   417,
+   678,
+   96,
+   36
+  ],
+  "plate": "ui/menu/plate.png 9-slice x2, text '보관함' (menu.inventory)",
   "badge": "ui/menu/badge.png x2 at plate top-right (x+w-10, y-6)"
  }
 }

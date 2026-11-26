@@ -14,6 +14,7 @@ export const en = {
   menu: {
     play: 'Play',
     inventory: 'Vault',
+    prep: 'Prepare',
     ranking: 'Ranking',
     icon: { attendance: 'Attend', event: 'Event', mail: 'Mail', settings: 'Settings', shop: 'Shop', mine: 'Mine' },
     mode: { title: 'Select Mode', normal: 'Normal Mode', competitive: 'Competitive Mode', locked: 'Unlocks at F20' },
@@ -197,7 +198,8 @@ export const en = {
           "Gold: earned by defeating enemies and clearing floors. First clears give an extra reward.",
           "Guardian upgrades: tap a guardian in battle or use the prep screen to level up with gold. Each level raises attack.",
           "Diamonds: spend them in the shop on items, gem skills and packages.",
-          "Vault: tap the altar pedestal in the main menu to view your items and equip them to slots.",
+          "Prepare: tap the altar to upgrade guardians and manage spirits.",
+          "Vault: tap the treasure chest next to the altar in the main menu to view your items and equip them to slots.",
           "Ranking: tap the crystal in the middle of the main menu to see best floor rankings.",
         ] },
         { title: "Cursed Crystal Mine", body: [
@@ -299,7 +301,7 @@ export const en = {
     win: { title: 'FLOOR CLEAR', desc: 'All enemies on this floor defeated.', descGold: '+{total} Gold!', clearGold: 'Clear Gold', firstClear: 'First Clear ×{mul}!', comboGold: 'Combo Bonus (max combo {max})' },
     lose: { title: 'DEFEATED', desc: 'The wall has fallen.', adFail: "Couldn't load the ad" },
     prep: {
-      title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Prepare' },
+      title: { floorClear: 'Floor {n} Clear', defeat: 'Floor {n} Failed', village: 'Prepare', vault: 'Vault' },
       status: { floorClear: 'Get ready for the next floor', defeat: 'Get ready to retry', village: 'Best: Floor {best}' },
       tab: { statue: 'Guardians', spirit: 'Spirits', vault: 'Vault' },
       next: 'To Floor {n} ▶',
