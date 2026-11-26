@@ -8,7 +8,8 @@
   "spirit": "정령 자리(준비 중)",
   "pack": "패키지 카드 아이콘",
   "rail": "왼쪽 레일 탭 아이콘",
-  "banner": "추천 탭 맨 위 큰 배너(스타터 팩 / 보스 돌파 팩)"
+  "banner": "추천 탭 맨 위 큰 배너(스타터 팩 / 보스 돌파 팩)",
+  "diaTier": "다이아 탭 묶음 6단계. dia_t1~6 = 아이콘(40x36, 2배 80x72), card_dia_{silver,gold,royal} = 3~6단계 카드 틀, ribbon_{red,gold} = 배지(인기/최고 혜택), pill_{blue,gold} = 보너스 % 알약, sparkle = 5~6단계 반짝이(7x7 5프레임)"
  },
  "icons": {
   "banner_boss": {
@@ -148,6 +149,135 @@
    "w": 14,
    "h": 14,
    "group": "skill"
+  },
+  "dia_t1": {
+   "src": "ui/shop/dia_t1.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "dia_t2": {
+   "src": "ui/shop/dia_t2.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "dia_t3": {
+   "src": "ui/shop/dia_t3.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "dia_t4": {
+   "src": "ui/shop/dia_t4.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "dia_t5": {
+   "src": "ui/shop/dia_t5.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "dia_t6": {
+   "src": "ui/shop/dia_t6.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "card_dia_silver": {
+   "src": "ui/shop/card_dia_silver.png",
+   "w": 12,
+   "h": 12,
+   "slice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "group": "diaTier"
+  },
+  "card_dia_gold": {
+   "src": "ui/shop/card_dia_gold.png",
+   "w": 12,
+   "h": 12,
+   "slice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "group": "diaTier"
+  },
+  "card_dia_royal": {
+   "src": "ui/shop/card_dia_royal.png",
+   "w": 12,
+   "h": 12,
+   "slice": [
+    4,
+    4,
+    4,
+    4
+   ],
+   "group": "diaTier"
+  },
+  "ribbon_red": {
+   "src": "ui/shop/ribbon_red.png",
+   "w": 16,
+   "h": 11,
+   "slice": [
+    3,
+    3,
+    6,
+    3
+   ],
+   "group": "diaTier"
+  },
+  "ribbon_gold": {
+   "src": "ui/shop/ribbon_gold.png",
+   "w": 16,
+   "h": 11,
+   "slice": [
+    3,
+    3,
+    6,
+    3
+   ],
+   "group": "diaTier"
+  },
+  "pill_blue": {
+   "src": "ui/shop/pill_blue.png",
+   "w": 10,
+   "h": 9,
+   "slice": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "group": "diaTier"
+  },
+  "pill_gold": {
+   "src": "ui/shop/pill_gold.png",
+   "w": 10,
+   "h": 9,
+   "slice": [
+    3,
+    3,
+    3,
+    3
+   ],
+   "group": "diaTier"
+  },
+  "sparkle": {
+   "src": "ui/shop/sparkle.png",
+   "w": 35,
+   "h": 7,
+   "frames": 5,
+   "frameW": 7,
+   "frameMs": 120,
+   "group": "diaTier"
   }
  }
 }

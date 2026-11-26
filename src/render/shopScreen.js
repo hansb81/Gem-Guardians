@@ -39,6 +39,16 @@ const C = {
 };
 // 특수 잼 기술 슬롯 아래 5색 점(색이 효과를 정한다) - config/shop.json skills.color 순서.
 const SKILL_DOT = { red: '#b82a3c', blue: '#386cbc', purple: '#7a3cae', yellow: '#f2d264', green: '#3a8a3c' };
+// 다이아 묶음 단계(p.index 0~5 = dia.0~5). 아이콘 80x72(원본 40x36 x2), 카드 틀, 배지, 반짝이 수.
+const DIA_TIER = [
+  { icon: 'shop/dia_t1.png', card: 'upgrade/card.png' },
+  { icon: 'shop/dia_t2.png', card: 'upgrade/card.png', pill: 'blue' },
+  { icon: 'shop/dia_t3.png', card: 'shop/card_dia_silver.png', pill: 'blue', badge: ['shop.dia.badge.popular', 'red'] },
+  { icon: 'shop/dia_t4.png', card: 'shop/card_dia_silver.png', pill: 'blue' },
+  { icon: 'shop/dia_t5.png', card: 'shop/card_dia_gold.png', pill: 'gold', gold: true, sparkle: 2 },
+  { icon: 'shop/dia_t6.png', card: 'shop/card_dia_royal.png', pill: 'gold', gold: true, sparkle: 3, shine: true, badge: ['shop.dia.badge.best', 'gold'] },
+];
+const SPARK_AT = [[14, 6], [66, 10], [8, 52]]; // 아이콘 칸 안 반짝이 자리(basis)
 const TAG_BG = { '': C.red, blue: C.blueM, gray: C.bg3, gold: C.gold };
 
 // 배치(basis px). 작은 버튼은 그림 크기는 목업 그대로, 터치 영역(hit)만 64 이상으로 넓혔다(412dp 폰에서
@@ -475,6 +485,7 @@ export class ShopScreen {
 
   _drawCard(ctx, row, y) {
     const { e: p, tx } = row;
+    if (p.kind === 'diaBundle') return this._drawDiaCard(ctx, row, y);
     const x = CARD.x;
     const w = CARD.w;
     const h = CARD.h;
@@ -491,6 +502,67 @@ export class ShopScreen {
     if (p.state === 'sold') this._dither(ctx, x, y, w, h);
     this._drawPrice(ctx, p, tx, ix + iw - 132, iy + 16, 132, 48);
     if (tx.tag) this._drawTag(ctx, tx.tag, x + w - 4, y - 8);
+  }
+
+  // 다이아 묶음 카드: 단계별 아이콘·틀·보너스 알약·배지·반짝이.
+  _drawDiaCard(ctx, row, y) {
+    const { e: p, tx } = row;
+    const tier = DIA_TIER[p.index] ?? DIA_TIER[0];
+    const x = CARD.x, w = CARD.w, h = CARD.h;
+    const now = performance.now();
+    this._nine(ctx, this.sel === p.id && !tier.gold ? 'upgrade/card_selected.png' : tier.card, x, y, w, h);
+    const calm = !!this._assets?.effectsConfig?.settings?.reduceMotion; // 움직임 줄이기 = 반짝이·빛줄기 끔
+    if (tier.shine && !calm) this._shine(ctx, x + 6, y + 6, w - 12, h - 12, now);
+    const ix = x + 8, iy = y + 8, iw = w - 16;
+    const left = ix + 88;
+    this._img(ctx, tier.icon, ix + 2, iy + 4, 80, 72);
+    if (!calm) for (let i = 0; i < (tier.sparkle ?? 0); i++) this._sparkle(ctx, ix + 2 + SPARK_AT[i][0], iy + 4 + SPARK_AT[i][1], now + i * 700);
+    this._text(ctx, tx.name, left, iy + 15, 22, tier.gold ? C.goldL : C.bone, 'left', true);
+    const lines = this._lines(ctx, row, ix + iw - 140 - left, 1);
+    lines.forEach((line, i) => this._text(ctx, line.text, left, iy + 37 + i * 14, 11, line.em ? C.goldL : C.bone));
+    if (p.bonus) {
+      const pct = `+${Math.round((p.bonus / p.dia) * 100)}%`;
+      const pw = this._measure(ctx, pct, 11) + 12;
+      this._nine(ctx, `shop/pill_${tier.pill}.png`, left, iy + 54, pw, 20);
+      this._text(ctx, pct, left + pw / 2, iy + 64, 11, tier.pill === 'gold' ? C.outline : C.bone, 'center');
+      this._text(ctx, tx.sub, left + pw + 6, iy + 64, 11, tier.gold ? C.goldL : C.blueL);
+    }
+    if (p.state === 'sold') this._dither(ctx, x, y, w, h);
+    this._drawPrice(ctx, p, tx, ix + iw - 132, iy + 16, 132, 48);
+    if (tx.tag) this._drawTag(ctx, tx.tag, x + w - 4, y - 8);
+    if (tier.badge) {
+      const label = t(tier.badge[0]);
+      const bw = this._measure(ctx, label, 11) + 22;
+      this._nine(ctx, `shop/ribbon_${tier.badge[1]}.png`, x - 6, y - 8, bw, 22);
+      this._text(ctx, label, x - 6 + 8, y + 3, 11, tier.badge[1] === 'gold' ? C.outline : C.bone);
+    }
+  }
+
+  // sparkle.png 5프레임(120ms) + 쉬는 시간. 원본 7x7 -> basis 14x14 가운데 맞춤.
+  _sparkle(ctx, cx, cy, now) {
+    const state = getUi(this._assets, 'shop/sparkle.png');
+    if (!uiReady(state)) return;
+    const f = Math.floor((now % 2100) / 120);
+    if (f > 4) return;
+    const { offsetX, offsetY, k } = this._transform;
+    drawImageSnapped(ctx, state.img, f * 7, 0, 7, 7, offsetX + (cx - 7) * k, offsetY + (cy - 7) * k, 14 * k, 14 * k);
+  }
+
+  // 최고 단계 카드: 3.2초마다 사선 빛줄기가 왼쪽->오른쪽으로 지나감(픽셀 단위 계단, 2색).
+  _shine(ctx, x, y, w, h, now) {
+    const T = 3200, run = 900;
+    const t0 = now % T;
+    if (t0 > run) return;
+    const head = x - h + ((w + h * 2) * t0) / run;
+    // 바깥 b1 12px, 가운데 b2 6px, 심 b3 2px - 원본 2px 단위 계단.
+    const bands = [[0, 12, '#1c3a76'], [3, 6, '#386cbc'], [5, 2, '#8cc4ee']];
+    for (let yy = 0; yy < h; yy += 2) {
+      const base = Math.round((head - yy * 0.6) / 2) * 2;
+      for (const [off, bw, col] of bands) {
+        const a = Math.max(x, base + off), b = Math.min(x + w, base + off + bw);
+        if (b > a) this._fill(ctx, col, a, y + yy, b - a, 2);
+      }
+    }
   }
 
   _drawBanner(ctx, row, y, now) {

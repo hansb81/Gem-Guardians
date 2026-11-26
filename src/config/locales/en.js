@@ -417,7 +417,7 @@ export const en = {
     },
     grant: { dia: '{n} gems', item: '{name} {n}', slot4: '4th item slot now', adFree: 'Free item without ads' },
     pass: { desc: '{now} now + {daily}/day for {days} days', total: '(total {n})', left: '{n} days left', today: 'Today: {n} gems', claim: 'Claim +{n}', plusItem: ' + {name} {n}', mine: ' · Mine output +{pct}%', mineCard: ' · Mine +{pct}%', mineInfo: 'Mine', mineVal: 'Output +{pct}%' },
-    dia: { name: '{n} Gems', bonus: 'Bonus +{n}', first: 'First buy: {n}', amount: 'You get {n}', long: 'Buy {n} gems.', longFirst: 'Buy {n} gems. First purchase doubles the base gems.' },
+    dia: { badge: { popular: 'Popular', best: 'Best value' }, name: '{n} Gems', bonus: 'Bonus +{n}', first: 'First buy: {n}', amount: 'You get {n}', long: 'Buy {n} gems.', longFirst: 'Buy {n} gems. First purchase doubles the base gems.' },
     stones: { name: 'Stone Pack', desc: '{n} Spirit Stones · once a day', long: 'Get {n} Spirit Stones. Can be bought once a day; resets at midnight (KST).' },
     slot4: { name: '4th Slot', desc: '1 more item slot', desc2: 'Permanent', long: 'Opens the 4th bottom slot now. Beating the floor 20 boss also opens it for free.' },
     goldex: { small: 'Gold S', mid: 'Gold M', big: 'Gold L', desc: 'About {n} normal floors', desc2: 'Grows with your best floor', long: '{gold} gold for {dia} gems. Worth {n} normal floors at your best floor.' },
