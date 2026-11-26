@@ -38,8 +38,12 @@ function mulberry32(a) {
   };
 }
 
-// img = 마지막 프레임(좌우 반전해서 그리고 있었다면 반전된 상태로).
-function buildDissolve(img, seed) {
+// 이미지별 불투명 픽셀 목록(1번만 getImageData) - 색 순서로 정렬해 그릴 때 fillStyle을 색이 바뀔 때만 바꾼다.
+// { n, xs, ys, ci(색 번호), colors(색 문자열), top, bot }
+const pixelCache = new WeakMap();
+function pixelsOf(img) {
+  let b = pixelCache.get(img);
+  if (b) return b;
   const c = document.createElement('canvas');
   c.width = img.width;
   c.height = img.height;
@@ -48,35 +52,73 @@ function buildDissolve(img, seed) {
   const p = x.getImageData(0, 0, c.width, c.height).data;
   const w = c.width;
   const h = c.height;
-  const r = mulberry32(seed);
+  const colorIdx = new Map(); // 0xRRGGBB -> 번호
+  const list = []; // [색 번호, x, y]
   let top = h;
   let bot = 0;
-  for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) if (p[(y * w + i) * 4 + 3]) {
-    top = Math.min(top, y);
-    bot = Math.max(bot, y);
-  }
-  const parts = [];
   for (let y = 0; y < h; y++) for (let i = 0; i < w; i++) {
     const k = (y * w + i) * 4;
     if (!p[k + 3]) continue;
-    parts.push({ x: i, y, c: `rgb(${p[k]},${p[k + 1]},${p[k + 2]})`, delay: ((y - top) / Math.max(1, bot - top)) * 0.45 + r() * 0.15,
-      dx: (r() - 0.35) * 7, dy: -(3 + r() * 9), keep: r() });
+    const rgb = (p[k] << 16) | (p[k + 1] << 8) | p[k + 2];
+    if (!colorIdx.has(rgb)) colorIdx.set(rgb, colorIdx.size);
+    list.push([colorIdx.get(rgb), i, y]);
+    top = Math.min(top, y);
+    bot = Math.max(bot, y);
   }
-  return parts;
+  list.sort((a, z) => a[0] - z[0]);
+  const n = list.length;
+  b = { n, xs: new Uint16Array(n), ys: new Uint16Array(n), ci: new Uint16Array(n), colors: [], top, bot };
+  for (let i = 0; i < n; i++) [b.ci[i], b.xs[i], b.ys[i]] = list[i];
+  for (const rgb of colorIdx.keys()) b.colors.push(`#${rgb.toString(16).padStart(6, '0')}`);
+  pixelCache.set(img, b);
+  return b;
+}
+
+// img = 마지막 프레임(좌우 반전해서 그리고 있었다면 반전된 상태로). 적마다 다른 건 seed로 뽑는 4개 값뿐 - 타입 배열 4개.
+function buildDissolve(img, seed) {
+  const b = pixelsOf(img);
+  const r = mulberry32(seed);
+  const span = Math.max(1, b.bot - b.top);
+  const delay = new Float32Array(b.n);
+  const dx = new Float32Array(b.n);
+  const dy = new Float32Array(b.n);
+  const keep = new Float32Array(b.n);
+  for (let i = 0; i < b.n; i++) {
+    delay[i] = ((b.ys[i] - b.top) / span) * 0.45 + r() * 0.15;
+    dx[i] = (r() - 0.35) * 7;
+    dy[i] = -(3 + r() * 9);
+    keep[i] = r();
+  }
+  return { b, delay, dx, dy, keep };
 }
 
 // t = 0..1 (경과 / dissolveMs), (sx,sy) = 스프라이트 왼쪽 위 화면 좌표, s = 배율
+// fillRect는 픽셀마다지만 fillStyle 대입(문자열 해석)은 색이 바뀔 때만: 남은 몸은 색 순서로, 재는 4가지 색(번쩍 + ash 3단계)별로 한 번씩.
 function drawDissolve(ctx, parts, t, sx, sy, s, ash) {
-  for (const q of parts) {
-    if (t < q.delay) {
-      ctx.fillStyle = q.c;
-      ctx.fillRect(sx + q.x * s, sy + q.y * s, s, s);
-      continue;
+  const { b, delay, dx, dy, keep } = parts;
+  const { n, xs, ys, ci, colors } = b;
+  let last = -1;
+  for (let i = 0; i < n; i++) {
+    if (t >= delay[i]) continue;
+    if (ci[i] !== last) {
+      last = ci[i];
+      ctx.fillStyle = colors[last];
     }
-    const p = Math.min(1, (t - q.delay) / 0.45);
-    if (q.keep < p) continue;
-    ctx.fillStyle = p > 0.08 ? ash[Math.min(2, Math.floor(p * 3))] : '#e8dcc0';
-    ctx.fillRect(sx + Math.round(q.x + q.dx * p) * s, sy + Math.round(q.y + q.dy * p) * s, s, s);
+    ctx.fillRect(sx + xs[i] * s, sy + ys[i] * s, s, s);
+  }
+  for (let k = 0; k < 4; k++) {
+    let set = false;
+    for (let i = 0; i < n; i++) {
+      if (t < delay[i]) continue;
+      const p = Math.min(1, (t - delay[i]) / 0.45);
+      if (keep[i] < p) continue;
+      if ((p > 0.08 ? 1 + Math.min(2, Math.floor(p * 3)) : 0) !== k) continue;
+      if (!set) {
+        ctx.fillStyle = k ? ash[k - 1] : '#e8dcc0';
+        set = true;
+      }
+      ctx.fillRect(sx + Math.round(xs[i] + dx[i] * p) * s, sy + Math.round(ys[i] + dy[i] * p) * s, s, s);
+    }
   }
 }
 // ---------- 끝 ----------
@@ -84,7 +126,17 @@ function drawDissolve(ctx, parts, t, sx, sy, s, ash) {
 const ASH = ['#655a74', '#3b3347', '#221c2b'];
 const SMALL_MAX_PX = 32; // 이 크기 이하 = death_smoke_s, 넘거나 보스 = _l
 
+// 반전 캔버스도 이미지별 1번 - 매번 새로 만들면 그 뒤 flashImage·pixelsOf 캐시(이미지 키)가 한 번도 안 맞는다.
+const flipCache = new WeakMap();
 function flipped(img) {
+  let c = flipCache.get(img);
+  if (c) return c;
+  c = makeFlipped(img);
+  flipCache.set(img, c);
+  return c;
+}
+
+function makeFlipped(img) {
   const c = document.createElement('canvas');
   c.width = img.naturalWidth || img.width;
   c.height = img.naturalHeight || img.height;

@@ -149,15 +149,9 @@ const platform = {
   },
 
   storage: {
-    async get(key) {
-      try {
-        return await Storage.getItem(key);
-      } catch (e) {
-        warn('Storage.getItem', e);
-        return null;
-      }
-    },
-    set: (key, str) => Storage.setItem(key, str).catch((e) => warn('Storage.setItem', e)),
+    // get·set 오류는 삼키지 않는다 - 읽기 오류를 '없음'(null)으로 보면 세이브를 지우거나 기본값으로 덮는다(src/platform/storage.js).
+    get: (key) => Storage.getItem(key),
+    set: (key, str) => Storage.setItem(key, str),
     remove: (key) => Storage.removeItem(key).catch((e) => warn('Storage.removeItem', e)),
   },
 

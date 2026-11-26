@@ -123,6 +123,7 @@ export class GameState {
     this.floorObstacles = floorObstacles ?? null;
     this._obstacleSpawnCounters = {};
     this._obstacleReshuffleFailures = 0;
+    this._reshufflePending = false; // 재배치 실패 - 셔플 연출이 끝나면 update가 _maybeReshuffle을 다시 부른다
     // 유효 스왑 수(Resolution을 만든 일반 스왑만, force 스왑·아이템은 안 셈) - 아이템 쿨다운 기준(docs/items.md 3장).
     this.validSwapCount = 0;
     if (this.obstaclesRegistry) {
@@ -708,6 +709,10 @@ export class GameState {
       this.resolutions = this.resolutions.filter((r) => !r.done);
     }
     if (hadActive && this.resolutions.length === 0) {
+      this._maybeReshuffle();
+    } else if (this._reshufflePending && this.resolutions.length === 0 && !this._hasActiveShuffle()) {
+      // 재배치를 해도 수가 없었음 - 그 셔플 연출이 끝났으니 다시 확인(3번 연속 실패면 방해요소 제거, docs/balance.md 7-2).
+      this._reshufflePending = false;
       this._maybeReshuffle();
     }
   }
@@ -1674,6 +1679,7 @@ export class GameState {
 
       // occupant가 보드를 너무 막아서 재배치를 해도 여전히 가능한 수가 없으면 "실패"로 센다.
       // 3번 연속 실패하면 hp가 가장 낮은 occupant 1개를 없애 막힌 보드를 풀어준다(docs/balance.md 7-2).
+      // 실패해도 새 Resolution은 안 생기므로, 다음 시도는 이 셔플 연출이 끝날 때 update가 부른다(_reshufflePending).
       if (this.obstaclesRegistry) {
         if (!hasAnyValidMove(board, canSwap)) {
           this._obstacleReshuffleFailures += 1;
@@ -1684,6 +1690,8 @@ export class GameState {
               this._pushEffect({ type: 'obstacleDestroyed', id: removed.type, cell: { row: removed.row, col: removed.col }, cause: 'noMoves', durationMs: 1 });
             }
           }
+          // 방해요소를 없앴어도 수가 생겼는지는 다음 확인에서 본다(없으면 또 섞음).
+          this._reshufflePending = true;
         } else {
           this._obstacleReshuffleFailures = 0;
         }

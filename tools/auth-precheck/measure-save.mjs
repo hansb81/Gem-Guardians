@@ -96,7 +96,7 @@ async function build({ days, payments, best, perDay }) {
   ps.shop.purchasedOnce = ['pack.starter', 'pack.adfree', 'pack.slot4'];
   ps.shop.firstBuyUsed = [0, 1, 2, 3, 4, 5];
   ps.shop.offers = { starter: END + 3 * DAY, boss: { floor: 40, expiresAt: END + DAY } };
-  ps.shop.passes.monthly = { daysLeft: 17, claimedToday: true };
+  ps.shop.passes.monthly = { endDay: ymd(END + 17 * DAY), claimedDay: ymd(END) };
   ps.shop.freeClaimedDate = ymd(END);
   ps.shop.day = ymd(END);
   Object.assign(ps.ranking.profile, { nickname: '보석지기123', statue: 'purple' });

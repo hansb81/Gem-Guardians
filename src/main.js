@@ -41,6 +41,7 @@ import { CloudSave, saveSummary } from './net/cloudSave.js';
 import { net, call, sayHello, refreshSessionUser, authClient } from './net/api.js';
 import { Account } from './net/account.js';
 import { pruneGrantedTx } from './core/inventory/inventory.js';
+import { kstDate } from './core/kst.js';
 import { GAME_INFO } from './config/gameInfo.js';
 import { LANE_JITTER } from './render/battleRenderer.js';
 import { GLOW } from './render/guardianFx.js';
@@ -451,7 +452,7 @@ function endCompRun() {
 
 function startCloudSave() {
   const tx = playerState.inventory.data.grantedTx;
-  const kept = pruneGrantedTx(tx, new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10)); // KST 오늘
+  const kept = pruneGrantedTx(tx, kstDate(Date.now())); // KST 오늘
   if (kept.length !== tx.length) {
     tx.splice(0, tx.length, ...kept);
     playerState.save();
@@ -717,6 +718,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       save: () => playerState.save(),
       showReward: (r) => rewardPopup.show(r),
       itemIcons: () => renderer.itemAssets?.icons,
+      serverToday: () => serverUi.att?.status?.today ?? null, // 상점·패스 하루 기준도 광산과 같은 서버 날짜(KST) 우선
       playerId: () => net.playerId ?? null, // 환불 안내 팝업의 회원 번호(설정 > 게임 정보의 회원 번호와 같은 id)
     });
     // 결제는 됐는데 지급 전에 꺼진 주문(토스 getPendingOrders 등) - 상점 데이터가 준비된 지금 다시 지급한다.
@@ -1794,7 +1796,19 @@ function drawPrep(now) {
 }
 
 let lastBattleStatus = null;
+// 메뉴·상점·광산은 거의 정적 - rAF를 하나씩 건너뛰어 30fps로 그린다(배터리 절반). 건너뛴 프레임은 lastTime을
+// 안 바꾸므로 다음 프레임 dt에 그대로 쌓인다. 화면을 만지는 중·직후(스크롤 관성·길게 누르기)와 페이드 중엔 60fps.
+const HALF_FPS_SCENES = new Set(['menu', 'shop', 'mine']);
+const FULL_FPS_AFTER_INPUT_MS = 1500;
+let lastInputAt = 0;
+let skipOdd = false;
+const noteInput = () => (lastInputAt = performance.now());
+for (const type of ['pointerdown', 'pointermove', 'wheel']) canvas.addEventListener(type, noteInput, { passive: true });
 function loop(now) {
+  if (HALF_FPS_SCENES.has(scene) && !fade && now - lastInputAt > FULL_FPS_AFTER_INPUT_MS && (skipOdd = !skipOdd)) {
+    requestAnimationFrame(loop);
+    return;
+  }
   syncBanner();
   syncPopupBanner();
   const rawDtMs = Math.min(64, now - lastTime);

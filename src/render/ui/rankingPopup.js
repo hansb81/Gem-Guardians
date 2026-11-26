@@ -10,6 +10,7 @@ import { drawNine, drawText, drawFixedImage, getUi, getUiMeta, uiReady } from '.
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
 import { drawImageSnapped, screen } from '../screenFit.js';
+import { kstDate } from '../../core/kst.js';
 
 export const RANKING_TABS = ['normal', 'comp'];
 export const STATUE_PICKS = ['red', 'blue', 'yellow', 'green', 'purple'];
@@ -512,8 +513,7 @@ const tierLabel = (id) => t(`ranking.tier.${id}`);
 // 날짜(KST) 2026.11.05
 function dateText(ms) {
   if (!ms) return '';
-  const d = new Date(ms + 9 * 3600e3);
-  return `${d.getUTCFullYear()}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${String(d.getUTCDate()).padStart(2, '0')}`;
+  return kstDate(ms).replaceAll('-', '.');
 }
 
 function rewardParts(tier, floorGold, bundle) {

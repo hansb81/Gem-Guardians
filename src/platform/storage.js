@@ -16,16 +16,20 @@ const dirty = new Set();
 let backend = null; // { get, set, remove } (platform.storage)
 let timer = null;
 
+// 읽기 오류(store.get이 throw)면 backend를 붙이지 않고 그대로 던진다 - 그 실행은 메모리에서만 돌고,
+// 디스크의 세이브를 지우거나(dataEpoch를 못 읽어 '다름'으로 보는 것) 기본값으로 덮어쓰지 않는다. 다음 실행 때 다시 읽는다.
 export async function initStorage(store) {
-  backend = store;
+  backend = null;
   cache.clear();
   if ((await store.get('dataEpoch')) !== String(DATA_EPOCH)) {
+    backend = store;
     await Promise.all(KEYS.map((k) => store.remove(k)));
     await store.set('dataEpoch', String(DATA_EPOCH));
     return;
   }
   const values = await Promise.all(KEYS.map((k) => store.get(k)));
   KEYS.forEach((k, i) => values[i] != null && cache.set(k, values[i]));
+  backend = store;
 }
 
 export const storage = {
@@ -35,6 +39,12 @@ export const storage = {
     try {
       return JSON.parse(raw);
     } catch {
+      // 깨진 값은 '{key}.corrupt'에 원문 그대로 남긴다(복구용 - KEYS에 없어 다시 읽지는 않음). 이 키는 곧 새 값으로 덮인다.
+      if (!cache.has(`${key}.corrupt`)) {
+        cache.set(`${key}.corrupt`, raw);
+        dirty.add(`${key}.corrupt`);
+        if (backend && !timer) timer = setTimeout(() => storage.flush(), FLUSH_MS);
+      }
       return null;
     }
   },
@@ -53,13 +63,18 @@ export const storage = {
     const keys = [...KEYS, 'gemGuardians.auth', 'platformUserId'].filter((k) => k !== 'devServer' && k !== 'devCheats');
     return Promise.all(keys.map((k) => storage.remove(k)));
   },
-  // 쓰기 실패(용량 초과, 프라이버시 모드 등)는 어댑터가 삼킨다 - 진행은 메모리상으로 계속된다.
+  // 쓰기 실패(용량 초과 등)면 진행은 메모리상으로 계속되고, 그 키는 dirty로 되돌려 다음 저장·onPause 때 다시 쓴다.
   flush() {
     clearTimeout(timer);
     timer = null;
     if (!backend) return Promise.resolve();
     const keys = [...dirty];
     dirty.clear();
-    return Promise.all(keys.map((k) => backend.set(k, cache.get(k)).catch(() => {})));
+    return Promise.all(keys.map((k) => backend.set(k, cache.get(k)).catch((e) => {
+      console.warn('[storage] set', k, e);
+      if (cache.has(k)) dirty.add(k);
+    })));
   },
+  // 키에 값은 있는데 load가 null(JSON이 깨짐)인지 보려고 - playerState가 깨진 세이브를 클라우드에 빈 진행으로 올리지 않게.
+  has: (key) => cache.has(key),
 };

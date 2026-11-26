@@ -13,7 +13,7 @@ import { SkillFx } from './skillFx.js';
 import { MonsterFx, isBigMonster } from './monsterFx.js';
 import { createRng } from '../core/rng.js';
 import { audio } from '../audio/AudioManager.js';
-import { FX_SLOT_STAGGER_MS, fxTier, lookGrade, lookAnimKey, GuardianAttackFx, atkCfg, atkFrame, drawAtkSprite, quantizeAngle, drawGuardianFxBack, drawGuardianFxBehind, drawGuardianFxFront, drawGuardianOutline } from './guardianFx.js';
+import { FX_SLOT_STAGGER_MS, fxTier, lookGrade, lookAnimKey, GuardianAttackFx, atkCfg, atkFrame, drawAtkSprite, quantizeAngle, drawGuardianFxBack, drawGuardianFxBehind, drawGuardianFxFront, drawGuardianOutline, outlineMask } from './guardianFx.js';
 
 // tower.color 값('red'|'blue'|'yellow'|'green'|'purple')은 GEM_TYPES의 id와 같은 이름을
 // 쓰므로 그대로 색상표로 재사용한다(하드코딩 회피).
@@ -32,6 +32,42 @@ const RANK_OUTLINE = {
   elite: '#a855f7',
   boss: '#ef4444',
 };
+
+// 프레임 이미지 + 색 -> (w+2)x(h+2) 1px 윤곽 캔버스. 프레임마다 한 번 굽는다(guardianFx.outlineMask와 같은 윤곽 규칙).
+const rankOutlines = new WeakMap();
+function rankOutline(img, color) {
+  let byColor = rankOutlines.get(img);
+  if (!byColor) rankOutlines.set(img, (byColor = new Map()));
+  let c = byColor.get(color);
+  if (c) return c;
+  const w = img.naturalWidth || img.width;
+  const h = img.naturalHeight || img.height;
+  const src = document.createElement('canvas');
+  src.width = w;
+  src.height = h;
+  const sctx = src.getContext('2d', { willReadFrequently: true });
+  sctx.drawImage(img, 0, 0);
+  const d = sctx.getImageData(0, 0, w, h).data;
+  const alpha = new Uint8Array(w * h);
+  for (let i = 0; i < alpha.length; i++) alpha[i] = d[i * 4 + 3];
+  const mask = outlineMask(alpha, w, h);
+  c = document.createElement('canvas');
+  c.width = w + 2;
+  c.height = h + 2;
+  const cctx = c.getContext('2d');
+  const id = cctx.createImageData(w + 2, h + 2);
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16));
+  for (let i = 0; i < mask.length; i++) {
+    if (!mask[i]) continue;
+    id.data[i * 4] = r;
+    id.data[i * 4 + 1] = g;
+    id.data[i * 4 + 2] = b;
+    id.data[i * 4 + 3] = 255;
+  }
+  cctx.putImageData(id, 0, 0);
+  byColor.set(color, c);
+  return c;
+}
 
 const ENEMY_LANE_COUNT = 3;
 // 같은 줄 안에서 적마다 발 y를 위아래로 흩는 범위(원본 px, 그리기 배율을 곱함). boss = 대형 보스 포함(데이터에 따로 구분 없음).
@@ -1387,19 +1423,16 @@ export class BattleRenderer {
             footX: uiCenterX + knockX, footY: pos.y, bodyY: pos.y - visualHeight / 2, big: isBigMonster(frameW, frameH, enemy.rank),
           }, now, assets);
         } else {
-          if (outline) {
-            ctx.shadowColor = outline;
-            ctx.shadowBlur = Math.max(2, h * 0.04);
-          }
           ctx.imageSmoothingEnabled = false;
           ctx.translate(snapPx(drawX), snapPx(pos.y));
           if (flip) ctx.scale(-1, 1);
+          // 엘리트·보스 외곽선: 프레임별로 구워 둔 1px 윤곽을 몸 뒤에(shadowBlur 없이 - 31행).
+          if (outline) drawImageSnapped(ctx, rankOutline(frame.img, outline), -w / 2 - scale, -h - scale, w + 2 * scale, h + 2 * scale);
           // 맞은 직후 flashMs 동안 번쩍 버전(flashMap, 프레임별 캐시).
           const img = (hitEvent && hitEvent.elapsedMs < flashMs) || fxState.flashUntil > now ? this._monsterFx.flashImage(frame.img, assets) : frame.img;
           drawImageSnapped(ctx, img, -w / 2, -h, w, h); // anchor: feet(아래 가운데) - pos.y가 발 위치.
           // 서리 고래 빙결 - 이 적 한 마리에만 모래시계와 같은 회색 체커 디더(빙결 시간 동안).
           if (enemy.spiritFreeze > 0) {
-            ctx.shadowBlur = 0;
             ctx.fillStyle = ditherPattern(ctx, '#6a6672');
             ctx.fillRect(Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h));
           }
@@ -1410,11 +1443,7 @@ export class BattleRenderer {
         if (dead) {
           this._monsterFx.die(enemy, { id: enemy.id, img: null, footX: drawX, footY: pos.y, bodyY: pos.y - shapeSize / 2, big: enemy.rank === 'boss' }, now, assets);
         } else {
-          if (outline) {
-            ctx.shadowColor = outline;
-            ctx.shadowBlur = Math.max(2, shapeSize * 0.08);
-          }
-          this._drawEnemyFallback(ctx, enemy, drawX, pos.y - shapeSize / 2, shapeSize);
+          this._drawEnemyFallback(ctx, enemy, drawX, pos.y - shapeSize / 2, shapeSize, outline);
         }
       }
       ctx.restore();
@@ -1475,10 +1504,17 @@ export class BattleRenderer {
   // 스프라이트가 없는(로딩 실패) 적용 임시 표시: 이름 해시로 고른 색 원 + 이름 첫 글자
   // (docs/balance.md §4). x/y는 해당 도형의 좌상단이 아니라 중심(원래 _drawEnemies가
   // pos.y - shapeSize/2를 넘겨 중심을 맞춘다).
-  _drawEnemyFallback(ctx, enemy, x, y, size) {
+  _drawEnemyFallback(ctx, enemy, x, y, size, outline = null) {
     if (size <= 0) return;
     const label = enemy.name ?? enemy.type ?? '';
     const color = ENEMY_FALLBACK_PALETTE[hashLane(enemy.type ?? label, ENEMY_FALLBACK_PALETTE.length)];
+    if (outline) {
+      // 엘리트·보스 외곽 - 조금 큰 원을 뒤에(shadowBlur 없이).
+      ctx.fillStyle = outline;
+      ctx.beginPath();
+      ctx.arc(x, y, size / 2 + Math.max(2, size * 0.06), 0, Math.PI * 2);
+      ctx.fill();
+    }
     ctx.fillStyle = color;
     ctx.beginPath();
     ctx.arc(x, y, size / 2, 0, Math.PI * 2);

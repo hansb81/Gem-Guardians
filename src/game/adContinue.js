@@ -1,8 +1,7 @@
 // 패배 팝업 "부활(깃털)" / "광고 보고 이어하기" 판정(docs/ads.md 2장). 순수 계산 - 시각(ms)·상태는 호출부가 넘긴다.
-import { KST_OFFSET_MS } from '../ranking/season.js';
+import { KST_OFFSET_MS, DAY_MS } from '../core/kst.js';
 
-const DAY = 24 * 3600e3;
-export const kstDay = (ms) => Math.floor((ms + KST_OFFSET_MS) / DAY);
+export const kstDay = (ms) => Math.floor((ms + KST_OFFSET_MS) / DAY_MS);
 
 // save = { day, count } (저장 키 'adContinue') | null. 날짜(KST)가 바뀌면 0부터.
 export const usedToday = (save, ms) => (save?.day === kstDay(ms) ? save.count : 0);

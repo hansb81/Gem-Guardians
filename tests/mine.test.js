@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   defaultMine, normalizeMine, veinRate, veinCost, maxVeinLevel, capHours, ratePerHour, capacity, cartAt, settle, rolloverDay,
-  syncUnlocks, harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, hasBadge, nextGoldCost, kstDate,
+  syncUnlocks, harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, hasBadge, nextGoldCost,
   nextMaxLevelFloor, hoursToFull, cartState, upgradeBlocksGold, goldNeedsConfirm, dailyLeft, boostAmount, pouchGold,
   refineStone, nextStoneCost, stoneNeedsConfirm,
 } from '../src/core/mine/mine.js';
 import { pruneGrantedTx } from '../src/core/inventory/inventory.js';
+import { kstDate } from '../src/core/kst.js';
 import { Inventory } from '../src/game/inventory.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`../config/${name}`, import.meta.url), 'utf8'));
@@ -82,13 +83,25 @@ test('가속으로 상한을 넘긴 분량은 줄지 않고, 그동안 시간 �
   assert.equal(mine.cart, 10, '수확 뒤에는 다시 쌓인다');
 });
 
-test('시계를 뒤로 돌리면 경과 0, anchorAt만 지금으로', () => {
+test('시계를 뒤로 돌리면 쌓인 양은 0, anchorAt은 지금으로(앞뒤로 돌려 계속 채우기 방지)', () => {
   const { mine } = make({ cart: 12 });
+  assert.equal(cartAt(CFG, mine, T0 - 5 * HOUR), 0, '표시도 0');
   settle(CFG, mine, T0 - 5 * HOUR);
-  assert.equal(mine.cart, 12);
+  assert.equal(mine.cart, 0);
   assert.equal(mine.anchorAt, T0 - 5 * HOUR);
   settle(CFG, mine, T0 - 4 * HOUR);
-  assert.equal(mine.cart, 22, '돌린 시각부터 다시 흐른다');
+  assert.equal(mine.cart, 10, '돌린 시각부터 다시 흐른다');
+});
+
+test('시계 +24h -> 수확 -> 되돌림 -> 다시 +24h 를 반복해도 상한 한 번 이상 못 얻는다', () => {
+  const { mine, ctx } = make();
+  assert.equal(harvest(CFG, mine, ctx(T0 + 24 * HOUR)).amount, 80, '앞으로 돌린 건 상한까지 허용');
+  settle(CFG, mine, T0); // 되돌림
+  assert.equal(mine.cart, 0);
+  settle(CFG, mine, T0 + 24 * HOUR); // 다시 앞으로 - 되돌린 시각부터 24시간 = 상한
+  assert.equal(mine.cart, 80);
+  settle(CFG, mine, T0); // 또 되돌림 - 그 80은 사라진다
+  assert.equal(mine.cart, 0);
 });
 
 test('레벨업 직전 정산: 지난 시간은 옛 생산량으로 계산된다', () => {

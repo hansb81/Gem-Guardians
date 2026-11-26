@@ -338,6 +338,26 @@ test('재배치를 3번 연속 해도 가능한 수가 없으면 hp가 가장 �
   assert.equal(board.occupants[lowestIdx], null, '가장 낮은 hp(crate, hp1)가 제거돼야 한다');
 });
 
+test('재배치가 실패하면 연쇄가 없어도 update만으로 다시 섞고, 3번째에 occupant를 없앤다(보드가 멈추지 않음)', () => {
+  // 위와 같은 막힌 보드. 처음 한 번만 _maybeReshuffle을 부르고, 그 뒤로는 update만 돌린다 - 예전엔 여기서 영원히 멈췄다.
+  const board = new Board({ rows: 6, cols: 6, seed: 1 });
+  let lowestIdx = -1;
+  for (let i = 1; i < board.grid.length; i++) {
+    board.grid[i] = OBSTACLE;
+    board.occupants[i] = { type: 'stone', hp: 2 };
+    if (lowestIdx === -1) {
+      board.occupants[i] = { type: 'crate', hp: 1 };
+      lowestIdx = i;
+    }
+  }
+  const state = new GameState({ board, obstaclesConfig: obstaclesConfig({ crate: CRATE, stone: STONE }) });
+
+  state._maybeReshuffle();
+  assert.equal(state._obstacleReshuffleFailures, 1);
+  for (let i = 0; i < 2000 && board.occupants[lowestIdx]; i++) state.update(1 / 60);
+  assert.equal(board.occupants[lowestIdx], null, 'update만으로 3번째 실패까지 가서 crate가 제거돼야 한다');
+});
+
 // ------------------------------------------------------------
 // 확장 구조: 핸들러 없는 가짜 방해요소도 데이터만으로 동작한다
 // ------------------------------------------------------------

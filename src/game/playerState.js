@@ -3,7 +3,8 @@
 // §8 "저장: 최고 층, 현재 층, 골드, 탑 5개 레벨".
 import { storage } from '../platform/storage.js';
 import { towerLevelCost, maxTowerLevelUps, evenTowerLevelUps } from '../core/economy/economy.js';
-import { normalizeShopSave } from '../core/shop/shop.js';
+import { normalizeShopSave, passActive } from '../core/shop/shop.js';
+import { kstDate } from '../core/kst.js';
 import { migrateSave, defaultSkillLevels, SAVE_VERSION } from '../core/inventory/inventory.js';
 import { Inventory } from './inventory.js';
 import { normalizeRanking } from '../ranking/rankingSave.js';
@@ -20,7 +21,7 @@ const LEGACY_KEYS = ['gemGuardians.save.v1'];
 const TOWER_COUNT = 5;
 
 function defaults() {
-  // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {daysLeft, claimedToday}}, freeClaimedDate, day, offers }
+  // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {endDay, claimedDay}}, freeClaimedDate, day, offers }
   // (src/core/shop/shop.js defaultShopSave) - config/shop.json을 읽은 뒤 initShop이 채운다.
   // tutorial = 최초 진입 튜토리얼(docs/tutorial.md) - done이 true가 아니면 1층 진입 때 실행.
   return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1), shop: null, tutorial: { done: false, version: 1 } };
@@ -37,6 +38,9 @@ class PlayerState {
   constructor() {
     let saved = storage.load(STORAGE_KEY);
     for (const key of LEGACY_KEYS) saved ??= storage.load(key);
+    // 세이브 키는 있는데 못 읽음(JSON 깨짐) - 기본값으로 시작하되, 클라우드 저장이 이 빈 진행을 서버에 올리지 않고
+    // 충돌 확인(서버 / 이 기기)을 먼저 띄운다(src/net/cloudSave.js init). 원문은 storage가 '.corrupt' 키에 남긴다.
+    this.loadFailed = saved == null && [STORAGE_KEY, ...LEGACY_KEYS].some((k) => storage.has(k));
     const { inv, saveVersion, ...rest } = migrateSave(saved, Math.floor(Date.now() / 1000)) ?? {};
     Object.assign(this, defaults(), rest);
     if (!Array.isArray(this.towerLevels) || this.towerLevels.length !== TOWER_COUNT) {
@@ -143,14 +147,14 @@ class PlayerState {
   unlockMineVeins(clearedFloor, now) {
     if (!this.mineConfig) return [];
     const wasUnlocked = this.mine.unlocked;
-    const opened = syncUnlocks(this.mineConfig, this.mine, clearedFloor, now, this.hasMonthlyPass());
+    const opened = syncUnlocks(this.mineConfig, this.mine, clearedFloor, now, this.hasMonthlyPass(kstDate(now)));
     if (opened.length > 0 || this.mine.unlocked !== wasUnlocked) this.save();
     return opened;
   }
 
-  // 월간 패스 기간 중(광산 생산 +25% - docs/mine.md 8장).
-  hasMonthlyPass() {
-    return (this.shop?.passes?.monthly?.daysLeft ?? 0) > 0;
+  // 월간 패스 기간 중(광산 생산 +25% - docs/mine.md 8장). 구매 날짜 기준 - today = KST 날짜(서버 날짜가 있으면 호출부가 넘긴다).
+  hasMonthlyPass(today = kstDate(Date.now())) {
+    return passActive(this.shop?.passes?.monthly, today);
   }
 
   isItemUnlocked(id) {

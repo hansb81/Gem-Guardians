@@ -20,7 +20,9 @@ export class Board {
     this.rows = rows;
     this.cols = cols;
     this.typeCount = typeCount;
-    this.rng = rng ?? createRng(seed ?? Date.now());
+    // core는 시계를 읽지 않는다(CLAUDE.md 난수 규칙) - seed나 rng를 꼭 받는다(게임은 main.js가 Date.now()를 seed로 넘긴다).
+    if (rng == null && seed == null) throw new Error('Board: seed 또는 rng가 필요하다');
+    this.rng = rng ?? createRng(seed);
     this.grid = this._generateSolvableGrid();
     this.specials = new Array(this.rows * this.cols).fill(null);
     // 방해요소 레이어(src/core/obstacles/) - occupant는 칸을 차지(잼 없음, grid=OBSTACLE),

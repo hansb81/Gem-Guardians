@@ -186,15 +186,9 @@ const platform = {
   },
 
   storage: {
-    async get(key) {
-      try {
-        return (await Preferences.get({ key })).value;
-      } catch (e) {
-        warn('Preferences.get', e);
-        return null;
-      }
-    },
-    set: (key, value) => Preferences.set({ key, value }).catch((e) => warn('Preferences.set', e)),
+    // get·set 오류는 삼키지 않는다 - 읽기 오류를 '없음'(null)으로 보면 세이브를 지우거나 기본값으로 덮는다(src/platform/storage.js).
+    get: async (key) => (await Preferences.get({ key })).value,
+    set: (key, value) => Preferences.set({ key, value }),
     remove: (key) => Preferences.remove({ key }).catch((e) => warn('Preferences.remove', e)),
   },
 

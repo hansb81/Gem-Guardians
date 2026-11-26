@@ -77,6 +77,27 @@ test('owner 같은 판정은 다시 묻지 않음(pendingVerify 안 남김)', as
   assert.deepEqual(storage.load('pendingVerify'), []);
 });
 
+// iapStrict=false여도 서버가 확정으로 거절한 주문은 지급하지 않는다(감사 14번).
+for (const reason of ['owner', 'refunded', 'invalid']) {
+  test(`iapStrict=false + ${reason} -> 지급 안 함`, async () => {
+    const { calls, onGrant } = setup([{ ok: false, reason }]);
+    assert.equal(await withVerify(onGrant)('dia.0', `d-${reason}`), false);
+    assert.deepEqual(calls.grant, []);
+  });
+}
+
+test('invalid는 일시 판정일 수 있어 pendingVerify에 남기고, 재확인 ok면 그때 지급', async () => {
+  const { calls, onGrant } = setup([{ ok: false, reason: 'invalid' }, { ok: false, reason: 'invalid' }, { ok: true, txId: 'iap:dia.0:i1' }]);
+  const state = {};
+  assert.equal(await withVerify(onGrant, state)('dia.0', 'i1'), false);
+  assert.equal(state.verifying, true);
+  await syncServerIap({ onGrant, onRevoke: () => assert.fail(), grantedTx: () => [] });
+  assert.equal(storage.load('pendingVerify').length, 1, '여전히 invalid면 남겨 둔다');
+  await syncServerIap({ onGrant, onRevoke: () => assert.fail(), grantedTx: () => [] });
+  assert.deepEqual(calls.grant, ['dia.0:i1']);
+  assert.deepEqual(storage.load('pendingVerify'), []);
+});
+
 test('서버 꺼짐 -> verify 없이 바로 지급', async () => {
   const { calls, onGrant } = setup([]);
   net.enabled = false;

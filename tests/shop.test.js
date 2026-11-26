@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { RAILS, buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack, skillLevelCap } from '../src/core/shop/shop.js';
+import { RAILS, buildRail, buyProduct, grantPaidProduct, revokePaidProduct, defaultShopSave, normalizeShopSave, refreshOffers, offerBossPack, rolloverDay, applySkillLevels, hasNewPack, skillLevelCap, passActive, passDaysLeft } from '../src/core/shop/shop.js';
 import { itemPrice, normalFloorReward } from '../src/core/economy/economy.js';
 import { defaultSkillLevels } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
@@ -149,11 +149,36 @@ test('패스: 사면 즉시 다이아, 다음 날부터 하루 한 번 받기', 
   assert.ok(buyProduct(ctx, 'pack.weekly').ok);
   assert.equal(player.diamonds, pass.now);
   assert.equal(buyProduct(ctx, 'pass.weekly').reason, 'sold', '산 날은 못 받는다');
+  const next = ctxOf(player, { today: '2026-11-08' });
   assert.ok(rolloverDay(player.shop, '2026-11-08'));
-  assert.ok(buyProduct(ctx, 'pass.weekly').ok);
+  assert.ok(buyProduct(next, 'pass.weekly').ok);
   assert.equal(player.diamonds, pass.now + pass.daily);
-  assert.equal(player.shop.passes.weekly.daysLeft, pass.days - 1);
-  assert.equal(buyProduct(ctx, 'pass.weekly').reason, 'sold', '하루 한 번');
+  assert.equal(buildRail(next, 'packs').find((e) => e.id === 'pass.weekly').daysLeft, pass.days - 1);
+  assert.equal(buyProduct(next, 'pass.weekly').reason, 'sold', '하루 한 번');
+});
+
+// 2026-11-26 결정: 남은 날은 받기를 누를 때가 아니라 구매 날짜 기준 - 안 받고 지나간 날은 사라진다.
+test('패스: 구매 날짜 기준 - 받기를 안 눌러도 기간이 끝나고, 월간 패스 광산 보너스도 같이 끝난다', () => {
+  const player = makePlayer();
+  assert.ok(buyProduct(ctxOf(player), 'pack.monthly').ok); // 2026-11-07 구매, 30일
+  const on = (day) => ctxOf(player, { today: day });
+  const left = (day) => buildRail(on(day), 'packs').find((e) => e.id === 'pass.monthly')?.daysLeft ?? 0;
+  assert.equal(left('2026-11-07'), 30);
+  assert.equal(left('2026-11-17'), 21, '10일 동안 안 받아도 줄어든다(오늘 받기 포함 11-17~12-07)');
+  assert.equal(left('2026-12-07'), 1, '마지막 날');
+  assert.equal(left('2026-12-08'), 0, '끝 - 다시 살 수 있다');
+  assert.ok(buildRail(on('2026-12-08'), 'packs').some((e) => e.id === 'pack.monthly'));
+  assert.equal(passActive(player.shop.passes.monthly, '2026-12-07'), true);
+  assert.equal(passActive(player.shop.passes.monthly, '2026-12-08'), false);
+});
+
+test('패스: 예전 저장 { daysLeft, claimedToday }는 마지막으로 상점을 연 날 기준으로 옮긴다', () => {
+  const s = normalizeShopSave({ day: '2026-11-10', passes: { weekly: { daysLeft: 3, claimedToday: true }, monthly: { daysLeft: 2, claimedToday: false } } }, SHOP);
+  assert.deepEqual(s.passes.weekly, { endDay: '2026-11-13', claimedDay: '2026-11-10' }, '오늘 받음 -> 내일부터 3번');
+  assert.deepEqual(s.passes.monthly, { endDay: '2026-11-11', claimedDay: null }, '오늘 안 받음 -> 오늘 포함 2번');
+  assert.equal(passDaysLeft(s.passes.weekly, '2026-11-10'), 3);
+  assert.equal(passDaysLeft(s.passes.monthly, '2026-11-10'), 2);
+  assert.deepEqual(normalizeShopSave(s, SHOP).passes, s.passes, '두 번 돌려도 같다');
 });
 
 test('오늘의 무료 1개는 하루 한 번', () => {
@@ -197,7 +222,7 @@ test('applySkillLevels: Lv 1이면 skills.json 그대로(특수 기술 잠금만
 test('normalizeShopSave: 빠진 키만 채운다(젬 스킬 레벨은 inventory로 옮겨서 shop엔 없음)', () => {
   const s = normalizeShopSave({ skillLv: { red: 3 }, purchasedOnce: ['pack.adfree'] }, SHOP);
   assert.equal(s.skillLv, undefined);
-  assert.deepEqual(s.passes.monthly, { daysLeft: 0, claimedToday: false });
+  assert.deepEqual(s.passes.monthly, { endDay: null, claimedDay: null });
   assert.deepEqual(s.purchasedOnce, ['pack.adfree']);
 });
 
@@ -272,7 +297,7 @@ test('products.json: 현금 상품 = 상점 krw 상품과 1:1, 지급은 txId ia
 test('canSell: 못 파는 현금 상품은 목록·구매에서 빠지고, 이미 산 패스 받기는 남는다', () => {
   const player = makePlayer({ bestFloor: 6 });
   player.shop.offers.starter = NOW + 1000;
-  player.shop.passes.weekly = { daysLeft: 3, claimedToday: false };
+  player.shop.passes.weekly = { endDay: '2026-11-09', claimedDay: null }; // TODAY(11-07) 포함 3번
   const ctx = ctxOf(player, { canSell: () => false });
   const packs = buildRail(ctx, 'packs').filter((e) => e.id);
   assert.deepEqual(packs.map((e) => e.id), ['pass.weekly']);

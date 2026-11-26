@@ -8,7 +8,7 @@ import { storage } from '../src/platform/storage.js';
 
 const SERVER_DATA = { saveVersion: 3, gold: 9, diamonds: 1240, floor: 37, bestFloor: 37, towerLevels: [30, 30, 30, 30, 22] };
 
-function setup({ meta = null, on = true, enabled = true, put = null } = {}) {
+function setup({ meta = null, on = true, enabled = true, put = null, loadFailed = false } = {}) {
   const store = new Map();
   if (meta) store.set('cloudMeta', meta);
   const fakeStorage = {
@@ -31,6 +31,7 @@ function setup({ meta = null, on = true, enabled = true, put = null } = {}) {
   const player = {
     onSaved: null,
     saveBlocked: false,
+    loadFailed,
     snapshot: () => ({ saveVersion: 3, bestFloor: 5, diamonds: 10, towerLevels: [1, 1, 1, 1, 1] }),
     save() {
       if (!this.saveBlocked) this.onSaved?.();
@@ -79,6 +80,14 @@ test('시작 판정: owner 다름 + 서버 save 있음 -> conflict(이 계정 / 
   await s.cs.applyConflictServer();
   assert.equal(s.store.get('cloudMeta').owner, 'me');
   assert.equal(s.reloads.length, 1);
+});
+
+// 기기 세이브가 깨져 기본값으로 시작 - S == L + dirty라도 빈 진행을 그냥 올리면 서버 진행이 덮인다(감사 2번).
+test('시작 판정: 기기 세이브 읽기 실패(loadFailed) -> S == L이어도 put 없이 conflict', async () => {
+  const s = setup({ meta: { owner: 'me', rev: 7, dirty: true }, loadFailed: true });
+  const r = await s.cs.syncOnStart({ rev: 7, updatedAt: 1, deviceId: 'x' });
+  assert.equal(r.action, 'conflict');
+  assert.equal(s.puts().length, 0);
 });
 
 for (const dirty of [false, true]) {

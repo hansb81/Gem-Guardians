@@ -93,7 +93,7 @@ export function cellsOfColor(board, color) {
 }
 
 // 보드에서 가장 많이 남은 색을 찾는다(동률이면 색 인덱스가 작은 쪽). 색이 전혀 없으면 null.
-export function mostCommonColor(board) {
+function mostCommonColor(board) {
   const counts = new Map();
   for (const value of board.grid) {
     if (value < 0) continue; // EMPTY, COLORLESS 제외
@@ -116,7 +116,7 @@ export function rowCells(board, row) {
   return cells;
 }
 
-export function columnCells(board, col) {
+function columnCells(board, col) {
   const cells = [];
   for (let r = 0; r < board.rows; r++) cells.push({ row: r, col });
   return cells;

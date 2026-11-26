@@ -12,8 +12,9 @@ import { ITEM_CAP } from '../core/inventory/inventory.js';
 import {
   veinRate, veinCost, maxVeinLevel, nextMaxLevelFloor, capHours, ratePerHour, capacity, cartAt, hoursToFull, cartState, settle, rolloverDay,
   harvest, upgradeVein, upgradeStorage, buyBigStorage, refineGold, refineItem, boost, nextGoldCost, pouchGold, upgradeBlocksGold,
-  goldNeedsConfirm, dailyLeft, boostAmount, syncUnlocks, kstDate, hasBadge, refineStone, nextStoneCost, stoneNeedsConfirm,
+  goldNeedsConfirm, dailyLeft, boostAmount, syncUnlocks, hasBadge, refineStone, nextStoneCost, stoneNeedsConfirm,
 } from '../core/mine/mine.js';
+import { kstDate } from '../core/kst.js';
 
 const NATIVE_W = 180;
 const NATIVE_H = 320;
@@ -134,9 +135,9 @@ export class MineScreen {
     const c = this._ctxObj;
     const p = this.env.player;
     c.now = Date.now() + this.devOffsetMs;
-    c.pass = p.hasMonthlyPass();
     c.bestFloor = p.bestFloor;
     c.today = this.env.serverToday?.() ?? (this.devOffsetMs ? kstDate(c.now) : null);
+    c.pass = p.hasMonthlyPass(c.today ?? kstDate(c.now));
     c.inventory = p.inventory;
     return c;
   }

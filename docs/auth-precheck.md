@@ -70,7 +70,7 @@
 | `log` | `{t, src, d, tx?}`[] | `LOG_MAX` = **50**(normalizeInv·_commit 둘 다 자름) |
 | `seenItems` | 문자열[] | 아이템 종류 수 |
 
-**shop** (src/core/shop/shop.js `defaultShopSave`, `skillLv`는 저장에서 빠짐): `purchasedOnce[]`(1회 상품 id), `firstBuyUsed[]`(다이아 묶음 index ≤ 6), `passes{weekly,monthly:{daysLeft, claimedToday}}`, `freeClaimedDate`, `day`, `offers{starter: ms, boss:{floor, expiresAt}}`. 계속 늘어나는 필드는 없다. `purchasedOnce`는 `pack.boss.{층}`까지 쳐도 몇십 개다.
+**shop** (src/core/shop/shop.js `defaultShopSave`, `skillLv`는 저장에서 빠짐): `purchasedOnce[]`(1회 상품 id), `firstBuyUsed[]`(다이아 묶음 index ≤ 6), `passes{weekly,monthly:{endDay, claimedDay}}`(구매 날짜 기준, 2026-11-26), `freeClaimedDate`, `day`, `offers{starter: ms, boss:{floor, expiresAt}}`. 계속 늘어나는 필드는 없다. `purchasedOnce`는 `pack.boss.{층}`까지 쳐도 몇십 개다.
 
 **ranking** (src/ranking/rankingSave.js): `profile{playerId, nickname, statue}`, `normal{bestFloor, reachedAt}`, `comp{seasonId, best{points, floor, at}, runs, pending|null, history[]}`, `lastTab`. `history`는 normalizeRanking에서 `slice(0, 8)`로 **최대 8**이다(config/ranking.json historyMax 8과 같음).
 

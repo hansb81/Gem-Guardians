@@ -60,7 +60,7 @@ function pickWeighted(rng, items) {
 
 // 보스 HP 층 배율(floorShape.bossMul). 그 층 키가 있으면 그 값. 101층부터 키가 없으면 보스 순서가 10층마다 같은 자리로
 // 다시 돌므로 1~100층의 같은 자리 값(((f-1) % 100) + 1) x cycleMul, 그 키도 없으면 1.0 x cycleMul. 1~100층에서 키가 없으면 1.0.
-export const BOSS_CYCLE_FLOORS = 100; // floors.json 범위 = 보스 10종 x 10층 한 바퀴
+const BOSS_CYCLE_FLOORS = 100; // floors.json 범위 = 보스 10종 x 10층 한 바퀴
 export function bossHpMulAt(B, f) {
   const m = B.floorShape.bossMul;
   const t = m.hpMulByFloor ?? {};

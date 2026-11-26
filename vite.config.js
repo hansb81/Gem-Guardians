@@ -12,7 +12,11 @@ function copyRuntimeFiles(platform) {
     name: 'copy-runtime-files',
     apply: 'build',
     writeBundle({ dir }) {
-      cpSync('assets', `${dir}/assets`, { recursive: true });
+      // 빼는 것: 작업용 문서(*.md), 폰트 woff2(style.css가 import해서 vite가 _app/에 이미 넣음 - OFL 라이선스 txt는 남긴다),
+      // Android 빌드의 mp3(WebView가 ogg를 재생 - AudioManager는 ogg를 못 열 때만 mp3. iOS·토스·웹은 mp3가 필요).
+      const android = platform === 'android' || platform === 'onestore';
+      const skip = (src) => src.endsWith('.md') || (/[\\/]fonts[\\/]/.test(src) && src.endsWith('.woff2')) || (android && src.endsWith('.mp3'));
+      cpSync('assets', `${dir}/assets`, { recursive: true, filter: (src) => !skip(src) });
       cpSync('config', `${dir}/config`, { recursive: true });
       for (const f of readdirSync('src/config')) if (f.endsWith('.json')) cpSync(`src/config/${f}`, `${dir}/src/config/${f}`);
       // 어느 마켓용 JS인지 표시 - Android flavor(play/onestore)가 빌드 전에 자기 이름과 맞는지 본다(android/app/build.gradle).

@@ -16,6 +16,7 @@ import { productText, gotText, fmt } from './shopText.js';
 import { rewardFromDelta } from './rewardPopup.js';
 import { drawImageSnapped, screen } from './screenFit.js';
 import { GAME_INFO } from '../config/gameInfo.js';
+import { kstDate } from '../core/kst.js';
 
 // 획득 팝업으로 알리는 상품(나머지는 토스트) - docs/inventory.md 5-2.
 const REWARD_KINDS = new Set(['pack', 'passClaim', 'free']);
@@ -77,11 +78,6 @@ function withdrawLines(p, packs) {
   return [[key, C.redL]];
 }
 
-function localDay(ms) {
-  const d = new Date(ms);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
 function hms(ms) {
   const s = Math.max(0, Math.floor(ms / 1000));
   return [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map((v) => String(v).padStart(2, '0')).join(':');
@@ -89,7 +85,7 @@ function hms(ms) {
 
 export class ShopScreen {
   constructor() {
-    this.env = null; // { cfg, itemsConfig, data, player, save(), itemIcons() } - main.js가 데이터 로드 후 setEnv.
+    this.env = null; // { cfg, itemsConfig, data, player, save(), itemIcons(), serverToday() } - main.js가 데이터 로드 후 setEnv.
     this.rail = 'items';
     this.rails = RAILS; // open()이 마켓에 맞게 줄인다.
     this.scroll = 0;
@@ -144,7 +140,9 @@ export class ShopScreen {
     const { cfg, itemsConfig, data, player } = this.env;
     // 현금 상품: 결제가 되는 마켓이고 그 마켓 상품 id가 등록된 것만. dev 가짜 결제 중엔 전부.
     const canSell = (key) => platform.caps.iap && (platform.dev || !!cfg.products[key]?.ids?.[platform.id]);
-    return { cfg, itemsConfig, data, player, now, today: localDay(now), canSell };
+    // 하루 기준(무료·패스·정령석 하루 1번) = KST, 서버 날짜(출석 상태)가 있으면 그것 - 광산·출석과 같은 날.
+    const today = this.env.serverToday?.() ?? kstDate(now);
+    return { cfg, itemsConfig, data, player, now, today, canSell };
   }
 
   _rebuild() {

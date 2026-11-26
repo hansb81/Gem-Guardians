@@ -11,6 +11,7 @@
 //          (docs/inventory.md 3장 - 주입된 객체 호출이라 core 규칙(브라우저 API 금지)과 무관).
 import { itemPrice, normalFloorReward } from '../economy/economy.js';
 import { defaultSkillLevels } from '../inventory/inventory.js';
+import { addDays, daysBetween } from '../kst.js';
 
 export const RAILS = ['items', 'skills', 'packs', 'dia']; // 정령 도감은 정비 팝업 정령 탭으로 옮김(docs/spirits.md 7장)
 const HOUR_MS = 3600 * 1000;
@@ -24,7 +25,7 @@ function passIds(cfg) {
 export function defaultShopSave(cfg) {
   const skillLv = defaultSkillLevels(cfg.skills);
   const passes = {};
-  for (const id of passIds(cfg)) passes[id] = { daysLeft: 0, claimedToday: false };
+  for (const id of passIds(cfg)) passes[id] = { endDay: null, claimedDay: null };
   // day = 마지막으로 날짜 갱신을 한 날, offers = 기간 한정 노출 { starter: 만료ms, boss: { floor, expiresAt } }.
   return { purchasedOnce: [], firstBuyUsed: [], passes, skillLv, freeClaimedDate: null, day: null, offers: {} };
 }
@@ -36,19 +37,33 @@ export function normalizeShopSave(saved, cfg) {
   const { skillLv, ...rest } = saved; // v1 잔여 필드는 마이그레이션(migrateSave)이 inv로 옮긴다.
   const out = { ...def, ...rest };
   out.passes = { ...def.passes };
-  for (const id of Object.keys(def.passes)) out.passes[id] = { ...def.passes[id], ...saved.passes?.[id] };
+  for (const id of Object.keys(def.passes)) out.passes[id] = migratePass(saved.passes?.[id], saved.day) ?? { ...def.passes[id] };
   out.offers = { ...saved.offers };
   if (!Array.isArray(out.purchasedOnce)) out.purchasedOnce = [];
   if (!Array.isArray(out.firstBuyUsed)) out.firstBuyUsed = [];
   return out;
 }
 
-// 날짜가 바뀌면 패스 "오늘 받음"을 푼다. 바뀌었으면 true(저장 필요).
-// shortcut: 못 받은 날은 사라지지 않고 daysLeft가 그대로 남는다(받을 때만 줄어듦) - 놓친 날을 깎아야 하면 경과 일수를 빼면 된다.
+// 패스 = { endDay, claimedDay } - 구매 날짜 기준(2026-11-26 결정): 산 날 + days일까지, 못 받은 날은 사라진다.
+// 산 날은 받은 것으로 친다(매일 받기는 다음 날부터). 날짜는 전부 KST 'YYYY-MM-DD'(ctx.today).
+// 예전 저장 { daysLeft, claimedToday }(받을 때만 줄던 방식)은 마지막으로 상점을 연 날(shop.day) 기준으로 옮긴다.
+function migratePass(p, lastDay) {
+  if (!p || typeof p !== 'object') return null;
+  if ('endDay' in p) return { endDay: p.endDay ?? null, claimedDay: p.claimedDay ?? null };
+  if (!(p.daysLeft > 0) || !lastDay) return { endDay: null, claimedDay: null };
+  return { endDay: addDays(lastDay, p.daysLeft - (p.claimedToday ? 0 : 1)), claimedDay: p.claimedToday ? lastDay : null };
+}
+
+// 패스 기간 중인가(오늘 <= 끝나는 날) - 광산 생산 보너스(월간)도 이것.
+export const passActive = (pass, today) => !!pass?.endDay && today <= pass.endDay;
+// 오늘 포함 남은 받기 횟수(오늘 이미 받았으면 오늘 뺌). 0 = 끝남(다시 살 수 있음).
+export const passDaysLeft = (pass, today) =>
+  passActive(pass, today) ? daysBetween(today, pass.endDay) + (pass.claimedDay === today ? 0 : 1) : 0;
+
+// 상점을 연 날 기록(예전 저장 마이그레이션 기준일). 바뀌었으면 true(저장 필요).
 export function rolloverDay(shop, today) {
   if (shop.day === today) return false;
   shop.day = today;
-  for (const pass of Object.values(shop.passes)) if (pass.daysLeft > 0) pass.claimedToday = false;
   return true;
 }
 
@@ -159,7 +174,7 @@ function railPacks(ctx) {
   for (const id of cfg.packs.order) {
     const p = cfg.packs[id];
     const base = { id: `pack.${id}`, kind: 'pack', pack: id, cur: 'krw', price: cfg.products[`pack.${id}`].priceKRW, state: '' };
-    if (ctx.canSell && !ctx.canSell(base.id) && !(p.pass && shop.passes[id].daysLeft > 0)) continue;
+    if (ctx.canSell && !ctx.canSell(base.id) && !(p.pass && passDaysLeft(shop.passes[id], ctx.today) > 0)) continue;
     if (id === 'starter') {
       const exp = shop.offers.starter;
       if (player.bestFloor >= p.minBestFloor && !bought('pack.starter') && exp != null && now < exp) out.push({ ...base, expiresAt: exp, onceKey: 'pack.starter' });
@@ -168,7 +183,8 @@ function railPacks(ctx) {
       if (offer && now < offer.expiresAt && !bought(`pack.boss.${offer.floor}`)) out.push({ ...base, expiresAt: offer.expiresAt, bossFloor: offer.floor, onceKey: `pack.boss.${offer.floor}` });
     } else if (p.pass) {
       const pass = shop.passes[id];
-      if (pass.daysLeft > 0) out.push({ id: `pass.${id}`, kind: 'passClaim', pack: id, cur: 'claim', daysLeft: pass.daysLeft, state: pass.claimedToday ? 'sold' : '' });
+      const daysLeft = passDaysLeft(pass, ctx.today);
+      if (daysLeft > 0) out.push({ id: `pass.${id}`, kind: 'passClaim', pack: id, cur: 'claim', daysLeft, state: pass.claimedDay === ctx.today ? 'sold' : '' });
       else out.push(base);
     } else if (id === 'slot4') {
       if (player.bestFloor <= p.maxBestFloor && !player.inventory.isUnlocked('slot4') && !bought('pack.slot4')) out.push({ ...base, onceKey: 'pack.slot4' });
@@ -222,7 +238,7 @@ export function hasNewPack(ctx) {
   return railPacks(ctx).some((p) => p.banner);
 }
 
-export function findProduct(ctx, id) {
+function findProduct(ctx, id) {
   for (const rail of RAILS) {
     const p = buildRail(ctx, rail).find((e) => e.id === id);
     if (p) return p;
@@ -281,7 +297,7 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       const pk = cfg.packs[p.pack];
       giveBundle(cfg.products[p.id].grant);
       after = () => {
-        if (pk.pass) shop.passes[p.pack] = { daysLeft: pk.pass.days, claimedToday: true }; // 매일 받기는 다음 날부터.
+        if (pk.pass) shop.passes[p.pack] = { endDay: addDays(today, pk.pass.days), claimedDay: today }; // 매일 받기는 다음 날부터.
         if (p.onceKey) shop.purchasedOnce.push(p.onceKey);
       };
       break;
@@ -293,8 +309,7 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       src = 'pass';
       tx = `pass:${p.pack}:${today}`;
       after = () => {
-        shop.passes[p.pack].daysLeft -= 1;
-        shop.passes[p.pack].claimedToday = true;
+        shop.passes[p.pack].claimedDay = today;
       };
       break;
     }

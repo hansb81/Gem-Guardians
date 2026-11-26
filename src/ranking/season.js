@@ -1,9 +1,10 @@
 // 경쟁 모드 시즌(docs/ranking.md 5-1). 순수 계산 - 시각(ms)은 호출부가 넘긴다.
 // 시즌 = 매주 resetDay(1=월) resetHourKst시 KST에 시작. 한국은 서머타임이 없어 UTC+9 고정.
 // id = 그 시작 시각을 "월요일 00:00"으로 옮겨 잰 ISO 주차(목요일이 속한 해) - 기본값이면 KST 달력의 ISO 주차 그대로.
+import { KST_OFFSET_MS } from '../core/kst.js';
+
 const HOUR = 3600e3;
 const DAY = 24 * HOUR;
-export const KST_OFFSET_MS = 9 * HOUR;
 
 // 기본 시각(월 00:00)에서 실제 초기화 시각까지의 차이.
 const shiftOf = (cfg = {}) => (((cfg.resetDay ?? 1) + 6) % 7) * DAY + (cfg.resetHourKst ?? 0) * HOUR;

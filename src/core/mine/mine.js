@@ -4,15 +4,14 @@
 //   now = 지금(ms) | pass = 월간 패스 보유 | bestFloor = 최고 층 | today = 서버 날짜 'YYYY-MM-DD'(있으면 우선)
 //   R = 기준 층 보상(economy.normalFloorReward) | inventory = src/game/inventory.js(지급·다이아 차감)
 import { ITEM_CAP } from '../inventory/inventory.js';
+import { kstDate } from '../kst.js';
 
 const HOUR_MS = 3600e3;
-const KST_OFFSET_MS = 9 * HOUR_MS;
 const OK = Object.freeze({ ok: true, reason: null });
 const fail = (reason) => ({ ok: false, reason });
 const num = (v, d = 0) => (Number.isFinite(v) && v >= 0 ? v : d);
 
 // 하루 제한의 날짜 키(KST). 서버 날짜를 받았으면 그것이 우선.
-export const kstDate = (ms) => new Date(ms + KST_OFFSET_MS).toISOString().slice(0, 10);
 const dayOf = (ctx) => ctx.today ?? kstDate(ctx.now);
 
 const newDaily = () => ({ gold: 0, items: 0, ads: 0, diaBoost: 0, stones: 0 });
@@ -67,6 +66,8 @@ export const capacity = (cfg, mine, pass = false) => capHours(cfg, mine) * rateP
 export function cartAt(cfg, mine, now, pass = false) {
   const cap = capacity(cfg, mine, pass);
   const dt = now - mine.anchorAt;
+  // 시계를 뒤로 돌림: 쌓인 양을 0으로(앞뒤로 돌려 수레를 계속 채우는 것 방지). 앞으로 돌리는 건 상한까지만이라 허용.
+  if (dt < 0) return 0;
   if (mine.cart >= cap || !(dt > 0)) return mine.cart; // 가속으로 상한을 넘긴 분량은 줄지도 늘지도 않는다(15-2 #5)
   return Math.min(mine.cart + (dt / HOUR_MS) * ratePerHour(cfg, mine, pass), cap);
 }
@@ -86,7 +87,7 @@ export function cartState(cfg, mine, now, pass = false) {
 }
 
 // ---------- 시간(6장 + 15-2 #5) ----------
-// 수레 정산. 시계를 뒤로 돌렸으면(now < anchorAt) 경과 0, anchorAt만 now로.
+// 수레 정산. 시계를 뒤로 돌렸으면(now < anchorAt) 수레 = 0, anchorAt = now(그때부터 다시 쌓임).
 // 레벨업·창고 강화·수확·가속·광맥 해금 직전에 항상 먼저 부른다(과거 시간이 새 생산량으로 계산되지 않게).
 export function settle(cfg, mine, now, pass = false) {
   if (!mine.unlocked) return;

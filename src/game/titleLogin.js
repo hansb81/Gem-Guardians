@@ -1,7 +1,7 @@
 // 타이틀 로그인 입구(docs/auth.md §15): 화면 종류 판정 + 서버 준비를 기다린 뒤 Account.link. 그리기는 render/titleScreen.js.
 import { isEmptyGuest } from '../net/account.js';
 
-export const TITLE_WAIT_MS = 8000; // 서버 연결(initNet·hello)을 기다리는 최대 시간 - 넘으면 오프라인 문구
+const TITLE_WAIT_MS = 8000; // 서버 연결(initNet·hello)을 기다리는 최대 시간 - 넘으면 오프라인 문구
 
 // null(기본 "터치하여 시작") | 'first'(버튼 두 개) | 'guest'(글자 버튼) | 'linked'(이메일 한 줄).
 // loginOn = 서버 켜짐 + Google 로그인 수단(caps.login). ready = 서버 시작 처리(hello·리다이렉트) 끝.

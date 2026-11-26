@@ -70,6 +70,8 @@ export function createCloudSave() {
       deps = { playerState, storage, net, call, reload, deviceId, appVersion, now };
       if (!net.enabled) return; // 서버 꺼짐 = 지금 동작 그대로(cloudMeta도 안 씀)
       meta = { owner: null, rev: 0, dirty: false, syncedAt: 0, lastUploadAt: 0, ...storage.load(META_KEY) };
+      // 기기 세이브가 깨져 기본값으로 시작함 - 주인을 모르는 기기로 보고(owner 다름) 서버 save가 있으면 덮지 않고 충돌 확인부터.
+      if (playerState.loadFailed) meta.owner = null;
       base = meta.rev;
       // 오프라인 세션도 dirty를 남겨야 다음 시작 때 서버 save가 이 진행을 덮지 않는다 -> net.on과 상관없이.
       playerState.onSaved = api.markDirty;

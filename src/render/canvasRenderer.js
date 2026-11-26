@@ -39,6 +39,30 @@ const STAMP_FALL_MS = 130; // 도장이 내려꽂히는 시간(이후 = 닿음)
 // 다른 길이)일 수 있다(README 참고). loop가 아닌데 ageMs가 전체 길이를 넘으면 -1(끝남).
 // audioCues는 at(ms) 오름차순이어야 _advanceAndDrawSpecialFx가 앞에서부터 하나씩 꺼내 쓸 수 있다
 // (affected 칸 순서는 거리순이 아니다).
+// 색마다 한 번 구운 둥근 빛(가운데 45%는 진하고 바깥으로 투명) - shadowBlur 대신 drawImage 한 번(모바일 GPU에서 blur는 매 프레임 비쌈).
+// 흰 그라디언트를 그린 뒤 source-in으로 색을 입혀, 어떤 색이든 가장자리가 검게 끼지 않는다.
+const GLOW_PX = 64;
+const glowCache = new Map();
+function glowSprite(color) {
+  let c = glowCache.get(color);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = c.height = GLOW_PX;
+  const g = c.getContext('2d');
+  const half = GLOW_PX / 2;
+  const grad = g.createRadialGradient(half, half, 0, half, half, half);
+  grad.addColorStop(0, 'rgba(255,255,255,0.9)');
+  grad.addColorStop(0.45, 'rgba(255,255,255,0.6)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, GLOW_PX, GLOW_PX);
+  g.globalCompositeOperation = 'source-in';
+  g.fillStyle = color;
+  g.fillRect(0, 0, GLOW_PX, GLOW_PX);
+  glowCache.set(color, c);
+  return c;
+}
+
 function sortCues(cues) {
   return cues.sort((a, b) => a.at - b.at);
 }
@@ -997,13 +1021,27 @@ export class CanvasRenderer {
     // 호출이 끝나면(ctx.restore()) 자동으로 원복된다.
     ctx.imageSmoothingEnabled = this.assets?.gemImageSmoothing ?? false;
 
+    // 발동 대기·힌트 빛: shadowBlur(모바일에서 매 프레임 비쌈) 대신 색마다 구워 둔 둥근 빛을 잼 뒤에 깐다.
+    // 세기 = 크기와 투명도(예전 blur 반경 = cellSize * 비율 * 세기와 같은 범위).
+    let glowColor = null;
+    let glowStrength = 0;
+    let glowRatio = 0;
     if (armedGlowColor) {
-      ctx.shadowColor = armedGlowColor;
-      ctx.shadowBlur = cellSize * 0.5 * armedGlowStrength;
+      glowColor = armedGlowColor;
+      glowStrength = armedGlowStrength;
+      glowRatio = 0.5;
     } else if (isHint) {
-      const { color, blurRatio } = HINT_CONFIG.glow;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = cellSize * blurRatio * Math.max(0, hintWave);
+      glowColor = HINT_CONFIG.glow.color;
+      glowStrength = Math.max(0, hintWave);
+      glowRatio = HINT_CONFIG.glow.blurRatio;
+    }
+    if (glowColor && glowStrength > 0) {
+      const r = cellSize * (0.5 + glowRatio * glowStrength);
+      ctx.globalAlpha = opacity * idleAlpha * Math.min(1, glowStrength);
+      ctx.imageSmoothingEnabled = true; // 빛은 부드럽게(잼 픽셀아트만 스무딩 끔)
+      ctx.drawImage(glowSprite(glowColor), cx - r, cy - r, r * 2, r * 2);
+      ctx.imageSmoothingEnabled = this.assets?.gemImageSmoothing ?? false;
+      ctx.globalAlpha = opacity * idleAlpha;
     }
 
     if (special?.kind === 'color') {
@@ -1954,9 +1992,11 @@ export class CanvasRenderer {
       const cx = rect.x + (effect.col + 0.5) * cellSize;
       const cy = rect.y + (effect.row + 0.5) * cellSize;
       const color = effect.color ?? '#ffffff';
+      // 바깥 번짐 = 구워 둔 빛(shadowBlur 대신), 가운데 = 원.
+      const r = cellSize * 0.92;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(glowSprite(color), cx - r, cy - r, r * 2, r * 2);
       ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = cellSize * 0.5;
       ctx.beginPath();
       ctx.arc(cx, cy, cellSize * 0.42, 0, Math.PI * 2);
       ctx.fill();
@@ -2421,11 +2461,12 @@ export class CanvasRenderer {
       const y = sy + (target.y - sy) * t;
       const color = this._gemHexColor(beam.color);
 
+      // 번짐은 구워 둔 빛(연쇄 때 수십 개가 한꺼번에 떠서 shadowBlur는 비쌈), 가운데는 원.
       ctx.save();
       ctx.globalAlpha = 1 - t * 0.3;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(glowSprite(color), x - 15, y - 15, 30, 30);
       ctx.fillStyle = color;
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 10;
       ctx.beginPath();
       ctx.arc(x, y, 5, 0, Math.PI * 2);
       ctx.fill();

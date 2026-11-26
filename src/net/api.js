@@ -86,7 +86,12 @@ export async function initNet(config, { override = null, legacyId = '', appVersi
     client = createClient(config.url, config.anonKey, {
       auth: {
         storageKey: 'gemGuardians.auth',
-        storage: { getItem: (k) => store.get(k), setItem: (k, v) => store.set(k, v), removeItem: (k) => store.remove(k) },
+        // 어댑터 get·set은 오류를 던진다(세이브용) - 로그인 세션은 예전처럼 실패하면 없음으로.
+        storage: {
+          getItem: (k) => store.get(k).catch((e) => (console.warn('[net] storage.get', e), null)),
+          setItem: (k, v) => store.set(k, v).catch((e) => console.warn('[net] storage.set', e)),
+          removeItem: (k) => store.remove(k),
+        },
         persistSession: true,
         autoRefreshToken: true,
         // 웹(dev 포함)만 Google 리다이렉트(PKCE ?code=)를 돌아와서 처리한다(docs/auth.md §5-5). 앱 빌드는 ID 토큰 방식이라 그대로.

@@ -16,6 +16,10 @@ const storeName = () => STORE[PLATFORM_ID] ?? (platform.dev ? 'dev' : null);
 // 다시 물어볼 실패(연결·반영 지연·서버 오류). owner·refunded·notImplemented 같은 판정은 다시 묻지 않는다.
 const RETRY = new Set(['offline', 'notFound', 'rateLimited', 'error', 'auth']);
 const retryable = (reason) => RETRY.has(reason) || /^http5/.test(reason ?? '');
+// 서버가 확정으로 거절 - iapStrict와 상관없이 지급하지 않는다. invalid는 일시 판정일 수 있어(원스토어 환경 착오 등,
+// server iap_record) pendingVerify에 남겨 다음 시작 때 다시 묻는다. owner·refunded는 다시 묻지 않는다.
+const DENY = new Set(['owner', 'refunded', 'invalid']);
+const recheck = (reason) => retryable(reason) || reason === 'invalid';
 
 // [{ store, productKey, orderId, bundle, granted }] - granted = 이 기기에서 이미 지급함(iapStrict false). 그런 항목은 재확인 때
 // 서버 기록만 하고 다시 주지 않는다: 계정 삭제·계정 전환으로 save가 바뀌면 grantedTx가 비어 txId 중복 방지가 안 걸린다(docs/auth.md §14).
@@ -41,11 +45,13 @@ export function withVerify(onGrant, state = {}) {
       return got;
     }
     // v1(iapStrict=false): 손님이 돈 내고 못 받는 게 최악 - 지급하고 기록만(§7). 준 bundle은 재확인 때 서버로.
-    const strict = feature('iapStrict');
-    const got = strict ? false : await onGrant(productKey, orderId);
+    // 확정 거절(owner·refunded·invalid)은 strict가 아니어도 지급하지 않는다.
+    const hold = feature('iapStrict') || DENY.has(v.reason);
+    const got = hold ? false : await onGrant(productKey, orderId);
     const entry = { store, productKey, orderId, bundle: got?.delta ?? null, granted: !!got };
-    if (retryable(v.reason) && !pendings().some((p) => same(p, entry))) await savePendings([...pendings(), entry]);
-    if (strict) state.verifying = true;
+    const again = recheck(v.reason);
+    if (again && !pendings().some((p) => same(p, entry))) await savePendings([...pendings(), entry]);
+    if (hold && again) state.verifying = true;
     return got;
   };
 }
@@ -108,7 +114,7 @@ export async function syncServerIap({ onGrant, onRevoke, grantedTx }) {
   }
   for (const p of pendings()) {
     const v = await IapService.verify(p.store, p.productKey, p.orderId, { retryMs: 0 });
-    if (retryable(v.reason)) continue;
+    if (recheck(v.reason)) continue;
     if (v.ok) {
       if (alreadyGranted(p)) {
         IapService.granted(v.txId, p.bundle ?? null); // 이 기기에서 이미 줌 - 서버 기록만(지금 save가 다른 계정 것이어도 다시 안 줌)
