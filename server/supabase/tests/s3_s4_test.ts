@@ -161,6 +161,7 @@ Deno.test("구간 계산: TS tierOf == SQL comp_tier, 참여 구간 골드 배�
   }
   assertEquals(pctOf(7, 100), 7);
   assert(compScoreOk(5000, 3, 600) && !compScoreOk(5000, 10, 10) && !compScoreOk(10_000_000, 3, 600));
+  assert(compScoreOk(5000, 10, 180) && !compScoreOk(5000, 10, 179), "웨이브당 20초");
   assert(compScoreOk(compMaxPoints(17), 17, 600) && !compScoreOk(compMaxPoints(17) + 1, 17, 600));
   assert(compMaxPoints(300) - compMaxPoints(299) === compMaxPoints(200) - compMaxPoints(199)); // 표 밖은 마지막 칸 차이로
 });

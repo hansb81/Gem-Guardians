@@ -315,6 +315,7 @@ AdMob 콘솔 → 앱 → 광고 단위(보상형) → 서버 측 확인 → URL 
 
 - 값진 보상(다이아·부활): **AdMob 서버 측 확인(SSV)** — 광고 요청에 `custom_data = /ad/nonce 값`, `user_id = 플레이어 id`를 넣으면 Google이 우리 `webhook/admob-ssv`를 서명과 함께 호출 → 확인 후 `ad/claim`이 보상.
 - 싼 보상(골드 소량, 쿨다운 줄이기): 기기 판정 + 서버 없이 하루 한도만. 서버 부담·지연을 줄임.
+- **결정(2026-11-27 쑹): 출시는 서버 확인 없이 간다.** 지금 보상형 위치(이어하기·상점 오늘의 무료)는 전부 기기 판정이고 광고로 다이아를 주는 곳이 없다 - `AD_PLACEMENTS`는 비워 두고 AdMob 콘솔 SSV URL도 등록하지 않는다. 광고로 다이아를 주는 배치를 넣을 때 연다(그때 할 일: `AD_PLACEMENTS` 한 줄, AdMob 어댑터가 광고 요청에 nonce 싣기, 콘솔 SSV URL).
 - 하루 한도는 서버 `claims`(kind=ad) 개수로 셈. adFree 보유자는 광고 없이 바로 `ad/claim`(서버가 purchases에서 adFree 확인).
 - 토스 광고의 서버 확인 지원 여부는 미확인 → ~~토스는 기기 판정 + 하루 한도~~ **2026-11-26 끔**: `players.platform`·`toss_key_hash`는 hello가 기기가 보낸 값 그대로 저장해서(서버 확인 없음) 다른 마켓 기기도 `platform:'toss'`로 광고 없이 보상을 받을 수 있었다. 지금 토스 광고 보상은 서버로 못 받는다(SSV·광고 제거만). 서버가 토스 사용자를 확인할 방법(토스 로그인 등)이 생기면 다시 연다.
 - 같은 이유로 쿠폰의 플랫폼 제한(`coupons.sql` - players.platform)은 **참고용**이다. 다른 마켓 사용자가 platform을 바꿔 보내면 통과한다 → 플랫폼 전용 쿠폰에는 큰 보상을 걸지 않는다.
@@ -329,7 +330,7 @@ AdMob 콘솔 → 앱 → 광고 단위(보상형) → 서버 측 확인 → URL 
 ## 9. 랭킹 (ranking-proposal §13에서 바뀌는 점만)
 
 - players 표를 공통으로 합침(§5). 닉네임 금칙어·중복 검사는 `rank/profile`.
-- 일반 모드 `rank/normal`: 서버가 이전 값보다 높을 때만 갱신 + **층 상승 속도 상한**(예: 가입 후 경과 시간 대비 최대 층) 넘으면 `hidden=true`로 숨김.
+- 일반 모드 `rank/normal`: 서버가 이전 값보다 높을 때만 갱신 + **층 상승 속도 상한**(예: 가입 후 경과 시간 대비 최대 층) 넘으면 `hidden=true`로 숨김. → **구현(2026-11-27)**: 지난 기록(없으면 가입 시각) 이후 오른 층 > 20 + 흐른 초 ÷ 10이면 `players.rank_hidden = true` + `server_log`(source `rank-normal`, kind `floorSpeed`) warn. 기록은 올라가고 순위표에서만 빠진다(관리자 페이지에서 해제). 값 = `_shared/ranking.ts` `NORMAL_LIMIT`, SQL `rank_normal_guard`(`migrations/20261127000000_rank_speed_guard.sql`). 배포는 **db push 먼저, 그다음 `rank-normal`·`save-put` 함수**(반대면 함수가 없는 SQL을 불러 실패).
 - 토스: 토스 리더보드(보드 1개)를 그대로 쓰고, 우리 서버 랭킹에는 **토스 사용자를 넣지 않음**(v1). 토스 안에서 우리 랭킹 팝업은 "토스 랭킹 보기" 버튼만 동작.
 - 정산 cron(월 00:00 KST = 일 15:00 UTC), 보상 지급은 `claims`의 `rank:{seasonId}`로 통일.
 - 참여 보상 골드(`goldFloorMul`) = 배수 × 그 시즌 최고 판 층의 골드 기준가. 서버 표 `functions/_shared/floor_gold.json`(1~300층, 넘으면 300층 값)은 `node tools/gen_floor_gold.mjs`로 생성 — 밸런스 config를 바꾸고 다시 안 돌리면 `tests/iap.test.js`가 실패(§22 C3-5).
@@ -552,7 +553,7 @@ AdMob 콘솔 → 앱 → 광고 단위(보상형) → 서버 측 확인 → URL 
 | # | 내용 | 판정 |
 |---|---|---|
 | 1 | 시즌당 고정 시드 | **수용** (주간 같은 퍼즐 = 공정·검증 가능) |
-| 2 | 점수 상한 임시값 | **수용**, 경쟁 모드 규칙 정할 때 확정 |
+| 2 | 점수 상한 임시값 | **수용**, 경쟁 모드 규칙 정할 때 확정 → 2026-11-23 확정(웨이브별 표 `comp_limits.json`, docs/ranking.md 5-2) |
 | 3 | 정산 일 15:31 UTC, 놓친 주 다음에 같이 | **수용** |
 | 4 | 닉네임 있고 밴·삭제 아닌 사람만 | **수용** |
 | 5 | 참여 보상 골드 뺌 | **결정 필요 → 추천:** 상품표처럼 **층별 골드 기준표를 서버 `_shared`에 복사**(밸런스 config와 다르면 테스트 실패)하고, 서버가 comp_best의 층으로 계산. 쑹이 원하면 대신 고정 보상(예: 다이아 소량)으로 단순화 |
