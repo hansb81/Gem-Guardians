@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layoutRankingPopup, hitRankingPopup, scrollToMeValue } from '../src/render/ui/rankingPopup.js';
+import { layoutRankingPopup, hitRankingPopup, scrollToMeValue, stonePixels } from '../src/render/ui/rankingPopup.js';
 
 const CFG = JSON.parse(readFileSync(new URL('../config/ranking.json', import.meta.url), 'utf8'));
 const within = (r, o) => r.x >= o.x && r.y >= o.y && r.x + r.width <= o.x + o.width && r.y + r.height <= o.y + o.height;
@@ -81,4 +81,19 @@ test('판정: 탭·닫기·잠김 덮개는 목록을 막음·작은 팝업은 �
   const Ln = layoutRankingPopup(540, 960, n);
   assert.equal(hitRankingPopup(Ln, ...at(Ln.sub.picks[3].rect), n).statue, 'green');
   assert.equal(hitRankingPopup(Ln, ...at(Ln.sub.save), n).type, 'saveNick');
+});
+
+test('석상 색 변환: 외곽선·네온은 그대로, 나머지는 밝기로 3단 돌색, 투명은 안 건드림', () => {
+  const NEON = Object.values(JSON.parse(readFileSync(new URL('../assets/statues/manifest.json', import.meta.url), 'utf8')).neon).flat();
+  assert.equal(NEON.length, 10);
+  const rgb = (hex) => [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+  const keep = new Set(['#0d0a10', ...NEON].map((h) => parseInt(h.slice(1), 16)));
+  const src = ['#0d0a10', ...NEON, '#200000', '#741426', '#ec6a6a', '#f2d264'];
+  const d = new Uint8ClampedArray([...src.flatMap((h) => [...rgb(h), 255]), 9, 9, 9, 0]);
+  stonePixels(d, keep);
+  const out = [];
+  for (let i = 0; i < d.length; i += 4) out.push('#' + [d[i], d[i + 1], d[i + 2]].map((v) => v.toString(16).padStart(2, '0')).join(''));
+  // 밝기: #200000 = 9.6(<40), #741426 = 50.8(<110), #ec6a6a = 145, #f2d264 = 207
+  assert.deepEqual(out.slice(0, 15), ['#0d0a10', ...NEON, '#3b3347', '#655a74', '#e8dcc0', '#e8dcc0']);
+  assert.deepEqual([...d.slice(-4)], [9, 9, 9, 0]);
 });

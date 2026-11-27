@@ -26,7 +26,8 @@ const GAP = 4;
 const DIV_H = 28;
 const PODIUM_H = 196;
 const FOOT_H = 44;
-const STEP_H = { 1: 72, 2: 52, 3: 40 }; // 목업 단상 높이
+const PED_H = { 1: 68, 2: 52, 3: 40 }; // 받침대 그림(pedestal_1~3) 화면 높이 - 바닥선을 맞춘다
+const FOOT_SINK = 4; // 석상 발이 받침대 윗면에 박히는 깊이
 const BLINK_MS = 1000;
 // 팔레트(assets/gems/palette.hex) + 보조 글자색(characters.hex #a59cb2)
 const C = {
@@ -350,27 +351,31 @@ function drawList(ctx, assets, st, L) {
 
 const blinkOn = (st) => st.blinkAt >= 0 && st.nowMs - st.blinkAt < BLINK_MS && Math.floor((st.nowMs - st.blinkAt) / 125) % 2 === 0;
 
+// 위에서부터 메달 -> 이름 -> 점수 -> 석상(돌색, 발이 받침대에 박힘) -> 받침대(숫자는 그림에 있다).
 function drawPodium(ctx, assets, st, it, top) {
   const bottom = top + PODIUM_H;
   for (const col of it.cols) {
     const e = st.entries[col.rank - 1];
-    const step = rect(col.x, bottom - STEP_H[col.rank], col.width, STEP_H[col.rank]);
-    nine(ctx, assets, `ranking/podium_${col.rank}.png`, step, C.bg2);
-    label(ctx, String(col.rank), step, C.bone, 22, 'center');
+    const h = PED_H[col.rank];
     const cx = col.x + col.width / 2;
-    const valueY = step.y - 3 - 11;
+    const statueY = bottom - h + FOOT_SINK - 40;
+    drawStatue(ctx, assets, e.statue, cx - 16, statueY, true);
+    if (!drawFixedImage(ctx, assets, `ranking/pedestal_${col.rank}.png`, cx, bottom - h / 2, K)) {
+      ctx.fillStyle = C.bg2;
+      ctx.fillRect(cx - 70, bottom - h, 140, h);
+    }
+    const valueY = statueY - 3 - 11;
     label(ctx, valueText(st.tab, e.value), rect(col.x, valueY - 11, col.width, 22), C.goldL, 22, 'center');
     const nameY = valueY - 11 - 3 - 7;
     label(ctx, e.nickname || t('ranking.me'), rect(col.x + 2, nameY - 7, col.width - 4, 14), C.bone, 11, 'center');
-    const statueY = nameY - 7 - 3 - 40;
-    drawStatue(ctx, assets, e.statue, cx - 16, statueY);
-    if (!drawFixedImage(ctx, assets, `ranking/medal_${col.rank}.png`, cx, statueY - 3 - 14, K)) {
+    const medalY = nameY - 7 - 3 - 14;
+    if (!drawFixedImage(ctx, assets, `ranking/medal_${col.rank}.png`, cx, medalY, K)) {
       ctx.fillStyle = C.goldL;
-      ctx.fillRect(cx - 14, statueY - 31, 28, 28);
+      ctx.fillRect(cx - 14, medalY - 14, 28, 28);
     }
     if (e.me) {
-      meTag(ctx, col.x + 4, statueY - 30);
-      if (blinkOn(st)) strokeRect(ctx, rect(col.x, statueY - 34, col.width, bottom - statueY + 34), C.bone, 4);
+      meTag(ctx, col.x + 4, medalY - 14);
+      if (blinkOn(st)) strokeRect(ctx, rect(col.x, medalY - 18, col.width, bottom - medalY + 18), C.bone, 4);
     }
   }
 }
@@ -556,7 +561,39 @@ function rewardIcons(ctx, assets, tier, st, x, cy, size, align, bundle) {
   });
 }
 
-function drawStatue(ctx, assets, color, x, y) {
+// 석상 색 변환(RGBA 배열을 그 자리에서): keep(0xRRGGBB - 외곽선·네온 눈/불꽃)은 그대로, 나머지는 밝기 3단 돌색.
+const STONE = [C.bg2, C.bg3, C.bone].map((hex) => parseInt(hex.slice(1), 16));
+export function stonePixels(d, keep) {
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3] || keep.has((d[i] << 16) | (d[i + 1] << 8) | d[i + 2])) continue;
+    const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    const c = STONE[l < 40 ? 0 : l < 110 ? 1 : 2];
+    d[i] = c >> 16;
+    d[i + 1] = (c >> 8) & 255;
+    d[i + 2] = c & 255;
+  }
+}
+
+// shortcut: 순위표 항목에 수호자 등급이 없어 색(기본 등급 그림)별로만 캐시한다 - 등급이 오면 key에 붙인다.
+const stoneCache = new Map(); // 시트 키 -> 돌색으로 바꾼 idle 첫 프레임
+function stoneOf(assets, key, own) {
+  let c = stoneCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = own.frameW;
+  c.height = own.frameH;
+  const x = c.getContext('2d');
+  x.drawImage(own.state.img, 0, 0, own.frameW, own.frameH, 0, 0, own.frameW, own.frameH);
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const neon = Object.values(assets.towerManifest?.neon ?? {}).flat();
+  stonePixels(img.data, new Set([C.outline, ...neon].map((hex) => parseInt(hex.slice(1), 16))));
+  x.putImageData(img, 0, 0);
+  stoneCache.set(key, c);
+  return c;
+}
+
+// stone = 받침대 위 석상(돌색).
+function drawStatue(ctx, assets, color, x, y, stone = false) {
   // 수호자(idle 시트에 drawScale이 있는 그림): 전투 화면과 같은 배율로 idle 첫 프레임을 32x40 칸의
   // 아래 가운데에 그린다(20x26 x 1.5 = 30x39). 시트는 왼쪽을 보므로 뒤집어 오른쪽을 보게 한다.
   const own = assets?.towerAnims?.get(`tower_idle_${color}`);
@@ -566,7 +603,7 @@ function drawStatue(ctx, assets, color, x, y) {
     ctx.save();
     ctx.translate(Math.round(x) + 16, 0);
     ctx.scale(-1, 1);
-    drawImageSnapped(ctx, own.state.img, 0, 0, own.frameW, own.frameH, -w / 2, Math.round(y) + 40 - h, w, h);
+    drawImageSnapped(ctx, stone ? stoneOf(assets, `tower_idle_${color}`, own) : own.state.img, 0, 0, own.frameW, own.frameH, -w / 2, Math.round(y) + 40 - h, w, h);
     ctx.restore();
     return;
   }
