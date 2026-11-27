@@ -200,8 +200,7 @@ function shortTime(ms) {
 const STONE_ONLY = { spiritStones: 1 }; // 출석 칸에 정령석 아이콘만 그릴 때(_bundleIcon 인자)
 const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], streakRow: [24, 308, 352, 48], dot: 8, dotGap: 6, claim: [100, 370, 200, 50] };
 const STREAK_DOT = { on: '#f2d264', off: '#3b3347' };
-// 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼.
-// shortcut: 스크롤 없이 최근 MAIL.rows통만 보임 - 전체 우편을 처음 보내기 전에 스크롤 추가(쑹 2026-11-09).
+// 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼. rows = 한 번에 보이는 줄 수(넘으면 그 안에서 드래그·휠 스크롤, 이벤트 목록과 같은 방식).
 const MAIL = { y: 92, rowH: 72, rows: 6, claim: [272, 10, 92, 44] };
 const PLACEHOLDER = '#5a5266'; // 아이템 아이콘이 아직 안 불렸을 때 자리
 const TOAST = { y: 730, ms: 3000 };
@@ -275,6 +274,7 @@ export class MainMenuScreen {
     this._helpWrap = null; // { key, lines } - 쪽·배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
     this._eventScroll = 0; // 이벤트 목록 스크롤(basis px).
+    this._mailScroll = 0; // 우편 목록 스크롤(basis px).
     // 이벤트 목록 [{ id, title: { ko, en } }] - 이벤트 API가 생기면 main.js가 채운다(docs/server.md §19-11).
     this.events = [];
     this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
@@ -788,12 +788,24 @@ export class MainMenuScreen {
     else this._text(ctx, t('net.att.streakLeft', { n: left }), tx, ty, { size: 11, align: 'center' });
   }
 
+  // 우편 목록 보기 영역(basis) = MAIL.rows줄.
+  _mailView(card) {
+    return [card[0] + 24, card[1] + MAIL.y, card[2] - 48, MAIL.rows * MAIL.rowH - 8];
+  }
+
+  // 보기 영역에 걸친 줄만(스크롤 범위도 여기서 자른다 - 그리기·누르기가 같은 자리를 쓴다).
   _mailRows(card) {
     const list = this.server.mail.list ?? [];
-    return list.slice(0, MAIL.rows).map((m, i) => {
-      const row = [card[0] + 24, card[1] + MAIL.y + i * MAIL.rowH, card[2] - 48, MAIL.rowH - 8];
-      return { m, row, btn: [row[0] + MAIL.claim[0] - 24, row[1] + MAIL.claim[1], MAIL.claim[2], MAIL.claim[3]] };
-    });
+    const view = this._mailView(card);
+    this._mailScroll = Math.max(0, Math.min(this._mailScroll, list.length * MAIL.rowH - 8 - view[3]));
+    const rows = [];
+    for (let i = 0; i < list.length; i++) {
+      const y = view[1] + i * MAIL.rowH - this._mailScroll;
+      if (y + MAIL.rowH - 8 <= view[1] || y >= view[1] + view[3]) continue;
+      const row = [view[0], y, view[2], MAIL.rowH - 8];
+      rows.push({ m: list[i], row, btn: [row[0] + MAIL.claim[0] - 24, row[1] + MAIL.claim[1], MAIL.claim[2], MAIL.claim[3]] });
+    }
+    return rows;
   }
 
   _drawMailPopup(ctx, card) {
@@ -804,6 +816,11 @@ export class MainMenuScreen {
       return;
     }
     const loc = getLocale();
+    const sv = this._toScreen(this._mailView(card));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(sv.x, sv.y, sv.width, sv.height);
+    ctx.clip();
     for (const { m, row, btn } of this._mailRows(card)) {
       if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
       this._text(ctx, m.title?.[loc] || m.title?.ko || '', row[0] + 12, row[1] + 20, { size: 13 });
@@ -813,6 +830,7 @@ export class MainMenuScreen {
       if (!this._nine(ctx, img, btn)) this._panel(ctx, btn, COLORS.bg2, COLORS.bg3);
       this._text(ctx, t(m.claimed ? 'net.mail.delete' : 'net.mail.claim'), btn[0] + btn[2] / 2, btn[1] + btn[3] / 2 + (down ? 2 : 0), { size: 13, align: 'center' });
     }
+    ctx.restore();
   }
 
   _drawPlaceholderPopup(ctx, card) {
@@ -1479,7 +1497,7 @@ export class MainMenuScreen {
 
   // 게임 정보가 열려 있으면 휠로 스크롤하고 true(main.js가 기본 동작을 막는다).
   handleWheel(deltaY) {
-    const key = this.popup === 'about' ? '_aboutScroll' : this.popup === 'event' ? '_eventScroll' : null;
+    const key = { about: '_aboutScroll', event: '_eventScroll', mail: '_mailScroll' }[this.popup];
     if (!key) return false;
     this[key] += deltaY * 0.5; // 범위는 그릴 때 자른다.
     return true;
@@ -1596,6 +1614,7 @@ export class MainMenuScreen {
       this._pressed = id;
       this.popup = id;
       this._eventScroll = 0;
+      this._mailScroll = 0;
       // 서버가 켜져 있으면 main.js가 출석 상태·우편 목록을 새로 받는다.
       return this.server?.[id === 'attendance' ? 'att' : id] ? `open:${id}` : null;
     }
@@ -1777,10 +1796,14 @@ export class MainMenuScreen {
 
     if (this.popup === 'mail' && this.server?.mail) {
       if (this.server.mail.busy) return null;
-      for (const { m, btn } of this._mailRows(card)) {
-        if (!pressButton(x, y, this._toScreen(btn), 'none')) continue;
-        this._pressed = `mail:${m.id}`;
-        return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
+      if (pointInRect(x, y, this._toScreen(this._mailView(card)))) {
+        for (const { m, btn } of this._mailRows(card)) {
+          if (!pressButton(x, y, this._toScreen(btn), 'none')) continue;
+          this._pressed = `mail:${m.id}`;
+          return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
+        }
+        this._drag = { scrollFromY: y, scrollStart: this._mailScroll, key: '_mailScroll' }; // 버튼 밖 = 목록 끌기
+        return null;
       }
       // 그 밖은 아래 공통 처리로 - 카드 바깥 탭 = 닫기.
     }

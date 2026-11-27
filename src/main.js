@@ -120,7 +120,8 @@ if (DEV_ALLOWED) {
 mainMenuScreen.normalFloor = () => playerState.floor; // controller.floor는 경쟁·튜토리얼 판이면 다른 값
 mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
 // 이벤트 팝업 광고 칸(docs/ads.md 3장) - 배너를 띄울 수 있고 광고 제거가 없을 때만 칸을 그린다.
-mainMenuScreen.popupAd = () => platform.caps.popupBanner && !playerState.inventory.isUnlocked('adFree');
+// 이벤트가 없으면("준비 중" 문구뿐) 광고도 없다 - AdMob: 콘텐츠 없는 화면에 광고 금지.
+mainMenuScreen.popupAd = () => platform.caps.popupBanner && mainMenuScreen.events.length > 0 && !playerState.inventory.isUnlocked('adFree');
 mainMenuScreen.popupAdDebug = () => platform.adTesting;
 const shopScreen = new ShopScreen();
 const mineScreen = new MineScreen();

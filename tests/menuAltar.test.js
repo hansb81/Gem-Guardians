@@ -165,3 +165,32 @@ test('왕관·오라·누름·소용돌이 시트(manifest.symbols): 프레임 �
     assert.doesNotThrow(() => readFileSync(new URL(`../assets/${sh.file}`, import.meta.url)), sh.file);
   }
 });
+
+test('우편함: 6통까지는 그대로, 넘으면 끌어서 아래 우편을 받는다(보기 영역 밖 버튼은 안 눌림)', () => {
+  const m = menu();
+  const mail = (n) => Array.from({ length: n }, (_, i) => ({ id: i + 1, title: { ko: `우편 ${i + 1}` }, bundle: { diamonds: 1 }, claimed: false }));
+  m.server = { mail: { list: mail(6), busy: false } };
+  m.popup = 'mail';
+  const card = m._popupCardBasis();
+  assert.equal(m._mailRows(card).length, 6);
+  m._mailScroll = 500;
+  m._mailRows(card);
+  assert.equal(m._mailScroll, 0, '6통 이하면 스크롤 없음');
+
+  m.server.mail.list = mail(10);
+  const view = m._mailView(card);
+  const first = m._mailRows(card)[0];
+  assert.deepEqual([m._mailRows(card).length, first.m.id], [6, 1]);
+  // 버튼 밖(줄 왼쪽)을 잡고 위로 4줄 끈다.
+  assert.equal(m.handlePointerDown(view[0] + 20, view[1] + 300), null);
+  m.handlePointerMove(view[0] + 20, view[1] + 300 - 4 * 72);
+  m.handlePointerUp(view[0] + 20, view[1] + 300 - 4 * 72);
+  const rows = m._mailRows(card);
+  assert.deepEqual([rows[0].m.id, rows.at(-1).m.id], [5, 10], '끝까지 내려감(더는 안 내려감)');
+  const last = rows.at(-1).btn;
+  assert.equal(m.handlePointerDown(last[0] + 10, last[1] + 10), 'mailClaim:10');
+  m.handlePointerUp(last[0] + 10, last[1] + 10);
+  // 9번 우편 버튼 자리 바로 아래(보기 영역 밖)는 아무 우편도 안 받는다.
+  const r = m.handlePointerDown(last[0] + 10, view[1] + view[3] + 4);
+  assert.ok(r == null || !String(r).startsWith('mail'));
+});
