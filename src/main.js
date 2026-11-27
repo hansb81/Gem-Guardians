@@ -106,6 +106,13 @@ const ranking = new RankingUi({
   },
 });
 mainMenuScreen.compStatus = () => compStatus();
+mainMenuScreen.crown = () => ranking.devCrown ?? ranking.crown;
+if (DEV_ALLOWED) {
+  // ?crown=iron|bronze|silver|gold 메뉴 왕관 금속 고정, ?swirl=1 새 시즌 소용돌이 한 번(개발 빌드만).
+  const q = new URLSearchParams(location.search);
+  ranking.devCrown = q.get('crown');
+  ranking.swirl = q.has('swirl');
+}
 mainMenuScreen.normalFloor = () => playerState.floor; // controller.floor는 경쟁·튜토리얼 판이면 다른 값
 mainMenuScreen.itemIcons = () => renderer.itemAssets?.icons; // 출석·우편 보상 아이콘
 // 이벤트 팝업 광고 칸(docs/ads.md 3장) - 배너를 띄울 수 있고 광고 제거가 없을 때만 칸을 그린다.
@@ -265,6 +272,7 @@ function drawFade(rawDtMs) {
 // 정비 팝업(docs/upgrade-popup.md, src/render/ui/prepPopup.js) - null이 아니면 열려 있고 전투가 멈춘다.
 // { context: 'floorClear'|'defeat'|'village'|'vault'|'towerTap', tab, selectedTower, flash, view }.
 let prep = null;
+let rankingOpenAt = null; // 메뉴 원석 누름 연출이 끝나 랭킹 팝업을 열 시각(ms). 연출 중이 아니면 null.
 let vaultOpenAt = null; // 메뉴 보물상자 열기 연출이 끝나 보관함 팝업을 열 시각(ms). 연출 중이 아니면 null.
 let spiritEnv = null; // { cfg: config/spirits.json, floorReward() } - 데이터 로드 뒤(정령 탭 view·레벨업 비용)
 let prepLastTab = null; // 층 클리어/패배끼리 같은 판에서 마지막에 본 탭.
@@ -445,6 +453,7 @@ function endCompRun() {
   compResult = { title: t('comp.resultTitle'), notes: [t('comp.resultScore', { score: points.toLocaleString() }), t('comp.resultWave', { wave })], gold: 0, diamonds: 0, items: {}, skills: {}, flags: [] };
   call('rank-comp-finish', { runId: run.runId, points, floor: wave, log: run.input.log }).then((r) => {
     if (!r.ok) console.warn('경쟁 점수 제출 실패/보류', r);
+    ranking.crownDirty(); // 메뉴 왕관 금속 다시 받기
   });
   ranking.service.submit('comp', { value: points, floor: wave, at: ranking.service.now(), seasonId: run.seasonId }); // 오프라인 표시용 기기 기록
   startExitToMenu(); // retryFloor가 본편 층 전투로 되돌린다(경쟁 판 상태는 버림)
@@ -1416,7 +1425,7 @@ window.addEventListener('pointerup', (e) => {
   upgradeHold = null;
   sliderDrag = null;
   const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
-  if (menuUp === 'openRanking') ranking.open();
+  if (menuUp === 'openRanking') rankingOpenAt = mainMenuScreen.crystalTapAt + mainMenuScreen.crystalTapMs();
   if (menuUp === 'openPrep') openPrep('village');
   if (menuUp === 'openVault') vaultOpenAt = mainMenuScreen.chestOpenAt + mainMenuScreen.chestOpenMs();
   if (scene === 'shop') shopScreen.handlePointerUp();
@@ -1847,6 +1856,15 @@ function loop(now) {
       }
     }
     if (vaultOpenAt == null && !prep) mainMenuScreen.chestOpenAt = null;
+    // 원석: 누름 연출이 끝나면 랭킹 팝업. 새 시즌 소용돌이는 메뉴가 가려지지 않았을 때 한 번.
+    const menuFree = !mainMenuScreen.popup && !ranking.isOpen && !rewardPopup.active && !prep && !fade;
+    if (rankingOpenAt != null && now >= rankingOpenAt) {
+      rankingOpenAt = mainMenuScreen.crystalTapAt = null;
+      if (menuFree) ranking.open();
+    } else if (ranking.swirl && menuFree) {
+      ranking.swirl = false;
+      mainMenuScreen.swirlAt = now;
+    }
     drawPrep(now);
     // 메뉴에 있는 동안 1초마다 시즌 넘김 확인(지난 시즌 보상은 서버가 우편으로).
     ranking.tick(now);

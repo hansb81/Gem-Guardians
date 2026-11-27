@@ -3,7 +3,9 @@
 // 닉네임 입력은 캔버스 위에 HTML input을 잠깐 겹친다(모바일 키보드) - 팝업을 닫거나 저장하면 지운다.
 import { createRankingService } from '../ranking/rankingService.js';
 import { ServerRankingService } from '../ranking/serverRankingService.js';
-import { isSettling, splitRemain } from '../ranking/season.js';
+import { isSettling, splitRemain, isNewSeason } from '../ranking/season.js';
+import { crownBand } from '../ranking/tiers.js';
+import { storage } from '../platform/storage.js';
 import { isValidNickname } from '../ranking/rankingSave.js';
 import { hitRankingPopup, scrollToMeValue } from '../render/ui/rankingPopup.js';
 import { audio } from '../audio/AudioManager.js';
@@ -31,6 +33,11 @@ export class RankingUi {
     this._input = null;
     this._lastTick = 0;
     this._loadSeq = 0;
+    this.crown = 'iron'; // 메뉴 왕관 금속(tick이 1초마다 갱신)
+    this.swirl = false; // 새 시즌 소용돌이 요청 - main.js가 메뉴가 비어 있을 때 틀고 끈다
+    this._crownSave = null; // 기기에 남긴 { seasonId, band } - 서버에서 못 받은 동안 쓰는 값
+    this._crownAsked = null; // 내 기록을 물어본 시즌
+    this._crownSeen = null; // 마지막으로 반영한 service.compMine
   }
 
   // server = 서버 랭킹(일반 모드) 사용 - config/server.json enabled이고 마켓 리더보드(토스)가 없을 때(main.js).
@@ -95,6 +102,44 @@ export class RankingUi {
     const before = this.player.ranking.comp.seasonId;
     this.service.syncSeason();
     if (this.state && before !== this.player.ranking.comp.seasonId) this.refresh();
+    this._tickCrown(this.player.ranking.comp.seasonId);
+  }
+
+  // 메뉴 왕관 금속 + 새 시즌 소용돌이(config/ranking.json crown). 금속은 서버에서 받은 이번 주 내 기록으로 정해 기기에 남긴다.
+  _tickCrown(seasonId) {
+    const seen = storage.load('lastSeenSeasonId');
+    if (seen !== seasonId) {
+      storage.save('lastSeenSeasonId', seasonId);
+      this.swirl ||= isNewSeason(seen, seasonId);
+    }
+    if (!this.compOpen()) {
+      this.crown = 'iron';
+      return;
+    }
+    if (this._crownAsked !== seasonId) {
+      this._crownAsked = seasonId;
+      this.service.me('comp', { seasonId });
+    }
+    this._crownSave ??= storage.load('crownBand') ?? {};
+    const mine = this.service.compMine;
+    if (mine && mine !== this._crownSeen && mine.seasonId === seasonId) {
+      this._crownSeen = mine;
+      const { bands = [], swirlOnBandUp } = this.config.crown ?? {};
+      const band = crownBand(bands, mine.me);
+      const old = this._crownSave.seasonId === seasonId ? this._crownSave.band : 'iron';
+      if (band !== old || this._crownSave.seasonId !== seasonId) {
+        const at = (b) => (bands.findIndex((x) => x.id === b) + bands.length + 1) % (bands.length + 1); // 좋은 순, iron이 맨 뒤
+        if (swirlOnBandUp && at(band) < at(old)) this.swirl = true;
+        this._crownSave = { seasonId, band };
+        storage.save('crownBand', this._crownSave);
+      }
+    }
+    this.crown = this._crownSave.seasonId === seasonId ? this._crownSave.band : 'iron';
+  }
+
+  // 경쟁 판 점수가 서버에 들어간 뒤(main.js) - 다음 tick에 내 기록을 다시 받는다.
+  crownDirty() {
+    this._crownAsked = null;
   }
 
   // ---------- 그리기 값 ----------

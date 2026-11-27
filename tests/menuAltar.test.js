@@ -67,7 +67,8 @@ test('밖으로 끌고 나가서 떼거나 pointercancel이면 안 열린다', (
 test('결정 자리(crystalReserved) = 랭킹 입구: 안에서 떼면 openRanking, 받침대로 끌고 가 떼면 안 열림', () => {
   const m = menu();
   m.handlePointerDown(270, 400);
-  assert.equal(m.handlePointerUp(270, 480), 'openRanking'); // 이름판 [214,466,112,36] 위
+  assert.equal(m.handlePointerUp(270, 480), 'openRanking'); // 이름판 [204,466,132,36] 위
+  m.crystalTapAt = null; // main.js: 누름 연출이 끝나 랭킹을 엶
   m.handlePointerDown(270, 400);
   assert.equal(m.handlePointerUp(270, 600), null);
   m.handlePointerDown(270, 506); // 원석 끝(504)과 받침대 시작(510) 사이 = 아무것도 아님
@@ -130,4 +131,37 @@ test('seenItems는 저장·불러오기에 남는다(옛 저장은 빈 배열)',
   assert.deepEqual(inv.data.seenItems, []);
   inv.markItemsSeen(1);
   assert.deepEqual(new Inventory(JSON.parse(JSON.stringify(inv.data)), { config: ITEMS }).data.seenItems, ['hammer']);
+});
+
+test('원석: 손을 떼면 누름 연출(3프레임 x 80ms = 240ms) 시작, 연출 중에는 다른 입력을 안 받는다', () => {
+  const m = menu();
+  assert.equal(m.crystalTapMs(), 240);
+  m.handlePointerDown(270, 400);
+  assert.equal(m.crystalTapAt, null, '누르는 순간엔 연출 없음');
+  assert.equal(m.handlePointerUp(270, 400), 'openRanking');
+  assert.notEqual(m.crystalTapAt, null);
+  const [px, py] = MANIFEST.layoutA_screenPx.playButton;
+  assert.equal(m.handlePointerDown(px + 10, py + 10), null);
+  assert.equal(m.popup, null, '플레이 버튼 안 눌림');
+  m.handlePointerDown(270, 600);
+  assert.equal(m.handlePointerUp(270, 600), null, '신단도 안 받는다');
+  m.handlePointerDown(270, 400);
+  assert.equal(m.handlePointerUp(270, 400), null, '원석 두 번 안 열림');
+  m.crystalTapAt = null;
+  m.handlePointerDown(270, 600);
+  assert.equal(m.handlePointerUp(270, 600), 'openPrep');
+});
+
+test('왕관·오라·누름·소용돌이 시트(manifest.symbols): 프레임 수·순서·파일이 맞다', () => {
+  const s = MANIFEST.symbols;
+  assert.equal(s.rankCrown.seq.length * s.rankCrown.frameMs, 3200, '3.2초마다 한 번 훑음');
+  assert.ok(s.rankCrown.seq.every((k) => k >= 0 && k < 9));
+  assert.deepEqual(Object.keys(s.rankCrown.sheets), ['iron', 'bronze', 'silver', 'gold']);
+  assert.equal(s.rankAura.sheets.iron, undefined, 'iron은 오라 없음');
+  assert.deepEqual([s.rankCrown.x, s.rankCrown.y, s.rankAura.x, s.rankAura.y], [81, 80, 72, 75]);
+  assert.equal(s.seasonSwirl.frames, 16);
+  assert.equal(s.seasonSwirl.cols, 8);
+  for (const sh of [...Object.values(s.rankCrown.sheets), ...Object.values(s.rankAura.sheets), s.crystalTap, s.seasonSwirl]) {
+    assert.doesNotThrow(() => readFileSync(new URL(`../assets/${sh.file}`, import.meta.url)), sh.file);
+  }
 });

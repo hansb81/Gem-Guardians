@@ -39,9 +39,12 @@ export function waterDropY(item, t) {
   return Math.floor(mod(t / 1600 + item.phase, 1) * 170) + 100;
 }
 
+// 봉인 원석의 둥실거림(네이티브 px) - 불씨와 메뉴 왕관(mainMenuScreen)이 같은 값을 쓴다.
+export const bobAt = (t) => Math.round(2 * Math.sin((TAU * mod(t, 6400)) / 3200));
+
 // 불씨 하나(sparks rule): 둥실거리는 봉인 원석의 균열에서 올라간다.
 export function spark(item, t) {
-  const cy = 134 + Math.round(2 * Math.sin((TAU * mod(t, 6400)) / 3200));
+  const cy = 134 + bobAt(t);
   return {
     x: Math.round(90 + item.amp * Math.sin((TAU * mod(t, 6400)) / 6400 + item.phase * 6.28)),
     y: Math.round(cy + 10 - mod((mod(t, 6400) * 60) / 6400 + item.phase * 60, 60)),
@@ -75,7 +78,8 @@ export class LayeredBg {
   // (offsetX, offsetY)를 네이티브 (0,0)으로 두고 1 네이티브 px = scale 화면 px로 그린다.
   // manifest.background.bleed = { file, w, h }(예: 240x432, 가운데 180x320이 base 자리)가 있으면 base 밑에 깔아 frame 밖까지 채운다.
   // manifest나 이미지가 아직 없으면 그 부분만 조용히 건너뛴다(호출부는 멈추지 않는다).
-  draw(ctx, offsetX, offsetY, scale, now) {
+  // mid(place) = 조각 다음·입자 전에 끼워 그릴 것(메뉴 왕관). place(x, y, w, h) = 네이티브 사각형 -> 화면 사각형.
+  draw(ctx, offsetX, offsetY, scale, now, mid) {
     const bg = this.background;
     if (!bg) return;
 
@@ -111,6 +115,7 @@ export class LayeredBg {
       const { sx, sy } = pieceSrcPos(piece, now, frameMs, bg.loopFrames ?? piece.frames);
       ctx.drawImage(sheet.img, sx, sy, piece.w, piece.h, ...place(piece.x, piece.y, piece.w, piece.h));
     }
+    mid?.(place);
 
     for (const group of bg.particles ?? []) {
       const rule = group.rule ?? {};

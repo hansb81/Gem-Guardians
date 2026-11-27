@@ -12,6 +12,9 @@ export function tierOf(tiers, rank, total) {
   return tiers.find((t) => (t.rank != null ? rank <= t.rank : rank <= Math.ceil((total * t.pct) / 100))) ?? null;
 }
 
+// 메뉴 왕관 금속(config/ranking.json crown.bands). me = 이번 주 경쟁 내 기록 { rank, total } | null. 경계는 포함.
+export const crownBand = (bands, me, locked = false) => (!locked && me && tierOf(bands, me.rank, me.total)?.id) || 'iron';
+
 // 바로 위 구간의 마지막 사람을 넘기려면 몇 점 필요한지. values = 나를 포함해 정렬된 전체 값.
 // 동점이면 먼저 낸 사람이 위라서 같은 점수로는 못 넘는다 -> 차이 + step(점수 단위).
 // 1위거나 위 구간이 없으면 null.

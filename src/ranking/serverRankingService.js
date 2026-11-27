@@ -55,6 +55,7 @@ export class ServerRankingService extends LocalRankingService {
       this.compLeft = res.left ?? this.compLeft;
       const me = res.me && { ...this._base(), ...res.me, frame: null, next: null };
       this._lastComp = { ...this._lastComp, me };
+      this.compMine = { seasonId: res.seasonId, me }; // 받는 데 성공한 값만(메뉴 왕관 - rankingUi.tick)
       return me;
     }
     if (mode !== 'normal') return super.me(mode, opts);
