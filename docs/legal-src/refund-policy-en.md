@@ -21,9 +21,33 @@ Effective date: 2026-11-28
 
 First-purchase bonus: reclaimed together with the base diamonds on refund, and not granted again on repurchase. If part was used, the refund is calculated on base and bonus together.
 
-Partial use (diamonds, packs): refund = price × (diamonds left ÷ diamonds received incl. bonus), rounded down to 10 KRW; diamonds left are counted up to the amount received from that purchase. Example: 330-diamond product (5,900 KRW), 130 used, 200 left → 5,900 × 200/330 = 3,570 KRW. For packs, each item is valued in diamonds and the unused share is refunded; we send the calculation with the result. The refunded part is reclaimed. App Store purchases cannot be partially refunded by us; request a refund from Apple.
+Partial use (diamonds, packs): refund = price × (diamonds left ÷ diamonds received incl. bonus), rounded down to 10 KRW; diamonds left are counted up to the amount received from that purchase. Example: 330-diamond product (5,900 KRW), 130 used, 200 left → 5,900 × 200/330 = 3,570 KRW. For packs, each item is valued in diamonds using the conversion table below and the unused share is refunded (rounded down to 10 KRW); we send the calculation with the result. Example: Starter Pack (1,200 KRW) with 3 repair hammers and 1 feather used → 351 ÷ 419 left → 1,200 × 351/419 = 1,000 KRW. 4th Slot Pack: no cancellation once the slot is used in battle; otherwise the pack rule applies (2 rainbows used → 2,900 × 336/360 = 2,700 KRW). Ad Removal: no cancellation once an ad-free reward is claimed; otherwise the price minus the value of diamonds used (1 diamond = 20 KRW, the smallest diamond product 1,200 KRW ÷ 60), minimum 0 (120 diamonds used → 6,500 − 2,400 = 4,100 KRW). The refunded part is reclaimed. App Store purchases cannot be partially refunded by us; request a refund from Apple.
 
 Pass termination after claiming: refund = price × daily share × (remaining days ÷ total days) − 10% of price (rounded down to 10 KRW, minimum 0). Daily share: Weekly 89%, Monthly 91%. Example: Weekly Pass, 3 days claimed → 5,900 × 0.89 × 4/7 − 590 = 2,410 KRW. Missed days add up on your next claim (up to 3 days after it ends); unclaimed rewards expire after that. No fee for days missed because of our error. Passes bought on the App Store cannot be partially refunded by us; request a refund from Apple, which decides whether and how much to refund.
+
+**Pack conversion table**
+
+| Item | Diamond value |
+|---|---|
+| Hammer | 3 |
+| Scythe | 6 |
+| Repair Hammer | 6 |
+| Hourglass | 6 |
+| Barrier Scroll | 9 |
+| War Drum | 9 |
+| Bomb Booster | 9 |
+| Rainbow Crystal | 12 |
+| Phoenix Feather | 50 |
+| 4th Slot | 300 |
+
+| Pack | Contents (value) | Total |
+|---|---|---|
+| Starter Pack | 300 diamonds + 5 hammers (15) + 6 scythes (36) + 3 repair hammers (18) + 1 feather (50) | 419 |
+| Boss Pack | 800 diamonds + 2 feathers (100) + 3 hourglasses (18) + 3 barriers (27) + 3 drums (27) | 972 |
+| Chapter Pack | 250 diamonds + 3 barriers (27) + 2 hourglasses (12) + 2 bomb boosters (18) | 307 |
+| 4th Slot Pack | 4th slot (300) + 5 rainbows (60) | 360 |
+
+Basis: items sold for gold = gold price (in normal-floor rewards) × 20 (the shop gold exchange gives one normal-floor reward for 20 diamonds, at any floor); items sold for diamonds and the 4th slot = their shop diamond price.
 
 **5. How to request.**
 - Google Play: within 48 hours, request in Google Play (Payments & subscriptions > Budget & history); after that, email us.
