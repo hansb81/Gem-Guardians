@@ -34,7 +34,7 @@
     "priceKRW": 5900,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_boss",
       "onestore": null,
       "ios": null
     }
@@ -50,7 +50,7 @@
     "priceKRW": 2900,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_slot4",
       "onestore": null,
       "ios": null
     }
@@ -63,7 +63,7 @@
     "priceKRW": 5900,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_weekly",
       "onestore": null,
       "ios": null
     }
@@ -76,7 +76,7 @@
     "priceKRW": 11000,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_monthly",
       "onestore": null,
       "ios": null
     }
@@ -94,7 +94,7 @@
     "priceKRW": 1900,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_chapter",
       "onestore": null,
       "ios": null
     }
@@ -108,7 +108,7 @@
     "priceKRW": 6500,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "pack_adfree",
       "onestore": null,
       "ios": null
     }
@@ -134,7 +134,7 @@
     "priceKRW": 5900,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_1",
       "onestore": null,
       "ios": null
     }
@@ -147,7 +147,7 @@
     "priceKRW": 12000,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_2",
       "onestore": null,
       "ios": null
     }
@@ -160,7 +160,7 @@
     "priceKRW": 29000,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_3",
       "onestore": null,
       "ios": null
     }
@@ -173,7 +173,7 @@
     "priceKRW": 59000,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_4",
       "onestore": null,
       "ios": null
     }
@@ -186,7 +186,7 @@
     "priceKRW": 119000,
     "ids": {
       "toss": null,
-      "android": null,
+      "android": "dia_5",
       "onestore": null,
       "ios": null
     }
