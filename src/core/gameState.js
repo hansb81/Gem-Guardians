@@ -153,6 +153,7 @@ export class GameState {
     // update() 0단계 뒤에 큐를 비워 밀어 넣어 다른 신규 이펙트와 같은 보장(최소 한 번은
     // 읽힘)을 받게 한다.
     this._pendingSwapEffects = [];
+    this._pendingExpires = []; // 타이머가 0이 된 시한폭탄 { instance, handler, resolution } - 그 스왑이 끝난 뒤 터진다.
 
     // 무효 스왑의 "들썩" 애니메이션은 Resolution을 만들지 않으므로 별도로 추적해서
     // 끝나면 cellStates를 정리해준다.
@@ -363,7 +364,7 @@ export class GameState {
     // 스케줄의 everyMoves 카운터도 여기서만 올라간다(docs/balance.md 7-2/7-3).
     if (!force) {
       this.validSwapCount += 1;
-      if (this.obstaclesRegistry) this._onObstacleValidSwap();
+      if (this.obstaclesRegistry) this._onObstacleValidSwap(resolution);
     }
 
     // 콤보(연속 스트릭) - Resolution을 만드는 모든 성공 스왑(match/colorSwap/boxSwap/combo)에서
@@ -642,26 +643,40 @@ export class GameState {
 
   // 시한폭탄 타이머 틱 + everyMoves 등장 스케줄 - trySwap이 유효한 스왑을 만들 때만 1번
   // 부른다(연쇄/캐스케이드 중에는 호출되지 않으므로 자동으로 "연쇄는 안 셈"이 보장된다).
-  // 타이머가 0이 된 attachment는 그 칸을 지우는 전용 Resolution을 새로 만든다(기존
-  // armed/clearing -> settle(중력/리필) 파이프라인을 그대로 재사용) - 점수는 다른 clear와
-  // 동일하게 매겨지지만 탑 사격은 없다(PuzzleBattleBridge가 value<0/attachment 칸이 아니라
-  // GEM_TYPES 색상 기준으로만 쏘므로 영향 없음, obstacleExpire는 wallDamage 전용 신호).
-  _onObstacleValidSwap() {
+  // 타이머가 0이 된 attachment는 바로 터지지 않고 _pendingExpires에 들어간다 - 그 스왑의 매치·연쇄가
+  // 끝난 뒤에도 남아 있으면 터진다(_advancePendingExpires). 마지막 스왑으로 그 잼을 지우면 해제.
+  _onObstacleValidSwap(resolution) {
     const { board } = this;
     const registry = this.obstaclesRegistry;
 
-    for (const { row, col, instance, handler } of tickAttachmentTimers(board, registry)) {
-      const cell = { row, col };
-      const expireResolution = this._createResolution();
-      this.resolutions.push(expireResolution);
-      this._beginClear(expireResolution, new Map([[keyOf(cell), { row, col, armedMs: 0, cause: 'obstacleExpire' }]]), 1);
-      const event = handler.onExpire?.(instance);
-      if (event) this._pendingSwapEffects.push({ ...event, cell, durationMs: 1 });
+    for (const { instance, handler } of tickAttachmentTimers(board, registry)) {
+      this._pendingExpires.push({ instance, handler, resolution });
     }
 
     if (this.floorObstacles) {
       maybeSpawnOnMove(board, registry, this.floorObstacles, board.rng, this._obstacleSpawnCounters);
     }
+  }
+
+  // 0이 된 시한폭탄: 그 스왑의 Resolution이 끝났고 폭탄이 아직 붙어 있으면(가만히 있는 칸) 그 칸을 지우는
+  // 전용 Resolution을 만든다(armed/clearing -> settle 파이프라인 재사용). 점수는 다른 clear와 같지만 탑 사격은
+  // 없다(PuzzleBattleBridge는 색 잼만 쏜다, obstacleExpire는 wallDamage 전용 신호). 그 사이 지워졌으면 해제된 것.
+  _advancePendingExpires() {
+    if (this._pendingExpires.length === 0) return;
+    const { board } = this;
+    this._pendingExpires = this._pendingExpires.filter((p) => {
+      if (!p.resolution.done) return true;
+      const idx = board.attachments.indexOf(p.instance);
+      if (idx < 0) return false;
+      if (board.cellStates[idx]) return true; // 다른 스왑·낙하로 움직이는 중 - 멈추면 터진다.
+      const cell = { row: Math.floor(idx / board.cols), col: idx % board.cols };
+      const expireResolution = this._createResolution();
+      this.resolutions.push(expireResolution);
+      this._beginClear(expireResolution, new Map([[keyOf(cell), { ...cell, armedMs: 0, cause: 'obstacleExpire' }]]), 1);
+      const event = p.handler.onExpire?.(p.instance);
+      if (event) this._pushEffect({ ...event, cell, durationMs: 1 });
+      return false;
+    });
   }
 
   // ------------------------------------------------------------
@@ -700,6 +715,7 @@ export class GameState {
     for (const resolution of this.resolutions) {
       if (!resolution.done) this._advanceResolution(resolution);
     }
+    this._advancePendingExpires();
 
     this._advanceComboStreak(dtMs);
     this._advanceHint(dtMs);
@@ -1298,6 +1314,13 @@ export class GameState {
     resolution.protectedKeys = new Set(spawnPlans.map((p) => keyOf(p.cell)));
 
     for (const spawnPlan of spawnPlans) {
+      // 특수 잼이 되는 잼에 붙은 시한폭탄은 해제된다(그 잼은 매치로 쓰였다 - 특수 잼으로 옮겨 가면 안 된다).
+      const spawnIdx = board.index(spawnPlan.cell.row, spawnPlan.cell.col);
+      if (this.obstaclesRegistry && board.attachments[spawnIdx]) {
+        const type = board.attachments[spawnIdx].type;
+        board.attachments[spawnIdx] = null;
+        this._pushEffect({ type: 'obstacleDestroyed', id: type, cell: { ...spawnPlan.cell }, cause: 'gemCleared', cascadeIndex, durationMs: 1 });
+      }
       board.set(spawnPlan.cell.row, spawnPlan.cell.col, spawnPlan.color);
       board.setSpecial(spawnPlan.cell.row, spawnPlan.cell.col, { kind: spawnPlan.kind, direction: spawnPlan.direction });
       this._pushEffect({

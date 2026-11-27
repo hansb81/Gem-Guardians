@@ -248,6 +248,57 @@ test('시한폭탄 타이머가 0이 되면 obstacleExpire 이벤트가 뜨고 �
   assert.ok(board.grid.every((v) => v !== EMPTY && v !== OBSTACLE), '만료로 지워진 칸도 중력/리필로 다시 채워져야 한다');
 });
 
+test('시한폭탄 1이 남았을 때 그 스왑으로 지우면 해제된다(터지지 않음)', () => {
+  const grid = [0, 0, 1, 1, 2, 0, 2, 1, 0];
+  const board = boardFromGrid(3, 3, grid);
+  const idx = board.index(0, 1); // swap(0,2,1,2)이 만드는 가로 매치에 들어가는 칸
+  board.attachments[idx] = { type: 'timeBomb', hp: 1, timer: 1, wallDamagePct: 0.2 };
+  const state = new GameState({ board, obstaclesConfig: obstaclesConfig({ timeBomb: TIME_BOMB }) });
+
+  assert.equal(state.trySwap(0, 2, 1, 2), true);
+  const effects = drainAndCollectEffects(state);
+  assert.ok(!effects.some((e) => e.type === 'obstacleExpire'), '지웠으니 터지면 안 된다');
+  assert.ok(effects.some((e) => e.type === 'obstacleDestroyed' && e.id === 'timeBomb' && e.cause === 'gemCleared'));
+  assert.ok(board.attachments.every((a) => a === null));
+});
+
+test('시한폭탄은 0을 보여 준 뒤 그 스왑이 끝나면 터진다(0 아래로는 안 내려감)', () => {
+  const grid = [0, 0, 1, 1, 2, 0, 2, 1, 0];
+  const board = boardFromGrid(3, 3, grid);
+  const idx = board.index(2, 0); // 매치와 무관한 칸
+  board.attachments[idx] = { type: 'timeBomb', hp: 1, timer: 1, wallDamagePct: 0.2 };
+  const state = new GameState({ board, obstaclesConfig: obstaclesConfig({ timeBomb: TIME_BOMB }) });
+
+  assert.equal(state.trySwap(0, 2, 1, 2), true);
+  assert.equal(board.attachments[idx]?.timer, 0, '스왑 직후에는 0으로 붙어 있다');
+  state.update(0.016);
+  assert.equal(board.attachments[idx]?.timer, 0, '스왑 연출 중에는 아직 안 터진다');
+  const effects = drainAndCollectEffects(state);
+  assert.equal(effects.filter((e) => e.type === 'obstacleExpire').length, 1);
+  assert.ok(board.attachments.every((a) => a === null));
+});
+
+test('시한폭탄이 붙은 잼이 특수 잼이 되면 폭탄은 해제된다(특수 잼으로 옮겨 가지 않음)', () => {
+  // swap(0,2)<->(1,2): 0이 (0,2)로 올라가 가로 4개 -> (0,2)에 특수 잼. 폭탄은 올라가는 0에 붙어 있다.
+  const grid = [
+    0, 0, 1, 0, //
+    1, 2, 0, 2, //
+    2, 1, 2, 1, //
+    1, 2, 1, 2,
+  ];
+  const board = boardFromGrid(4, 4, grid);
+  board.attachments[board.index(1, 2)] = { type: 'timeBomb', hp: 1, timer: 5, wallDamagePct: 0.1 };
+  const state = new GameState({ board, obstaclesConfig: obstaclesConfig({ timeBomb: TIME_BOMB }) });
+
+  assert.equal(state.trySwap(0, 2, 1, 2), true);
+  const effects = drainAndCollectEffects(state);
+  const created = effects.find((e) => e.type === 'specialCreate');
+  assert.deepEqual(created?.position, { row: 0, col: 2 }, '폭탄이 붙은 잼 자리에 특수 잼');
+  assert.ok(effects.some((e) => e.type === 'obstacleDestroyed' && e.id === 'timeBomb'));
+  assert.ok(board.attachments.every((a) => a === null), '특수 잼에 폭탄이 남으면 안 된다');
+  assert.ok(!effects.some((e) => e.type === 'obstacleExpire'));
+});
+
 test('연쇄(cascade)는 시한폭탄 타이머를 줄이지 않는다 - 유효한 스왑 1번당 1만 줄어든다', () => {
   // tests/puzzleBattleBridge.test.js의 2단계 연쇄 격자를 그대로 재사용한다. (4,0)은 두
   // 단계 중 어느 쪽 매치/중력 이동에도 전혀 관여하지 않는 칸(바닥, col0은 1단계에서만
