@@ -336,6 +336,33 @@
       "volume": 0.6,
       "maxInstances": 2,
       "minGapMs": 120
+    },
+    "guardian_upgrade": {
+      "event": "수호자 강화 성공 1회. 연속 강화(길게 누르기) n번째에 guardian_upgrade_n (8 이상은 8), 1.2초 쉬면 1부터",
+      "files": [
+        "guardian_upgrade_1",
+        "guardian_upgrade_2",
+        "guardian_upgrade_3",
+        "guardian_upgrade_4",
+        "guardian_upgrade_5",
+        "guardian_upgrade_6",
+        "guardian_upgrade_7",
+        "guardian_upgrade_8"
+      ],
+      "durationMs": 200,
+      "volume": 0.8,
+      "maxInstances": 3,
+      "minGapMs": 50
+    },
+    "guardian_tier_up": {
+      "event": "강화로 수호자 모습 등급이 바뀜 (towerLookTiers 20/35/50 넘을 때). 이때는 guardian_upgrade 대신",
+      "files": [
+        "guardian_tier_up"
+      ],
+      "durationMs": 600,
+      "volume": 0.9,
+      "maxInstances": 1,
+      "minGapMs": 200
     }
   }
 }

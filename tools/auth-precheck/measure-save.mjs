@@ -74,7 +74,7 @@ async function build({ days, payments, best, perDay }) {
     const date = ymd(ms);
     const dayIdx = days - 1 - d;
     inv.grant(att.days[dayIdx % att.days.length], { src: 'att', txId: `att:${date}` });
-    inv.grant({ items: { [shop.free.item]: shop.free.count } }, { src: 'freeDaily', txId: `free:${date}` });
+    inv.grant({ items: { [shop.free.items[0]]: shop.free.count } }, { src: 'freeDaily', txId: `free:${date}` });
     for (const p of perDay.pass) inv.grant({ diamonds: shop.packs[p].pass.daily }, { src: 'pass', txId: `pass:${p}:${date}` });
     for (let n = 1; n <= perDay.ads; n++) inv.grant({ diamonds: 5 }, { src: 'ad', txId: `ad:chest:${date}:${n}` });
     if (dayIdx % 7 === 6) {

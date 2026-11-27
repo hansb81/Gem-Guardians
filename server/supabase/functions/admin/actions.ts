@@ -75,7 +75,9 @@ export function bundleOfProduct(key: string) {
 function savePick(d: Record<string, unknown> | null) {
   if (!d) return null;
   const inv = (d.inv ?? {}) as { items?: unknown; perm?: { skills?: unknown; flags?: unknown } };
+  const shop = (d.shop ?? {}) as { passes?: unknown; passHistory?: unknown };
   return {
+    passes: shop.passes ?? null, passHistory: shop.passHistory ?? null, // 패스 해지 환불의 "받은 일수" 확인용
     gold: d.gold, diamonds: d.diamonds, floor: d.floor, bestFloor: d.bestFloor, towerLevels: d.towerLevels,
     items: inv.items ?? null, skills: inv.perm?.skills ?? null, flags: inv.perm?.flags ?? null,
   };

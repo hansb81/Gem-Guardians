@@ -9,7 +9,8 @@ import { HUD_CONFIG } from '../config/hud.js';
 import { drawImageSnapped } from './screenFit.js';
 
 const K = 2;
-const SLOT = 22 * K; // 44
+const SLOT_K = 3; // 장착·예약 칸도 보유 목록과 같은 3배(66px)
+const SLOT = 22 * SLOT_K;
 const BIG_K = 3;
 const BIG = 22 * BIG_K; // 66
 const P = 5; // 구역 상자 안쪽 여백
@@ -28,7 +29,7 @@ const TITLE_PX = 12;
 const SMALL_PX = 11;
 const FILTERS = ['all', 'board', 'battle', 'other'];
 const EQ_H = P + 13 + 3 + SLOT + 1 + 11 + P;
-const RS_H = EQ_H + 2 + 13;
+const RS_H = EQ_H + 2 + 19; // 이름 아래 예약됨/끔 상자(18)
 const DT_H = P + BIG + 4 + BTN_H + P;
 const C = {
   title: HUD_CONFIG.text.title,
@@ -179,7 +180,7 @@ export class InventoryTab {
       } else {
         const id = shown[i] ?? null;
         const count = id != null ? inv.count(id) : null;
-        drawSlot(sx, sy, id, this._slotOpts(pending != null && pending[i] !== now[i], count));
+        drawSlot(sx, sy, id, { ...this._slotOpts((pending != null && pending[i] !== now[i]) || (id != null && ui.invSel === id), count), countK: K }, SLOT_K);
         name = id != null ? t(`item.name.${id}`) : t('inv.emptySlot');
         if (id == null) this._plus(ctx, sx, sy);
       }
@@ -198,10 +199,11 @@ export class InventoryTab {
       const sx = cellX(i);
       const count = inv.count(id);
       const ry = y + P + 16;
-      drawSlot(sx, ry, id, this._slotOpts(on, count));
+      // 예약됨 = 초록 틀(slot_reserved). 고른 것 표시(금색 틀)는 예약 칸에 없다.
+      drawSlot(sx, ry, id, { ...this._slotOpts(false, count), countK: K, skin: on ? 'items/slot_reserved.png' : null }, SLOT_K);
       this._name(ctx, t(`item.name.${id}`), sx + SLOT / 2, ry + SLOT + 7, cellW - 2, false);
-      this._status(ctx, on, sx + SLOT / 2, ry + SLOT + 21);
-      out.preFloor[id] = { x: Math.round(x + P + cellW * i), y: ry, width: Math.round(cellW), height: SLOT + 28 };
+      this._status(ctx, on, sx + SLOT / 2, ry + SLOT + 24);
+      out.preFloor[id] = { x: Math.round(x + P + cellW * i), y: ry, width: Math.round(cellW), height: SLOT + 34 };
     });
     y = sec.own.y;
 
@@ -266,7 +268,7 @@ export class InventoryTab {
       ctx.fillStyle = C.text;
       ctx.font = getFontString(SMALL_PX);
       this._wrap(ctx, t(`item.desc.${id}`), tx, dtY + P + 22, tw, 15, 2);
-      this._chips(ctx, [...this._stats(cfg.items[id]), t('inv.owned', { n: count })], tx, dtY + P + BIG - 14, tw);
+      this._chips(ctx, [...this._stats(cfg.items[id]), t('inv.owned', { n: count })], tx, dtY + P + BIG - 10, tw);
     } else {
       drawSlot(x + P, dtY + P, null, {}, BIG_K);
       ctx.textAlign = 'left';
@@ -349,14 +351,14 @@ export class InventoryTab {
   _status(ctx, on, cx, cy) {
     const text = t(on ? 'inv.reserveOn' : 'inv.reserveOff');
     ctx.font = getFontString(SMALL_PX);
-    const tw = Math.ceil(ctx.measureText(text).width) + 6;
+    const tw = Math.ceil(ctx.measureText(text).width) + 12; // 칩과 같은 규격: 상자 18, 좌우 여백 6, 글자 1px 아래
     const rx = Math.round(cx - tw / 2);
     ctx.strokeStyle = on ? C.on : C.chipBorder;
     ctx.lineWidth = 1;
-    ctx.strokeRect(rx + 0.5, Math.round(cy - 6) + 0.5, tw - 1, 12);
+    ctx.strokeRect(rx + 0.5, Math.round(cy - 9) + 0.5, tw - 1, 18);
     ctx.textAlign = 'center';
     ctx.fillStyle = on ? C.on : C.sub;
-    drawText(ctx, text, cx, cy);
+    drawText(ctx, text, cx, cy + 1);
   }
 
   _plus(ctx, sx, sy) {
@@ -423,12 +425,13 @@ export class InventoryTab {
     ctx.lineWidth = 1;
     let cx = x;
     for (const p of parts) {
-      const tw = Math.ceil(ctx.measureText(p).width) + 8;
+      // 글자 11 + 외곽선 2 = 13이라 상자 14·여백 4로는 테두리에 닿는다 -> 상자 18, 좌우 여백 6, 글자 1px 아래.
+      const tw = Math.ceil(ctx.measureText(p).width) + 12;
       if (cx + tw > x + maxW) break;
       ctx.strokeStyle = C.chipBorder;
-      ctx.strokeRect(Math.round(cx) + 0.5, Math.round(cy - 7) + 0.5, tw - 1, 14);
+      ctx.strokeRect(Math.round(cx) + 0.5, Math.round(cy - 9) + 0.5, tw - 1, 18);
       ctx.fillStyle = C.chip;
-      drawText(ctx, p, cx + 4, cy);
+      drawText(ctx, p, cx + 6, cy + 1);
       cx += tw + 4;
     }
   }
@@ -449,7 +452,7 @@ export class InventoryTab {
       ctx.fillStyle = '#1b1f2a';
       ctx.fillRect(x, y, SLOT, SLOT);
     }
-    drawFixedImage(ctx, assets, 'icons/lock.png', x + SLOT / 2, y + SLOT / 2, K);
+    drawFixedImage(ctx, assets, 'icons/lock.png', x + SLOT / 2, y + SLOT / 2, SLOT_K);
   }
 
   // 폭을 넘으면 끝을 …로 자른다(한 줄 유지).

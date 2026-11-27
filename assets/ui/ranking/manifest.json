@@ -27,21 +27,6 @@
    "w": 14,
    "h": 14
   },
-  "podium_1": {
-   "w": 16,
-   "h": 16,
-   "slice": 5
-  },
-  "podium_2": {
-   "w": 16,
-   "h": 16,
-   "slice": 5
-  },
-  "podium_3": {
-   "w": 16,
-   "h": 16,
-   "slice": 5
-  },
   "ribbon": {
    "w": 40,
    "h": 20,
@@ -93,6 +78,50 @@
   "tier_r50": {
    "w": 16,
    "h": 16
+  },
+  "hall/hall_bg": {
+   "w": 150,
+   "h": 96
+  },
+  "hall/hall_torch_l": {
+   "w": 32,
+   "h": 8
+  },
+  "hall/hall_torch_r": {
+   "w": 32,
+   "h": 8
+  },
+  "hall/hall_pedestal_1": {
+   "w": 44,
+   "h": 30
+  },
+  "hall/hall_pedestal_2": {
+   "w": 44,
+   "h": 24
+  },
+  "hall/hall_pedestal_3": {
+   "w": 44,
+   "h": 21
+  },
+  "hall/rank_shield_iron": {
+   "w": 26,
+   "h": 30
+  },
+  "hall/rank_shield_bronze": {
+   "w": 26,
+   "h": 30
+  },
+  "hall/rank_shield_silver": {
+   "w": 26,
+   "h": 30
+  },
+  "hall/rank_shield_gold": {
+   "w": 26,
+   "h": 30
+  },
+  "hall/shield_digits": {
+   "w": 60,
+   "h": 7
   }
  },
  "tiers": {
@@ -107,5 +136,101 @@
   "p30": "tier_p30",
   "p50": "tier_p50",
   "part": "tier_part"
+ },
+ "hall": {
+  "scale": 3,
+  "origin_screenPx": [
+   45,
+   230
+  ],
+  "native": [
+   150,
+   96
+  ],
+  "floorY": 86,
+  "bg": {
+   "file": "hall_bg.png",
+   "colors": 15
+  },
+  "torch": {
+   "sheets": {
+    "l": {
+     "file": "hall_torch_l.png",
+     "x": 42,
+     "y": 34,
+     "colors": 10
+    },
+    "r": {
+     "file": "hall_torch_r.png",
+     "x": 102,
+     "y": 34,
+     "colors": 9
+    }
+   },
+   "w": 8,
+   "h": 8,
+   "frames": 4,
+   "frameMs": 100,
+   "rule": "frame = floor(t/100) % 4 for both (phase offset baked in); opaque crops incl. wall"
+  },
+  "pedestals": {
+   "1": {
+    "file": "hall_pedestal_1.png",
+    "w": 44,
+    "h": 30,
+    "x": 53,
+    "y": 57,
+    "colors": 8
+   },
+   "2": {
+    "file": "hall_pedestal_2.png",
+    "w": 44,
+    "h": 24,
+    "x": 6,
+    "y": 63,
+    "colors": 6
+   },
+   "3": {
+    "file": "hall_pedestal_3.png",
+    "w": 44,
+    "h": 21,
+    "x": 100,
+    "y": 66,
+    "colors": 8
+   }
+  },
+  "statues": {
+   "1": {
+    "feetCenterX": 75,
+    "top": 33,
+    "size": [
+     20,
+     26
+    ],
+    "note": "stone tint of the representative guardian idle (frame = (floor(t/160)+rank)%4), neon pixels kept in own colour"
+   },
+   "2": {
+    "feetCenterX": 28,
+    "top": 39,
+    "size": [
+     20,
+     26
+    ],
+    "note": "stone tint of the representative guardian idle (frame = (floor(t/160)+rank)%4), neon pixels kept in own colour"
+   },
+   "3": {
+    "feetCenterX": 122,
+    "top": 42,
+    "size": [
+     20,
+     26
+    ],
+    "note": "stone tint of the representative guardian idle (frame = (floor(t/160)+rank)%4), neon pixels kept in own colour"
+   }
+  },
+  "myCard": {
+   "shield": "rank_shield_{metal}.png 26x30 drawn x4; digit from shield_digits.png (6px pitch, 5x7) drawn x8 at shield (6,5)*4; metal: normal tab 1 gold/2 silver/3 bronze/else iron, comp tab = weekly band metal",
+   "crown": "menu/symbols/rank_crown_{metal}.png frame 0 x2"
+  }
  }
 }

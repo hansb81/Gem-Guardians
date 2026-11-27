@@ -2,8 +2,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { seasonAt, seasonFromId, prevSeason, isSettling } from '../src/ranking/season.js';
-import { tierOf, nextTierGap, compareEntries, rewardBundle } from '../src/ranking/tiers.js';
+import { seasonAt, seasonFromId, prevSeason, isSettling, isNewSeason } from '../src/ranking/season.js';
+import { tierOf, nextTierGap, compareEntries, rewardBundle, crownBand } from '../src/ranking/tiers.js';
 import { normalizeRanking, isValidNickname } from '../src/ranking/rankingSave.js';
 import { LocalRankingService } from '../src/ranking/rankingService.js';
 import { migrateSave, SAVE_VERSION } from '../src/core/inventory/inventory.js';
@@ -155,4 +155,69 @@ test('닉네임 팝업을 X로 닫고 다음에 랭킹을 열면 다시 뜬다(�
   ui.close();
   ui.open();
   assert.equal(ui.state.sub, null);
+});
+
+// ---------- 메뉴 왕관(config crown) ----------
+globalThis.Image ??= class {};
+const { RankingUi } = await import('../src/game/rankingUi.js');
+
+test('왕관 금속: 상위 1%/10%/50% 경계는 포함, 기록 없음·잠김·그 밖은 iron', () => {
+  const B = CFG.crown.bands;
+  const band = (rank, total = 200) => crownBand(B, { rank, total });
+  assert.deepEqual([1, 2, 3, 20, 21, 100, 101, 200].map((r) => band(r)), ['gold', 'gold', 'silver', 'silver', 'bronze', 'bronze', 'iron', 'iron']);
+  assert.equal(band(1, 1), 'gold');
+  assert.equal(crownBand(B, null), 'iron', '이번 주 기록 없음');
+  assert.equal(crownBand(B, { rank: null, total: null }), 'iron', '순위를 모름(오프라인 기기 기록)');
+  assert.equal(crownBand(B, { rank: 1, total: 200 }, true), 'iron', '경쟁 모드 잠김');
+  // 보상 구간(tiers)과 같은 식 - p1 보상을 받는 사람은 금, p10은 은 이상, p50은 동 이상.
+  for (const [rank, total] of [[55, 6000], [60, 1000], [400, 1000]]) {
+    const t = tierOf(T, rank, total).id;
+    assert.equal(band(rank, total), { p1: 'gold', p5: 'silver', p10: 'silver', p30: 'bronze', p50: 'bronze' }[t]);
+  }
+});
+
+test('lastSeenSeasonId: 첫 설치는 재생 없음, 같은 시즌 없음, 새 시즌이면 재생', () => {
+  assert.equal(isNewSeason(null, '2026-W48'), false);
+  assert.equal(isNewSeason('2026-W48', '2026-W48'), false);
+  assert.equal(isNewSeason('2026-W47', '2026-W48'), true);
+});
+
+test('메뉴 tick: 금속은 받은 값을 기기에 남겨 못 받은 동안 쓰고, 시즌이 바뀌면 iron + 소용돌이 한 번', () => {
+  const player = { ranking: { comp: { seasonId: '2026-W47' } } };
+  let open = true;
+  const make = () => {
+    const ui = new RankingUi({ player, canvas: null });
+    ui.config = CFG;
+    ui.compOpen = () => open;
+    ui.service = { syncSeason() {}, me: async () => null, compMine: undefined };
+    return ui;
+  };
+  let ui = make();
+  ui.tick(1000);
+  assert.equal(ui.crown, 'iron', '처음 = iron');
+  assert.equal(ui.swirl, false, '첫 설치는 저장만');
+  ui.service.compMine = { seasonId: '2026-W47', me: { rank: 15, total: 200 } };
+  ui.tick(2000);
+  assert.equal(ui.crown, 'silver');
+  ui = make(); // 다시 실행 - 서버 응답 전
+  ui.tick(1000);
+  assert.equal(ui.crown, 'silver', '마지막으로 받은 값');
+  assert.equal(ui.swirl, false, '같은 시즌');
+  open = false;
+  ui.tick(2000);
+  assert.equal(ui.crown, 'iron', '잠김');
+  open = true;
+  ui.service.compMine = { seasonId: '2026-W47', me: null };
+  ui.tick(3000);
+  assert.equal(ui.crown, 'iron', '기록 없음을 받음');
+  ui.service.compMine = { seasonId: '2026-W47', me: { rank: 1, total: 200 } };
+  ui.tick(4000);
+  assert.equal(ui.crown, 'gold');
+  player.ranking.comp.seasonId = '2026-W48';
+  ui.tick(5000);
+  assert.equal(ui.crown, 'iron', '새 시즌 - 지난 시즌 값은 안 씀');
+  assert.equal(ui.swirl, true);
+  ui.swirl = false;
+  ui.tick(6000);
+  assert.equal(ui.swirl, false, '한 번만');
 });

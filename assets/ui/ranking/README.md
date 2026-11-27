@@ -5,8 +5,12 @@
 | 파일 | 원본 | 화면 | 쓰는 곳 |
 |---|---|---|---|
 | emblem_rank | 24x24 | 48 | 팝업 윗변 문장 (emblem_win 대신) |
-| medal_1/2/3 | 14x14 | 28 | 단상 위 메달 (금·은·동, 리본 빨강·파랑·초록, 숫자 포함) |
-| podium_1/2/3 | 16x16 9-slice, slice 5 | border 10px | 단상 칸 (가운데 #3b3347, 숫자는 코드 글자) |
+| medal_1/2/3 | 14x14 | 28 | (지금 안 씀 - 예전 단상 위 메달) |
+| hall/hall_bg | 150x96 | x3 = 450x288 | 명예의 전당 배경 (좌표는 manifest.json `hall`) |
+| hall/hall_torch_l, _r | 8x8 x4프레임 | x3 | 횃불 (100ms, 불투명 조각) |
+| hall/hall_pedestal_1/2/3 | 44x30 / 44x24 / 44x21 | x3 | 1~3위 돌 받침대 (숫자 포함) - 위 석상은 대표 수호자 idle을 코드에서 돌색으로 |
+| hall/rank_shield_{iron,bronze,silver,gold} | 26x30 | x4 | 내 기록 카드 순위 방패 |
+| hall/shield_digits | 60x7 (5x7, 6px 간격) | x8 | 방패 숫자 0~9 |
 | tier_r1 r2 r3 | 16x16 | 32 / 48 / 64 | 1·2·3위 왕관 (금·은·동) |
 | tier_r10 | 16x16 | | 4~10위 금테 빨간 방패 + 별 |
 | tier_r50 | 16x16 | | 11~50위 쇠테 보라 방패 + 별 |

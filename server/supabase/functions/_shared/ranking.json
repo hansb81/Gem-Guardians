@@ -8,6 +8,12 @@
   "topLimit": 100,
   "nextTierStep": 10,
   "historyMax": 8,
+  "cardModeBelow": 10,
+  "crown": {
+    "_doc": "메뉴 원석 위 왕관 금속 = 이번 주 경쟁 모드 내 구간(위에서부터 처음 맞는 것, tiers와 같은 식). 그 밖·기록 없음·잠김 = iron. swirlOnBandUp = 금속이 올라간 걸 처음 볼 때도 시즌 소용돌이 재생.",
+    "bands": [{ "id": "gold", "pct": 1 }, { "id": "silver", "pct": 10 }, { "id": "bronze", "pct": 50 }],
+    "swirlOnBandUp": false
+  },
   "comp": {
     "_doc": "경쟁 모드 판 규칙(docs/ranking.md 5장). 서버 사본 server/supabase/functions/_shared/ranking.json. 무한 웨이브: src/core/comp/endless.js. endless 수치는 tools/sim T8로 정한다.",
     "unlockBestFloor": 20,

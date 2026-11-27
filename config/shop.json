@@ -2,7 +2,8 @@
   "_doc": "상점 카탈로그(mockups/shop/shop.html 시안 2에서 옮김). 숫자는 전부 임시. 골드 아이템 가격은 여기 없다 - config/items.json goldBase x 최고 도달 층 근처 일반 층 보상(economy.itemPrice). goldBase/levelCost/unlockGold/floors = 같은 '일반 층 1개 보상' 배수(economy.normalFloorReward). 다이아 단품(gold_coin, revive) 값은 items.json diamond. diaItems의 객체 칸 = 정령석 묶음(spiritStones개 = 다이아 dia, 하루 1번 KST, txId shop:{id}:{날짜}). 현금 상품의 가격·지급 내용은 config/products.json(키 pack.{id}, dia.{순번}) - 여기는 노출 조건·패스 일정·첫 구매 2배(diaBundles bonus)만.",
   "qtyMax": 99,
   "qtyQuick": [1, 5, 10],
-  "free": { "item": "dye", "count": 1 },
+  "_freeDoc": "오늘의 무료: items를 날짜(KST) 순서로 하루에 하나씩 돌린다(모든 유저가 같은 날 같은 아이템). 목록은 임시 - 골드 상점 아이템 전부.",
+  "free": { "items": ["hammer", "dye", "shuffle", "scythe_h", "glove", "rainbow", "repair", "hourglass", "barrier", "drum", "booster_line", "booster_bomb"], "count": 1 },
   "goldItems": [
     { "group": "board", "items": ["hammer", "dye", "shuffle", "scythe_h", "glove", "rainbow"] },
     { "group": "battle", "items": ["repair", "hourglass", "barrier", "drum"] },
@@ -44,8 +45,9 @@
   "diaItems": ["gold_coin", "revive", { "id": "stones", "spiritStones": 5, "dia": 40 }],
   "slot4Dia": 300,
   "packs": {
-    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems) | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
+    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems). 종료일은 구매일 기준 고정, 못 받은 날은 다음에 받을 때 합산, 끝난 뒤 passGraceDays일까지 남은 몫을 받을 수 있고 그 뒤엔 사라진다 | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
     "order": ["starter", "boss", "slot4", "weekly", "monthly", "chapter", "adfree"],
+    "passGraceDays": 3,
     "starter": { "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5 },
     "boss": { "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3 },
     "slot4": { "once": true, "maxBestFloor": 20, "icon": "pack_slot4" },

@@ -48,6 +48,12 @@ const DIA_TIER = [
   { icon: 'shop/dia_t5.png', card: 'shop/card_dia_gold.png', pill: 'gold', gold: true, sparkle: 2 },
   { icon: 'shop/dia_t6.png', card: 'shop/card_dia_royal.png', pill: 'gold', gold: true, sparkle: 3, shine: true, badge: ['shop.dia.badge.best', 'gold'] },
 ];
+// 골드 교환 단계(config/shop.json goldExchange 순서 small/mid/big). 알약 = 다이아 1개당 골드가 '소'보다 몇 % 많은지.
+const GOLD_TIER = {
+  small: { icon: 'shop/gold_t1.png', card: 'upgrade/card.png' },
+  mid: { icon: 'shop/gold_t2.png', card: 'shop/card_dia_silver.png' },
+  big: { icon: 'shop/gold_t3.png', card: 'shop/card_dia_gold.png', gold: true, sparkle: 2, badge: ['shop.dia.badge.best', 'gold'] },
+};
 const SPARK_AT = [[14, 6], [66, 10], [8, 52]]; // 아이콘 칸 안 반짝이 자리(basis)
 const TAG_BG = { '': C.red, blue: C.blueM, gray: C.bg3, gold: C.gold };
 
@@ -486,6 +492,7 @@ export class ShopScreen {
   _drawCard(ctx, row, y) {
     const { e: p, tx } = row;
     if (p.kind === 'diaBundle') return this._drawDiaCard(ctx, row, y);
+    if (p.kind === 'goldEx' && GOLD_TIER[p.exId]) return this._drawGoldCard(ctx, row, y);
     const x = CARD.x;
     const w = CARD.w;
     const h = CARD.h;
@@ -535,6 +542,43 @@ export class ShopScreen {
       const bw = this._measure(ctx, label, 11) + 22;
       this._nine(ctx, `shop/ribbon_${tier.badge[1]}.png`, x - 6, y - 8, bw, 22);
       this._text(ctx, label, x - 6 + 8, y + 3, 11, tier.badge[1] === 'gold' ? C.outline : C.bone);
+    }
+  }
+
+  // 골드 교환 카드: 단계별 아이콘·틀, 아랫줄 = 가치 알약(+N%) + 받는 골드(금색), 대 = 최고 혜택 배지 + 반짝이.
+  _drawGoldCard(ctx, row, y) {
+    const { e: p, tx } = row;
+    const tier = GOLD_TIER[p.exId];
+    const x = CARD.x, w = CARD.w, h = CARD.h;
+    const now = performance.now();
+    this._nine(ctx, this.sel === p.id && !tier.gold ? 'upgrade/card_selected.png' : tier.card, x, y, w, h);
+    const calm = !!this._assets?.effectsConfig?.settings?.reduceMotion;
+    const ix = x + 8, iy = y + 8, iw = w - 16;
+    const left = ix + 88;
+    this._img(ctx, tier.icon, ix + 2, iy + 4, 80, 72);
+    if (!calm) for (let i = 0; i < (tier.sparkle ?? 0); i++) this._sparkle(ctx, ix + 2 + SPARK_AT[i][0], iy + 4 + SPARK_AT[i][1], now + i * 700);
+    this._text(ctx, tx.name, left, iy + 15, 22, tier.gold ? C.goldL : C.bone, 'left', true);
+    this._text(ctx, t('shop.goldex.desc', { n: p.floors }), left, iy + 37, 11, C.bone);
+    const base = this.env.cfg.goldExchange[0];
+    const pct = Math.round(((p.floors / p.price) / (base.floors / base.dia) - 1) * 100);
+    let sx = left;
+    if (pct > 0) {
+      const label = `+${pct}%`;
+      const pw = this._measure(ctx, label, 11) + 12;
+      this._nine(ctx, 'shop/pill_gold.png', left, iy + 54, pw, 20);
+      this._text(ctx, label, left + pw / 2, iy + 64, 11, C.outline, 'center');
+      sx += pw + 6;
+    }
+    this._img(ctx, 'icons/gold.png', sx, iy + 56, 16, 16);
+    this._text(ctx, `+${fmt(p.gold)}`, sx + 20, iy + 64, 11, C.goldL);
+    if (p.state === 'sold') this._dither(ctx, x, y, w, h);
+    this._drawPrice(ctx, p, tx, ix + iw - 132, iy + 16, 132, 48);
+    if (tx.tag) this._drawTag(ctx, tx.tag, x + w - 4, y - 8);
+    if (tier.badge) {
+      const label = t(tier.badge[0]);
+      const bw = this._measure(ctx, label, 11) + 22;
+      this._nine(ctx, `shop/ribbon_${tier.badge[1]}.png`, x - 6, y - 8, bw, 22);
+      this._text(ctx, label, x - 6 + 8, y + 3, 11, C.outline);
     }
   }
 
@@ -1034,6 +1078,7 @@ export class ShopScreen {
     else if (p.kind === 'item') this._showToast(t('shop.toast.bought', { name: tx.name, n: res.qty }));
     else if (REWARD_KINDS.has(p.kind) && this.env.showReward) this.env.showReward(rewardFromDelta(res.delta));
     else this._showToast(t('shop.toast.got', { what: gotText(res.got) }));
+    if (p.kind === 'passClaim') this._showToast(t('shop.toast.passDays', { n: res.product.pending, what: gotText(res.got) })); // 밀린 날 합산 - 며칠치인지
     return res;
   }
 
@@ -1072,6 +1117,21 @@ export class ShopScreen {
         pop.step = 'done';
         pop.gotText = gotText(res.got);
         pop.layout = null;
+      });
+      return;
+    }
+    if (p.kind === 'free' && !p.adFree && platform.caps.rewarded && this.env.watchAd) {
+      // 오늘의 무료: 보상형 광고가 닫힌 뒤에 지급(광산 가속과 같은 규칙). 못 띄우면 토스트, 중간에 닫으면 아무 일 없음(오늘 기회는 남는다).
+      const pop = this.popup;
+      pop.step = 'paying'; // 불러오는 동안 점 표시 + 닫기·중복 누름 막기
+      pop.layout = null;
+      this.env.watchAd().catch(() => null).then((r) => {
+        if (this.popup === pop) this.popup = null;
+        if (!r?.shown) {
+          audio.play('ui_purchase_fail');
+          return this._showToast(t('battle.lose.adFail'));
+        }
+        if (r.rewarded) this._buy(p, tx, qty);
       });
       return;
     }

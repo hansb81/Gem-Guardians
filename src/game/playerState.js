@@ -21,7 +21,7 @@ const LEGACY_KEYS = ['gemGuardians.save.v1'];
 const TOWER_COUNT = 5;
 
 function defaults() {
-  // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {endDay, claimedDay}}, freeClaimedDate, day, offers }
+  // shop = { purchasedOnce[], firstBuyUsed[], passes{weekly,monthly: {endDay, claimedDay}}, passHistory[최근 5건], freeClaimedDate, day, offers }
   // (src/core/shop/shop.js defaultShopSave) - config/shop.json을 읽은 뒤 initShop이 채운다.
   // tutorial = 최초 진입 튜토리얼(docs/tutorial.md) - done이 true가 아니면 1층 진입 때 실행.
   return { gold: 0, diamonds: 0, floor: 1, bestFloor: 1, towerLevels: Array(TOWER_COUNT).fill(1), shop: null, tutorial: { done: false, version: 1 } };

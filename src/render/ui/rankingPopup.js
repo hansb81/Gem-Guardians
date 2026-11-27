@@ -1,11 +1,13 @@
-// 랭킹 팝업(docs/ranking.md 3~5장, 목업 mockups/ranking/ranking.html 시안 1). 보관함 정비 팝업과 같은 틀·자리.
+// 랭킹 팝업(docs/ranking.md 3~5장). 보관함 정비 팝업과 같은 틀·자리. 탭 아래 = 명예의 전당(1~3위, 고정) +
+// 참가자가 적으면(config ranking.cardModeBelow 미만) 내 기록 카드, 아니면 4위부터 목록 + 맨 아래 내 줄.
 // 좌표는 전부 540 폭 기준(basis)이고 캔버스엔 scale(= 화면 폭 / 540)을 곱해 그린다(prepPopup과 같은 방식).
-// 그림은 원본 x2 정수 배율(구간 배지만 내 정보 x3, 시즌 결과 x4), imageSmoothingEnabled=false.
+// 그림은 원본 x2 정수 배율(전당 x3, 카드 방패 x4·숫자 x8), imageSmoothingEnabled=false.
 //   layoutRankingPopup = 사각형·목록 위치만 계산하는 순수 함수(tests/rankingPopup.test.js)
 //   drawRankingPopup   = 그리기만
 //   hitRankingPopup    = 화면 좌표 -> { type, ... }
 // st(src/game/rankingUi.js) = { sheet, tab, compState, sub, scroll, entries, unavailable, me, total, history,
-//   season, nowMs, timerText, blinkAt, nick: { draft, statue, err, first }, tiers, floorGold }
+//   season, nowMs, timerText, blinkAt, nick: { draft, statue, err, first }, tiers, floorGold,
+//   cardBelow, myMetal(iron|bronze|silver|gold), crown({ img, w, h } 메뉴 왕관 시트) }
 import { drawNine, drawText, drawFixedImage, getUi, getUiMeta, uiReady } from '../uiKit.js';
 import { getFontString } from '../../config/fonts.js';
 import { t } from '../../config/i18n.js';
@@ -24,15 +26,29 @@ const TAB_OVERLAP = 6;
 const ROW_H = 56;
 const GAP = 4;
 const DIV_H = 28;
-const PODIUM_H = 196;
 const FOOT_H = 44;
-const STEP_H = { 1: 72, 2: 52, 3: 40 }; // 목업 단상 높이
+const BAND_H = 32; // 경쟁 탭 시즌 한 줄 띠
+// 명예의 전당: 원본 150x96을 x3(메인 메뉴와 같은 픽셀 크기). 안쪽 좌표는 assets/ui/ranking/manifest.json hall.
+const HALL = { w: 450, h: 288, k: 3, gap: 16 };
+const CARD = { x: 50, w: 440, h: 230 }; // 내 기록 카드(참가자 cardModeBelow 미만)
 const BLINK_MS = 1000;
 // 팔레트(assets/gems/palette.hex) + 보조 글자색(characters.hex #a59cb2)
 const C = {
   outline: '#0d0a10', bg1: '#221c2b', bg2: '#3b3347', bg3: '#655a74', bone: '#e8dcc0', dim: '#a59cb2',
   gold: '#c28a20', goldL: '#f2d264', brnM: '#7a5212', brnD: '#3a2808', redM: '#741426', redL: '#ec6a6a',
 };
+
+// 내 금속(카드 테두리·진행 바 = mid, 기록 글자 = light). 전당 기록 글자색은 순위별.
+const METAL = {
+  iron: { mid: '#3b3347', light: '#a59cb2' },
+  bronze: { mid: '#8a5a4a', light: '#d4a88c' },
+  silver: { mid: '#655a74', light: '#e8dcc0' },
+  gold: { mid: '#c28a20', light: '#f2d264' },
+};
+const HALL_VALUE = { 1: '#f2d264', 2: '#e8dcc0', 3: '#d4a88c' };
+
+// 전당 아래를 내 기록 카드로 보여 줄지: 그 탭 참가자 수가 기준(config ranking.cardModeBelow) 미만일 때. 수를 모르면(null) 목록.
+export const isCardMode = (total, below = 10) => total != null && total < below;
 
 const rect = (x, y, width, height) => ({ x, y, width, height });
 const inside = (x, y, r) => r && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
@@ -56,52 +72,60 @@ export function layoutRankingPopup(screenW, screenH, st) {
   const c = rect(out.body.x + 8, out.body.y + 8, out.body.width - 16, out.body.height - 16);
   out.content = c;
   const cBottom = c.y + c.height;
-  out.mine = rect(c.x, cBottom - ROW_H, c.width, ROW_H);
-  out.edit = rect(out.mine.x + out.mine.width - 52, out.mine.y + 6, 44, 44);
-  out.goComp = rect(out.edit.x - 8 - 168, out.mine.y + 6, 168, 44);
-
-  let y = c.y + 4;
   const comp = st.tab === 'comp';
+  // 전당 아래: 참가자가 적으면 내 기록 카드(맨 아래 내 줄은 숨김), 아니면 4위부터 목록 + 맨 아래 내 줄.
+  out.cardMode = !st.unavailable && isCardMode(st.total, st.cardBelow);
+  if (!out.cardMode) {
+    out.mine = rect(c.x, cBottom - ROW_H, c.width, ROW_H);
+    out.edit = rect(out.mine.x + out.mine.width - 52, out.mine.y + 6, 44, 44);
+    out.goComp = rect(out.edit.x - 8 - 168, out.mine.y + 6, 168, 44);
+  }
+
+  let y = c.y + 2;
   if (comp) {
-    out.last = rect(c.x, y, c.width, 44);
-    y += 48;
-    out.season = rect(c.x, y, c.width, 32);
-    y += 36;
-    out.tierRow = rect(c.x, y, c.width, 64);
-    out.rewardsBtn = rect(c.x + c.width - 10 - 112, y + 10, 112, 44);
-    y += 68;
+    // 시즌 한 줄 띠("45주차 · 22:54:27 남음 · 내 구간 … · 보상 보기 ›") - 띠 전체가 보상 보기(터치 44).
+    out.band = rect(c.x, y, c.width, BAND_H);
+    out.rewardsBtn = rect(c.x, y - 6, c.width, 44);
+    y += BAND_H + 4;
     if (st.compState === 'settle') {
       out.settle = rect(c.x, y, c.width, 40);
       y += 44;
     }
   }
-  // 서버 랭킹 오프라인: "오프라인 · 마지막 갱신 N분 전" 한 줄(목록 위).
+  // 서버 랭킹 오프라인: "오프라인 · 마지막 갱신 N분 전" 한 줄(전당 위).
   if (!comp && st.offlineText) {
     out.offline = rect(c.x, y, c.width, 24);
     y += 28;
   }
+  // 명예의 전당(1~3위) - 스크롤하지 않는다. 순위표를 못 받았으면 없음(안내 문구만).
+  if (!st.unavailable) {
+    out.hall = rect(c.x - 1, y, HALL.w, HALL.h);
+    y += HALL.h + HALL.gap;
+  }
+  const mineTop = out.mine ? out.mine.y : cBottom + 6;
   // 마켓 리더보드 버튼(토스 "토스 랭킹 보기") - 일반 모드 탭, 내 줄 바로 위.
-  if (st.tossBoard && !comp) out.tossBoard = rect(c.x, out.mine.y - 50, c.width, 44);
-  out.list = rect(c.x, y, c.width, (out.tossBoard ? out.tossBoard.y : out.mine.y) - 6 - y);
+  if (st.tossBoard && !comp) out.tossBoard = rect(c.x, mineTop - 50, c.width, 44);
+  out.list = rect(c.x, y, c.width, (out.tossBoard ? out.tossBoard.y : mineTop) - 6 - y);
   if (comp && st.compState === 'locked') {
-    out.lockCover = rect(c.x, out.list.y, c.width, cBottom - out.list.y);
+    const top = out.hall?.y ?? out.list.y;
+    out.lockCover = rect(c.x - 1, top, c.width + 2, cBottom - top);
     out.lockBand = rect(c.x + 24, Math.round(out.lockCover.y + out.lockCover.height / 2 - 64), c.width - 48, 128);
   }
 
-  // 목록(스크롤 안 좌표, 0 = 목록 맨 위): 단상(1~3위) → 4~100위 줄(경쟁 탭은 보상 구간이 바뀔 때마다 구분 줄) → 끝 줄.
+  // 전당 아래(스크롤 안 좌표, 0 = 맨 위): 카드 모드 = 카드 + 끝 줄, 목록 모드 = 4~100위 줄(경쟁 탭은 보상 구간이
+  // 바뀔 때마다 구분 줄) + 끝 줄. 세로가 모자라면(경쟁 탭 정산 안내 등) 이 칸만 스크롤한다.
   const items = [];
   let ly = 0;
   const entries = st.entries ?? [];
   if (st.unavailable) items.push({ kind: 'offline', y: 0, h: out.list.height });
-  else {
-    const podium = entries.length >= 3;
-    if (podium) {
-      items.push({ kind: 'podium', y: 0, h: PODIUM_H, cols: podiumCols(c.x), meRank: entries.slice(0, 3).findIndex((e) => e.me) + 1 });
-      ly = PODIUM_H + GAP;
-    }
+  else if (out.cardMode) {
+    items.push({ kind: 'card', y: 0, h: CARD.h });
+    items.push({ kind: 'foot', y: CARD.h + 20, h: 32 });
+    ly = CARD.h + 52;
+  } else {
     let prev = null;
-    for (const e of entries.slice(podium ? 3 : 0)) {
-      if (comp && e.tierId !== prev && e.rank > 3) {
+    for (const e of entries.slice(3)) {
+      if (comp && e.tierId !== prev) {
         items.push({ kind: 'divider', y: ly, h: DIV_H, tierId: e.tierId });
         ly += DIV_H + GAP;
       }
@@ -119,21 +143,37 @@ export function layoutRankingPopup(screenW, screenH, st) {
   return out;
 }
 
-// 단상 3칸(2·1·3 순서), 각 144 폭.
-function podiumCols(x0) {
-  return [2, 1, 3].map((rank, i) => ({ rank, x: x0 + i * 152, width: 144 }));
+// 내 기록 카드 안 자리(x, y = 카드 왼쪽 위). 그리기와 터치 판정이 같이 쓴다.
+function cardRects(x, y) {
+  const rx = x + 150;
+  return {
+    card: rect(x, y, CARD.w, CARD.h),
+    shield: rect(x + 26, y + 24, 104, 120), // rank_shield x4
+    rankLabel: rect(x + 26, y + 152, 104, 14),
+    name: rect(rx, y + 28, 208, 22),
+    edit: rect(rx, y + 17, 236, 44), // 이름 + 연필 = 닉네임 바꾸기(카드 모드엔 맨 아래 내 줄이 없다)
+    crown: rect(x + 392, y + 26, 38, 26), // rank_crown x2
+    record: rect(rx, y + 65, 180, 22),
+    date: rect(rx + 180, y + 69, 100, 14),
+    until: rect(rx, y + 111, 200, 14),
+    gap: rect(rx + 200, y + 111, 80, 14),
+    bar: rect(rx, y + 135, 280, 16),
+    btn: rect(rx, y + 166, 280, 48),
+  };
 }
+const cardAt = (L, st) => cardRects(CARD.x, L.list.y - Math.min(st.scroll ?? 0, L.scrollMax));
 
 function layoutSub(st, H) {
   const center = (w, h) => rect(Math.round((BASIS_W - w) / 2), Math.max(24, Math.round((H - h) / 2)), w, h);
   const withClose = (card) => ({ card, close: rect(card.x + card.width - 52, card.y + 8, 44, 44) });
   if (st.sub === 'rewards') {
     const n = st.tiers?.length ?? 0;
-    const s = withClose(center(460, 84 + n * 44 + 70));
+    const s = withClose(center(460, 84 + 48 + n * 44 + 70));
     s.title = rect(s.card.x + 48, s.card.y + 28, s.card.width - 96, 28);
     s.subline = rect(s.card.x + 32, s.card.y + 60, s.card.width - 64, 18);
-    s.rows = Array.from({ length: n }, (_, i) => rect(s.card.x + 28, s.card.y + 84 + i * 44, s.card.width - 56, 44));
-    s.note = rect(s.card.x + 32, s.card.y + 88 + n * 44, s.card.width - 64, 36);
+    s.last = rect(s.card.x + 28, s.card.y + 84, s.card.width - 56, 44); // 지난 시즌 한 줄(눌러서 최근 8주)
+    s.rows = Array.from({ length: n }, (_, i) => rect(s.card.x + 28, s.card.y + 132 + i * 44, s.card.width - 56, 44));
+    s.note = rect(s.card.x + 32, s.card.y + 136 + n * 44, s.card.width - 64, 36);
     return s;
   }
   if (st.sub === 'history') {
@@ -167,6 +207,7 @@ export function hitRankingPopup(L, x, y, st) {
   const s = L.sub;
   if (s) {
     if (inside(bx, by, s.close)) return { type: 'subClose' };
+    if (st.sub === 'rewards' && inside(bx, by, s.last)) return { type: 'history' };
     if (st.sub === 'nick') {
       for (const p of s.picks) if (inside(bx, by, p.rect)) return { type: 'pick', statue: p.color };
       if (inside(bx, by, s.save)) return { type: 'saveNick' };
@@ -179,9 +220,13 @@ export function hitRankingPopup(L, x, y, st) {
   if (inside(bx, by, L.close)) return { type: 'close' };
   for (const key of st.tabs ?? RANKING_TABS) if (inside(bx, by, L.tabs[key])) return { type: 'tab', tab: key };
   if (inside(bx, by, L.tossBoard)) return { type: 'tossBoard' };
-  if (inside(bx, by, L.last)) return { type: 'history' };
   if (inside(bx, by, L.rewardsBtn)) return { type: 'rewards' };
   if (inside(bx, by, L.lockCover)) return { type: 'none' }; // 잠김: 목록·내 줄은 디더 덮개 아래
+  if (L.cardMode && inside(bx, by, L.list)) {
+    const R = cardAt(L, st);
+    if (inside(bx, by, R.btn)) return { type: 'challenge' };
+    if (inside(bx, by, R.edit)) return { type: 'edit' };
+  }
   if (inside(bx, by, L.edit)) return { type: 'edit' };
   if (st.tab === 'comp' && st.compState === 'none' && inside(bx, by, L.goComp)) return { type: 'goComp' };
   if (inside(bx, by, L.mine)) return { type: 'mine' };
@@ -190,9 +235,9 @@ export function hitRankingPopup(L, x, y, st) {
   return { type: 'none' };
 }
 
-// 내 줄이 목록 가운데 오는 스크롤 값(목록에 없으면 맨 아래).
+// 내 줄이 목록 가운데 오는 스크롤 값(목록에 없으면 - 1~3위거나 순위 밖 - 맨 아래).
 export function scrollToMeValue(L) {
-  const it = L.items.find((i) => (i.kind === 'row' && i.entry.me) || (i.kind === 'podium' && i.meRank));
+  const it = L.items.find((i) => i.kind === 'row' && i.entry.me);
   if (!it) return L.scrollMax;
   return Math.max(0, Math.min(L.scrollMax, Math.round(it.y + it.h / 2 - L.list.height / 2)));
 }
@@ -249,11 +294,12 @@ function drawSheet(ctx, assets, st, L) {
   nine(ctx, assets, 'upgrade/tab_body.png', L.body, '#15121c');
   drawTab(ctx, assets, L.tabs[st.tab], st.tab, true, st);
 
-  if (st.tab === 'comp') drawCompHeader(ctx, assets, st, L);
+  if (st.tab === 'comp') drawCompBand(ctx, assets, st, L);
   if (L.offline) label(ctx, st.offlineText, L.offline, C.dim, 11, 'center');
+  if (L.hall) drawHall(ctx, assets, st, L.hall);
   drawList(ctx, assets, st, L);
   if (L.tossBoard) button(ctx, assets, 'buttons/btn_primary.png', L.tossBoard, t('ranking.tossBoard'), C.bone, 22);
-  drawMine(ctx, assets, st, L);
+  if (L.mine) drawMine(ctx, assets, st, L);
   if (L.lockCover) drawLock(ctx, assets, L);
 }
 
@@ -274,36 +320,18 @@ function drawTab(ctx, assets, r, key, on, st) {
   drawText(ctx, text, cx, cy, outline(22));
 }
 
-function drawCompHeader(ctx, assets, st, L) {
-  // 지난 시즌 한 줄(눌러서 최근 8주)
-  nine(ctx, assets, 'upgrade/card.png', L.last, C.bg2);
-  const last = st.history?.[0];
-  const lr = rect(L.last.x + 12, L.last.y, L.last.width - 24, L.last.height);
-  label(ctx, last ? t('ranking.lastSeason', { rank: last.rank, pct: last.pct }) : t('ranking.lastNone'), lr, C.bone, 11, 'left');
-  label(ctx, t('ranking.recent'), lr, C.dim, 11, 'right');
-
-  // 시즌 타이머
-  const s = L.season;
-  drawFixedImage(ctx, assets, 'ranking/icon_timer.png', s.x + 16, s.y + s.height / 2, K);
-  label(ctx, t('ranking.season', { week: st.season.week }), rect(s.x + 34, s.y, 220, s.height), C.bone, 11, 'left');
-  label(ctx, st.timerText, rect(s.x + 200, s.y, s.width - 204, s.height), C.goldL, 22, 'right');
-
-  // 내 구간 줄
-  const tr = L.tierRow;
-  nine(ctx, assets, 'panels/panel_inset.png', tr, C.outline);
+// 경쟁 탭 시즌 한 줄 띠: 주차 · 남은 시간 · 내 구간 · 보상 보기 ›(지난 시즌 기록은 보상 보기 안).
+function drawCompBand(ctx, assets, st, L) {
+  const b = L.band;
+  ctx.fillStyle = C.bg2;
+  ctx.fillRect(b.x, b.y, b.width, b.height);
+  ctx.fillStyle = C.bg1;
+  ctx.fillRect(b.x + 2, b.y + 2, b.width - 4, b.height - 4);
+  drawFixedImage(ctx, assets, 'ranking/icon_timer.png', b.x + 18, b.y + b.height / 2, K);
   const me = st.compState === 'none' ? null : st.me;
-  const tierId = me?.tierId ?? 'part';
-  drawFixedImage(ctx, assets, `ranking/tier_${tierId}.png`, tr.x + 30, tr.y + tr.height / 2, K);
-  const tx = rect(tr.x + 56, tr.y + 12, L.rewardsBtn.x - tr.x - 64, 18);
-  if (me?.rank) {
-    label(ctx, t('ranking.myTier', { tier: tierLabel(tierId) }), tx, C.bone, 11, 'left');
-    const next = me.next ? t('ranking.nextTier', { tier: tierLabel(me.next.tierId), n: fmt(me.next.gap) }) : t('ranking.keepFirst');
-    label(ctx, next, rect(tx.x, tx.y + 22, tx.width, 18), C.dim, 11, 'left');
-  } else {
-    label(ctx, t(me ? 'ranking.offlineShort' : 'ranking.notJoined'), tx, C.bone, 11, 'left');
-    label(ctx, t('ranking.joinHint'), rect(tx.x, tx.y + 22, tx.width, 18), C.dim, 11, 'left');
-  }
-  button(ctx, assets, 'buttons/btn_secondary.png', L.rewardsBtn, t('ranking.rewardsBtn'), C.bone, 11);
+  const tier = me?.rank ? t('ranking.myTier', { tier: tierLabel(me.tierId ?? 'part') }) : t(me ? 'ranking.offlineShort' : 'ranking.notJoined');
+  label(ctx, t('ranking.band', { week: st.season.week, time: st.timerText, tier }), rect(b.x + 36, b.y, b.width - 36 - 100, b.height), C.bone, 11, 'left');
+  label(ctx, t('ranking.rewardsBtn') + ' ›', rect(b.x + b.width - 100, b.y, 90, b.height), C.goldL, 11, 'right');
 
   if (L.settle) {
     const b = L.settle;
@@ -328,10 +356,10 @@ function drawList(ctx, assets, st, L) {
   for (const it of L.items) {
     const y = Math.round(lr.y + it.y - scroll);
     if (y + it.h < lr.y || y > lr.y + lr.height) continue;
-    if (it.kind === 'podium') drawPodium(ctx, assets, st, it, y);
+    if (it.kind === 'card') drawMyCard(ctx, assets, st, cardRects(CARD.x, y));
     else if (it.kind === 'divider') drawDivider(ctx, st, it.tierId, rect(lr.x, y, lr.width, it.h));
     else if (it.kind === 'row') drawRow(ctx, assets, st, it.entry, rect(lr.x, y, lr.width, it.h), false);
-    else if (it.kind === 'foot') label(ctx, t('ranking.listFoot', { n: st.entries.length, total: fmt(st.total ?? 0) }), rect(lr.x, y, lr.width, it.h), C.dim, 11, 'center');
+    else if (it.kind === 'foot') label(ctx, t('ranking.listFoot', { n: L.cardMode ? 3 : st.entries.length, total: fmt(st.total ?? 0) }), rect(lr.x, y, lr.width, it.h), C.dim, 11, 'center');
     else if (it.kind === 'offline') {
       const mid = lr.y + lr.height / 2;
       label(ctx, t('ranking.offline'), rect(lr.x, mid - 24, lr.width, 22), C.bone, 22, 'center');
@@ -350,29 +378,92 @@ function drawList(ctx, assets, st, L) {
 
 const blinkOn = (st) => st.blinkAt >= 0 && st.nowMs - st.blinkAt < BLINK_MS && Math.floor((st.nowMs - st.blinkAt) / 125) % 2 === 0;
 
-function drawPodium(ctx, assets, st, it, top) {
-  const bottom = top + PODIUM_H;
-  for (const col of it.cols) {
-    const e = st.entries[col.rank - 1];
-    const step = rect(col.x, bottom - STEP_H[col.rank], col.width, STEP_H[col.rank]);
-    nine(ctx, assets, `ranking/podium_${col.rank}.png`, step, C.bg2);
-    label(ctx, String(col.rank), step, C.bone, 22, 'center');
-    const cx = col.x + col.width / 2;
-    const valueY = step.y - 3 - 11;
-    label(ctx, valueText(st.tab, e.value), rect(col.x, valueY - 11, col.width, 22), C.goldL, 22, 'center');
-    const nameY = valueY - 11 - 3 - 7;
-    label(ctx, e.nickname || t('ranking.me'), rect(col.x + 2, nameY - 7, col.width - 4, 14), C.bone, 11, 'center');
-    const statueY = nameY - 7 - 3 - 40;
-    drawStatue(ctx, assets, e.statue, cx - 16, statueY);
-    if (!drawFixedImage(ctx, assets, `ranking/medal_${col.rank}.png`, cx, statueY - 3 - 14, K)) {
-      ctx.fillStyle = C.goldL;
-      ctx.fillRect(cx - 14, statueY - 31, 28, 28);
+// 명예의 전당(1~3위): 배경 -> 횃불 -> 받침대 -> 석상(돌색, 발이 받침대에 박힘) -> 이름·기록. 사람이 없는 자리는 받침대만.
+function drawHall(ctx, assets, st, r) {
+  const m = assets?.rankingHall;
+  const k = HALL.k;
+  const pic = (file) => {
+    const s = getUi(assets, 'ranking/hall/' + file);
+    return uiReady(s) ? s.img : null;
+  };
+  const bg = m && pic(m.bg.file);
+  if (bg) drawImageSnapped(ctx, bg, r.x, r.y, r.width, r.height);
+  else {
+    ctx.fillStyle = C.bg1;
+    ctx.fillRect(r.x, r.y, r.width, r.height);
+  }
+  if (m) {
+    const tc = m.torch;
+    const tf = Math.floor(st.nowMs / tc.frameMs) % tc.frames;
+    for (const sh of Object.values(tc.sheets)) {
+      const img = pic(sh.file);
+      if (img) drawImageSnapped(ctx, img, tf * tc.w, 0, tc.w, tc.h, r.x + sh.x * k, r.y + sh.y * k, tc.w * k, tc.h * k);
     }
-    if (e.me) {
-      meTag(ctx, col.x + 4, statueY - 30);
-      if (blinkOn(st)) strokeRect(ctx, rect(col.x, statueY - 34, col.width, bottom - statueY + 34), C.bone, 4);
+    for (const rank of [2, 1, 3]) {
+      const p = m.pedestals[rank];
+      const img = pic(p.file);
+      if (img) drawImageSnapped(ctx, img, r.x + p.x * k, r.y + p.y * k, p.w * k, p.h * k);
+      const e = st.entries[rank - 1];
+      const cx = r.x + m.statues[rank].feetCenterX * k;
+      const top = r.y + m.statues[rank].top * k;
+      if (e) drawStoneStatue(ctx, assets, e.statue, cx, top, Math.floor(st.nowMs / 160) + rank);
+      // 글자 가운데 = 석상 윗변 -44(이름 11px), -20(기록 22px)
+      label(ctx, e ? e.nickname || st.myName || t('ranking.me') : t('ranking.emptySeat'), rect(cx - 70, top - 51, 140, 14), e ? C.bone : C.bg3, 11, 'center');
+      label(ctx, e ? valueText(st.tab, e.value) : '—', rect(cx - 70, top - 31, 140, 22), e ? HALL_VALUE[rank] : C.bg3, 22, 'center');
     }
   }
+  strokeRect(ctx, r, C.bg2, 2);
+}
+
+// 내 기록 카드(참가자가 적을 때 목록 대신): 방패 + 내 순위, 이름·왕관, 최고 기록·날짜, 바로 위 순위까지 남은 값, 도전 버튼.
+function drawMyCard(ctx, assets, st, R) {
+  const me = st.tab === 'comp' && st.compState === 'none' ? null : st.me;
+  const metalId = METAL[st.myMetal] ? st.myMetal : 'iron';
+  const metal = METAL[metalId];
+  const c = R.card;
+  ctx.fillStyle = metal.mid;
+  ctx.fillRect(c.x, c.y, c.width, c.height);
+  ctx.fillStyle = C.bg2;
+  ctx.fillRect(c.x + 3, c.y + 3, c.width - 6, c.height - 6);
+  ctx.fillStyle = C.bg1;
+  ctx.fillRect(c.x + 5, c.y + 5, c.width - 10, c.height - 10);
+
+  const sh = getUi(assets, 'ranking/hall/rank_shield_' + metalId + '.png');
+  if (uiReady(sh)) drawImageSnapped(ctx, sh.img, R.shield.x, R.shield.y, R.shield.width, R.shield.height);
+  const dg = getUi(assets, 'ranking/hall/shield_digits.png');
+  const rank = me?.rank ?? 0;
+  // 숫자 그림은 한 자리(5x7, 6px 간격)를 x8 - 카드 모드는 참가자가 적어 한 자리다. 그 밖·순위 없음은 글자.
+  if (rank >= 1 && rank <= 9 && uiReady(dg)) drawImageSnapped(ctx, dg.img, rank * 6, 0, 5, 7, R.shield.x + 24, R.shield.y + 20, 40, 56);
+  else label(ctx, rank > 9 ? String(rank) : '?', rect(R.shield.x, R.shield.y + 20, R.shield.width, 56), C.bone, 22, 'center');
+  label(ctx, t('ranking.card.myRank'), R.rankLabel, C.bg3, 11, 'center');
+
+  label(ctx, st.myName || me?.nickname || t('ranking.me'), R.name, C.bone, 22, 'left');
+  drawFixedImage(ctx, assets, 'ranking/icon_edit.png', R.edit.x + R.edit.width - 12, R.name.y + 11, K);
+  const cr = st.crown;
+  if (cr) drawImageSnapped(ctx, cr.img, 0, 0, cr.w, cr.h, R.crown.x, R.crown.y, cr.w * 2, cr.h * 2);
+  button(ctx, assets, 'menu/btn_play.png', R.btn, t('ranking.card.go'), C.outline, 22, false);
+
+  if (!me?.value) {
+    label(ctx, t('ranking.card.none'), R.record, C.dim, 11, 'left');
+    return;
+  }
+  label(ctx, st.tab === 'comp' ? valueText('comp', me.value) : t('ranking.card.best', { n: me.value }), R.record, metal.light, 22, 'left');
+  label(ctx, dateText(me.at), R.date, C.bg3, 11, 'right');
+  if (rank === 1) {
+    label(ctx, t('ranking.card.keepFirst'), rect(R.until.x, R.until.y, R.bar.width, R.until.height), C.goldL, 11, 'left');
+    return;
+  }
+  const above = rank > 1 ? st.entries[rank - 2] : null;
+  if (!above) return;
+  label(ctx, t('ranking.card.until', { rank: rank - 1, name: above.nickname }), R.until, C.bone, 11, 'left');
+  label(ctx, '+' + valueText(st.tab, Math.max(0, above.value - me.value)), R.gap, C.goldL, 11, 'right');
+  const b = R.bar;
+  ctx.fillStyle = C.bg2;
+  ctx.fillRect(b.x, b.y, b.width, b.height);
+  ctx.fillStyle = C.outline;
+  ctx.fillRect(b.x + 2, b.y + 2, b.width - 4, b.height - 4);
+  ctx.fillStyle = metal.mid;
+  ctx.fillRect(b.x + 4, b.y + 4, Math.round((b.width - 8) * Math.max(0, Math.min(1, me.value / (above.value || 1)))), b.height - 8);
 }
 
 function drawDivider(ctx, st, tierId, r) {
@@ -450,6 +541,11 @@ function subFrame(ctx, assets, s, title) {
 function drawRewards(ctx, assets, st, s) {
   subFrame(ctx, assets, s, t('ranking.rewards.title'));
   label(ctx, t('ranking.rewards.sub', { week: st.season.week, total: fmt(st.total ?? 0) }), s.subline, C.dim, 11, 'left');
+  nine(ctx, assets, 'upgrade/card.png', s.last, C.bg2);
+  const last = st.history?.[0];
+  const lr = rect(s.last.x + 12, s.last.y, s.last.width - 24, s.last.height);
+  label(ctx, last ? t('ranking.lastSeason', { rank: last.rank, pct: last.pct }) : t('ranking.lastNone'), lr, C.bone, 11, 'left');
+  label(ctx, t('ranking.recent'), lr, C.dim, 11, 'right');
   const mine = st.compState === 'none' ? null : st.me?.tierId;
   st.tiers.forEach((tier, i) => {
     const r = s.rows[i];
@@ -556,10 +652,54 @@ function rewardIcons(ctx, assets, tier, st, x, cy, size, align, bundle) {
   });
 }
 
+// 석상 색 변환(RGBA 배열을 그 자리에서): keep(0xRRGGBB - 외곽선·네온 눈/불꽃)은 그대로, 나머지는 밝기 3단 돌색.
+const STONE = [C.bg2, C.bg3, C.bone].map((hex) => parseInt(hex.slice(1), 16));
+export function stonePixels(d, keep) {
+  for (let i = 0; i < d.length; i += 4) {
+    if (!d[i + 3] || keep.has((d[i] << 16) | (d[i + 1] << 8) | d[i + 2])) continue;
+    const l = 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2];
+    const c = STONE[l < 40 ? 0 : l < 110 ? 1 : 2];
+    d[i] = c >> 16;
+    d[i + 1] = (c >> 8) & 255;
+    d[i + 2] = c & 255;
+  }
+}
+
+// shortcut: 순위표 항목에 수호자 등급이 없어 색(기본 등급 그림)별로만 캐시한다 - 등급이 오면 key에 붙인다.
+const stoneCache = new Map(); // 시트 키 -> 돌색으로 바꾼 idle 시트(프레임 전부)
+function stoneOf(assets, key, own) {
+  let c = stoneCache.get(key);
+  if (c) return c;
+  c = document.createElement('canvas');
+  c.width = own.state.img.width;
+  c.height = own.frameH;
+  const x = c.getContext('2d');
+  x.drawImage(own.state.img, 0, 0);
+  const img = x.getImageData(0, 0, c.width, c.height);
+  const neon = Object.values(assets.towerManifest?.neon ?? {}).flat();
+  stonePixels(img.data, new Set([C.outline, ...neon].map((hex) => parseInt(hex.slice(1), 16))));
+  x.putImageData(img, 0, 0);
+  stoneCache.set(key, c);
+  return c;
+}
+
+// 전당 받침대 위 석상: 대표 수호자 idle을 돌색 x3으로, cx = 발 가운데, top = 윗변. 시트는 왼쪽을 보므로 게임처럼 뒤집는다.
+function drawStoneStatue(ctx, assets, color, cx, top, tick) {
+  const key = 'tower_idle_' + color;
+  const own = assets?.towerAnims?.get(key);
+  if (!own || !uiReady(own.state)) return;
+  const w = own.frameW * HALL.k;
+  ctx.save();
+  ctx.translate(Math.round(cx), 0);
+  ctx.scale(-1, 1);
+  drawImageSnapped(ctx, stoneOf(assets, key, own), (tick % Math.min(4, own.frames || 1)) * own.frameW, 0, own.frameW, own.frameH, -w / 2, top, w, own.frameH * HALL.k);
+  ctx.restore();
+}
+
 function drawStatue(ctx, assets, color, x, y) {
   // 수호자(idle 시트에 drawScale이 있는 그림): 전투 화면과 같은 배율로 idle 첫 프레임을 32x40 칸의
   // 아래 가운데에 그린다(20x26 x 1.5 = 30x39). 시트는 왼쪽을 보므로 뒤집어 오른쪽을 보게 한다.
-  const own = assets?.towerAnims?.get(`tower_idle_${color}`);
+  const own = assets?.towerAnims?.get('tower_idle_' + color);
   if (own?.drawScale && uiReady(own.state)) {
     const w = own.frameW * own.drawScale;
     const h = own.frameH * own.drawScale;
@@ -584,11 +724,12 @@ function meTag(ctx, x, y) {
   const w = Math.ceil(ctx.measureText(text).width) + 10;
   ctx.fillStyle = C.outline;
   ctx.fillRect(x, y, w, 16);
-  ctx.fillStyle = C.gold;
+  ctx.fillStyle = C.brnD;
   ctx.fillRect(x + 2, y + 2, w - 4, 12);
   ctx.textAlign = 'center';
-  ctx.fillStyle = C.outline;
-  drawText(ctx, text, x + w / 2, y + 8, { outline: false });
+  ctx.fillStyle = C.goldL;
+  // 외곽선 없는 11px 글자는 번져 보인다(fonts.js 주석) - 다른 글자처럼 외곽선을 준다.
+  drawText(ctx, text, x + w / 2, y + 8, outline(11));
 }
 
 function strokeRect(ctx, r, color, w) {

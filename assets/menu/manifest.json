@@ -417,5 +417,136 @@
   ],
   "plate": "ui/menu/plate.png 9-slice x2, text '보관함' (menu.inventory)",
   "badge": "ui/menu/badge.png x2 at plate top-right (x+w-10, y-6)"
+ },
+ "symbols": {
+  "rankCrown": {
+   "sheets": {
+    "iron": {
+     "file": "menu/symbols/rank_crown_iron.png",
+     "w": 19,
+     "h": 13,
+     "frames": 9,
+     "cols": 9,
+     "colors": 4
+    },
+    "bronze": {
+     "file": "menu/symbols/rank_crown_bronze.png",
+     "w": 19,
+     "h": 13,
+     "frames": 9,
+     "cols": 9,
+     "colors": 5
+    },
+    "silver": {
+     "file": "menu/symbols/rank_crown_silver.png",
+     "w": 19,
+     "h": 13,
+     "frames": 9,
+     "cols": 9,
+     "colors": 5
+    },
+    "gold": {
+     "file": "menu/symbols/rank_crown_gold.png",
+     "w": 19,
+     "h": 13,
+     "frames": 9,
+     "cols": 9,
+     "colors": 10
+    }
+   },
+   "seq": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+   ],
+   "frameMs": 200,
+   "pos": "x = 81, y = 80 + bob (bob = round(2*sin(2*PI*(t%6400)/3200)), same as the crystal)",
+   "band": "metal by my weekly comp band: none/below top50% -> iron, top50% -> bronze, top10% -> silver, top1% -> gold",
+   "tap": "crown y -2, -1, 0 over the 3 crystal tap frames",
+   "x": 81,
+   "y": 80
+  },
+  "rankAura": {
+   "sheets": {
+    "bronze": {
+     "file": "menu/symbols/rank_aura_bronze.png",
+     "w": 37,
+     "h": 23,
+     "frames": 4,
+     "cols": 4,
+     "colors": 1
+    },
+    "silver": {
+     "file": "menu/symbols/rank_aura_silver.png",
+     "w": 37,
+     "h": 23,
+     "frames": 4,
+     "cols": 4,
+     "colors": 1
+    },
+    "gold": {
+     "file": "menu/symbols/rank_aura_gold.png",
+     "w": 37,
+     "h": 23,
+     "frames": 4,
+     "cols": 4,
+     "colors": 3
+    }
+   },
+   "frameMs": 200,
+   "pos": "x = 72, y = 75 + bob; draw BEFORE the crown; frame = floor(t/200)%4",
+   "x": 72,
+   "y": 75
+  },
+  "crystalTap": {
+   "file": "menu/symbols/crystal_tap.png",
+   "w": 57,
+   "h": 74,
+   "frames": 3,
+   "cols": 3,
+   "colors": 4,
+   "x": 62,
+   "y": 94,
+   "frameMs": 80,
+   "note": "y + bob; on pointer-up, then open ranking"
+  },
+  "seasonSwirl": {
+   "file": "menu/symbols/season_swirl.png",
+   "w": 85,
+   "h": 100,
+   "frames": 16,
+   "cols": 8,
+   "colors": 7,
+   "x": 48,
+   "y": 82,
+   "frameMs": 100,
+   "rule": "once, the first time the menu shows after a new season opens (seasonId changed since last seen); y + bob"
+  },
+  "plateIcons": {
+   "icon_crown": "menu/symbols/icon_crown.png 11x8",
+   "scale": 2,
+   "rule": "drawn x2 left of the ranking plate text, 6px gap; ranking plate widened to 132 (altar plate unchanged)"
+  },
+  "pedestals": {
+   "files": [
+    "ui/ranking/pedestal_1.png 70x34",
+    "ui/ranking/pedestal_2.png 70x26",
+    "ui/ranking/pedestal_3.png 70x20"
+   ],
+   "scale": 2
+  }
  }
 }

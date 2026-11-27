@@ -26,7 +26,7 @@
 | `popups/` | `popup_pause` `popup_win` `popup_lose` 48×48, 9-slice [16,16,16,16] | 팝업 틀 |
 | | `emblem_pause` 모래시계, `emblem_win` 왕관, `emblem_lose` 해골 (24×24) | 팝업 윗변 가운데에 반쯤 걸쳐서 |
 | `board/` | `tile_a`, `tile_b` 32×32 | 보드 칸 배경, `(행+열)%2`로 체크무늬 |
-| `items/` | `slot_normal` `slot_selected` `slot_locked` 22×22 | 하단 아이템 칸(고정 크기). 아이템 아이콘은 안쪽 (4,4) 14×14 |
+| `items/` | `slot_normal` `slot_selected` `slot_reserved` `slot_locked` 22×22 | 하단 아이템 칸(고정 크기). 아이템 아이콘은 안쪽 (4,4) 14×14 |
 
 채움 위치: `manifest.json`의 `fill` = 틀 왼쪽 위 기준 `x, y`, 높이 `h`, 오른쪽 여백 `padRight` (원본 px).
 버튼 글자색: `textColor` (골드 버튼만 어두운 글자).

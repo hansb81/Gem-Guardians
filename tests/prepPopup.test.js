@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { layoutPrepPopup, hitPrepPopup, statueRowInfo, openPrepState, rememberTab, PREP_TABS, prepTabs } from '../src/render/ui/prepPopup.js';
+import { layoutPrepPopup, hitPrepPopup, statueRowInfo, openPrepState, rememberTab, PREP_TABS, prepTabs, stageFxOnUpgrade } from '../src/render/ui/prepPopup.js';
 import { towerLevelCost } from '../src/core/economy/economy.js';
 
 const BALANCE = JSON.parse(readFileSync(new URL('../config/balance.json', import.meta.url), 'utf8'));
@@ -48,9 +48,9 @@ for (const [w, h] of SCREENS) {
             assert.ok(r.max.height >= 36, 'MAX 36');
           });
         } else if (tab === 'spirit') {
-          // 본문은 그릴 때 정해진다(spiritTab.js) - 수호자 5줄 + 필터 + 목록 6줄이 들어갈 높이인지만.
+          // 본문은 그릴 때 정해진다(spiritTab.js) - 무대 5칸 + 정보 카드 + 필터 + 목록 한 줄(92)이 들어갈 높이인지만(나머지는 스크롤).
           assert.equal(L.spirit.content, L.content);
-          assert.ok(L.content.height >= 28 + 6 + 5 * 48 + 34 + 6 * 34, `정령 탭 본문 높이 ${L.content.height}`);
+          assert.ok(L.content.height >= 28 + 6 + 102 + 6 + 58 + 68 + 92, `정령 탭 본문 높이 ${L.content.height}`);
         } else {
           const v = L.vault;
           checkGroup([v.equip, v.reserve, v.own, v.detail], L.content, 'vault');
@@ -149,4 +149,40 @@ test('정령 탭: 잠가 두면 기억 탭이 안 바뀐다, 그리기 전 본�
   assert.deepEqual(hitPrepPopup(L, L.content.x + 4, L.content.y + 40), { type: 'spiritSlot', index: 0 });
   assert.equal(L.statue, undefined);
   assert.equal(L.vault, undefined);
+});
+
+test('수호자 무대: rowH 112/100/96에서 81x93, 글자 시작 = 카드 + 103, 줄 안에 들어감', () => {
+  // [화면 높이, 상황, 기대 rowH] - 96 = 층 클리어(아래 버튼)에서 간격 6 -> 4로 줄인 결과(6이면 93).
+  for (const [h, context, rowH] of [[1170, 'village', 112], [936, 'village', 100], [960, 'floorClear', 96]]) {
+    const L = layoutPrepPopup(540, h, context, 'statue');
+    L.statue.rows.forEach((r) => {
+      assert.equal(r.card.height, rowH, `${h} ${context}`);
+      assert.deepEqual([r.statueBox.x, r.statueBox.width, r.statueBox.height], [r.card.x + 8, 81, 93]);
+      assert.ok(r.statueBox.y >= r.card.y && r.statueBox.y + 93 <= r.card.y + rowH, '무대가 잘리지 않음');
+      assert.ok(Math.abs(r.statueBox.y + 46.5 - (r.card.y + rowH / 2)) <= 0.5, '세로 가운데');
+      for (const k of ['name', 'badge', 'attack']) assert.equal(r[k].x, r.card.x + 103);
+      assert.equal(r.plus.x, r.card.x + 173);
+      assert.equal(r.upgrade.x + r.upgrade.width, r.card.x + r.card.width - 8, '버튼 위치 그대로');
+    });
+    assert.ok(L.statue.all.y + L.statue.all.height <= L.content.y + L.content.height);
+  }
+});
+
+test('강화 연출: 연속 강화 중 공격은 재시작 안 함, 번쩍임은 240ms 간격, "+1"은 매번', () => {
+  const ATK = 560; // 7프레임 x 80ms
+  let fx = stageFxOnUpgrade(null, 1000, ATK);
+  assert.deepEqual(fx, { atk: 1000, flash: 1000, spark: 1000, plus: 1000, grade: 1000 });
+  fx = stageFxOnUpgrade(fx, 1150, ATK);
+  assert.deepEqual(fx, { atk: 1000, flash: 1000, spark: 1000, plus: 1150, grade: 1000 }, '재생 중 = 이어서, 번쩍임 없음');
+  fx = stageFxOnUpgrade(fx, 1239, ATK);
+  assert.equal(fx.flash, 1000, '239ms = 아직');
+  fx = stageFxOnUpgrade(fx, 1240, ATK);
+  assert.deepEqual(fx, { atk: 1000, flash: 1240, spark: 1000, plus: 1240, grade: 1000 }, '240ms 지나면 번쩍임만 다시');
+  fx = stageFxOnUpgrade(fx, 1470, ATK);
+  assert.deepEqual([fx.atk, fx.flash], [1000, 1240], '공격 끝나기 전 = 이어서');
+  fx = stageFxOnUpgrade(fx, 1600, ATK);
+  assert.deepEqual(fx, { atk: 1600, flash: 1600, spark: 1600, plus: 1600, grade: 1000 }, '공격·반짝이가 끝난 뒤엔 처음부터, 레벨 이펙트(1.2초)는 이어서');
+  assert.equal(stageFxOnUpgrade(fx, 2800, ATK).grade, 2800, '마지막 강화 1.2초 뒤엔 레벨 이펙트도 처음부터');
+  // 일괄 강화로 늦춰 둔(미래) 시작이 있으면 그것도 이어서.
+  assert.equal(stageFxOnUpgrade({ atk: 2080, flash: 2080, spark: 2080, plus: 2080 }, 2000, ATK).atk, 2080);
 });

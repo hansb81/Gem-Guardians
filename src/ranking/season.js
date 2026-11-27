@@ -31,7 +31,9 @@ export function seasonFromId(id, cfg) {
   return seasonAt(week1 + (Number(m[2]) - 1) * 7 * DAY - KST_OFFSET_MS + shiftOf(cfg) + HOUR, cfg);
 }
 
-export const prevSeason = (season, cfg) => seasonAt(season.start - 1, cfg);
+// 메뉴 새 시즌 연출: 마지막으로 본 시즌(기기 저장)과 다를 때만. 첫 설치(저장값 없음)는 재생 없이 저장만.
+export const isNewSeason = (lastSeenId, id) => lastSeenId != null && lastSeenId !== id;
+export const prevSeason =(season, cfg) => seasonAt(season.start - 1, cfg);
 export const remainingMs = (ms, season) => Math.max(0, season.end - ms);
 // 종료 warnMin분 전부터 끝날 때까지 "정산 대기".
 export const isSettling = (ms, season, warnMin) => ms < season.end && season.end - ms <= warnMin * 60e3;

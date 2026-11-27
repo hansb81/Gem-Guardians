@@ -10,7 +10,7 @@
 // 아래 좌표는 모두 540x960 기준("basis")이고 _toScreen이 실제 캔버스 크기로 옮긴다.
 // 세부 배치 수치는 art/ui/menu/preview_*.png에서 잰 값이다.
 import { loadImage } from './assetLoader.js';
-import { LayeredBg } from './layeredBg.js';
+import { LayeredBg, bobAt } from './layeredBg.js';
 import { getFontString } from '../config/fonts.js';
 import { drawText, drawNine, getUi, getUiMeta, uiReady, pressButton, drawGoogleButton } from './uiKit.js';
 import { t, getLocale, setLocale, LOCALE_IDS } from '../config/i18n.js';
@@ -66,8 +66,12 @@ const DEFAULT_CHEST = {
   hitArea_screenPx: [408, 600, 116, 118],
   plate_screenPx: [417, 678, 96, 36],
 };
-// 랭킹 이름판 - 원석 영역 아래쪽(목업 mockups/ranking 시안 1). 받침대 영역과 겹치지 않는다.
-const RANKING_PLATE = [214, 466, 112, 36];
+// 랭킹 이름판 - 원석 영역 아래쪽(목업 mockups/ranking 시안 1). 받침대 영역과 겹치지 않는다. 폭 = 원석 누르는 영역과 같다.
+const RANKING_PLATE = [204, 466, 132, 36];
+const PLATE_ICON_GAP = 6;
+const PLATE_GROW_X = 6; // 이름판을 좌우·상하로 이만큼씩 키운다.
+const PLATE_GROW_Y = 3;
+const TAP_LIFT = [-2, -1, 0]; // 누름 연출 프레임마다 왕관 y(네이티브 px, manifest.symbols.rankCrown.tap)
 
 // 재화 바 내부(바 왼쪽 위 기준). 아이콘은 16x16(화면 32), 숫자 칸은 inset 9-slice.
 const BAR_ITEMS = [
@@ -196,8 +200,7 @@ function shortTime(ms) {
 const STONE_ONLY = { spiritStones: 1 }; // 출석 칸에 정령석 아이콘만 그릴 때(_bundleIcon 인자)
 const ATT = { cellW: 80, cellH: 100, gap: 8, rowY: [92, 200], streakRow: [24, 308, 352, 48], dot: 8, dotGap: 6, claim: [100, 370, 200, 50] };
 const STREAK_DOT = { on: '#f2d264', off: '#3b3347' };
-// 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼.
-// shortcut: 스크롤 없이 최근 MAIL.rows통만 보임 - 전체 우편을 처음 보내기 전에 스크롤 추가(쑹 2026-11-09).
+// 우편함 - 한 줄 = 제목 + 보상 + 받기 버튼. rows = 한 번에 보이는 줄 수(넘으면 그 안에서 드래그·휠 스크롤, 이벤트 목록과 같은 방식).
 const MAIL = { y: 92, rowH: 72, rows: 6, claim: [272, 10, 92, 44] };
 const PLACEHOLDER = '#5a5266'; // 아이템 아이콘이 아직 안 불렸을 때 자리
 const TOAST = { y: 730, ms: 3000 };
@@ -259,11 +262,19 @@ export class MainMenuScreen {
     // 상자 열기 연출을 시작한 시각(ms). null이 아닌 동안 상자는 열린 그림이고 메뉴 입력을 안 받는다 - 보관함 팝업이 닫히면 main.js가 null로.
     this.chestOpenAt = null;
     this._chestOpenImg = null;
+    // 원석 누름 연출(crystal_tap)을 시작한 시각(ms). null이 아닌 동안 메뉴 입력을 안 받는다 - main.js가 crystalTapMs() 뒤 랭킹을 열며 null로.
+    this.crystalTapAt = null;
+    this.swirlAt = null; // 새 시즌 소용돌이를 시작한 시각(ms) - main.js가 켜고, 다 돌면 그리면서 null로
+    this.crown = () => 'iron'; // main.js: 왕관 금속(iron|bronze|silver|gold = 이번 주 경쟁 구간)
+    this._sym = new Map(); // manifest.symbols 시트 파일 -> 로드 상태
+    this._now = 0;
+    this._drawSymbols = this._drawSymbols.bind(this);
     this._drag = null; // 설정 슬라이더를 끌고 있는 중 - { channel, rect } | null.
     this._helpPage = 0;
     this._helpWrap = null; // { key, lines } - 쪽·배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
     this._eventScroll = 0; // 이벤트 목록 스크롤(basis px).
+    this._mailScroll = 0; // 우편 목록 스크롤(basis px).
     // 이벤트 목록 [{ id, title: { ko, en } }] - 이벤트 API가 생기면 main.js가 채운다(docs/server.md §19-11).
     this.events = [];
     this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
@@ -291,6 +302,11 @@ export class MainMenuScreen {
       loadImage(`assets/menu/${this._chest().open.file}`).then((s) => {
         this._chestOpenImg = s;
       });
+      // 원석 위 왕관·오라·누름·시즌 소용돌이·이름판 아이콘(manifest.symbols) - file은 assets/ 기준.
+      const sy = m?.symbols ?? {};
+      const files = [...Object.values(sy.rankCrown?.sheets ?? {}), ...Object.values(sy.rankAura?.sheets ?? {}), sy.crystalTap, sy.seasonSwirl].map((x) => x?.file);
+      if (sy.plateIcons) files.push(sy.plateIcons.icon_crown.split(' ')[0]);
+      for (const f of files) if (f) loadImage(`assets/${f}`).then((s) => this._sym.set(f, s));
     });
     loadImage('assets/menu/menu_bg.png').then((s) => {
       this.bg = s;
@@ -325,6 +341,51 @@ export class MainMenuScreen {
 
   _crystal() {
     return this._altar().crystalReserved_screenPx ?? DEFAULT_ALTAR.crystalReserved_screenPx;
+  }
+
+  // 누름 연출 길이(ms) - 이만큼 지나면 main.js가 랭킹 팝업을 연다. 시트 정보가 없으면 0(바로 열기).
+  crystalTapMs() {
+    const tap = this.manifest?.symbols?.crystalTap;
+    return tap ? tap.frames * tap.frameMs : 0;
+  }
+
+  // 시트의 frame번째 칸을 네이티브 (x, y)에.
+  // 랭킹 내 기록 카드가 쓰는 왕관 시트(0프레임) - { img, w, h } | null.
+  crownSheet(metal) {
+    const sheets = this.manifest?.symbols?.rankCrown?.sheets;
+    const meta = sheets?.[metal] ?? sheets?.iron;
+    const st = meta && this._sym.get(meta.file);
+    return ready(st) ? { img: st.img, w: meta.w, h: meta.h } : null;
+  }
+
+  _symFrame(ctx, place, meta, frame, x, y) {
+    const st = this._sym.get(meta.file);
+    if (!ready(st)) return;
+    ctx.drawImage(st.img, (frame % meta.cols) * meta.w, Math.floor(frame / meta.cols) * meta.h, meta.w, meta.h, ...place(x, y, meta.w, meta.h));
+  }
+
+  // 배경 조각(원석) 다음·불씨 전: 오라 -> 왕관 -> (누를 때) crystal_tap -> (새 시즌) season_swirl. 전부 원석과 같이 둥실거린다.
+  _drawSymbols(place) {
+    const sy = this.manifest?.symbols;
+    if (!sy) return;
+    const ctx = this._ctx;
+    const now = this._now;
+    const bob = bobAt(now);
+    const metal = this.crown();
+    const tap = sy.crystalTap;
+    const tapFrame = this.crystalTapAt == null ? -1 : Math.min(tap.frames - 1, Math.max(0, Math.floor((now - this.crystalTapAt) / tap.frameMs)));
+    const aura = sy.rankAura.sheets[metal]; // iron은 오라 없음
+    if (aura) this._symFrame(ctx, place, aura, Math.floor(now / sy.rankAura.frameMs) % aura.frames, sy.rankAura.x, sy.rankAura.y + bob);
+    const crown = sy.rankCrown;
+    const sheet = crown.sheets[metal] ?? crown.sheets.iron;
+    this._symFrame(ctx, place, sheet, crown.seq[Math.floor(now / crown.frameMs) % crown.seq.length], crown.x, crown.y + bob + (TAP_LIFT[tapFrame] ?? 0));
+    if (tapFrame >= 0) this._symFrame(ctx, place, tap, tapFrame, tap.x, tap.y + bob);
+    if (this.swirlAt != null) {
+      const sw = sy.seasonSwirl;
+      const f = Math.floor((now - this.swirlAt) / sw.frameMs);
+      if (f >= sw.frames) this.swirlAt = null;
+      else if (f >= 0) this._symFrame(ctx, place, sw, f, sw.x, sw.y + bob);
+    }
   }
 
   // 화면 px -> manifest 좌표계(540x960) 사각형 변환. draw()가 매 프레임 _transform을
@@ -393,7 +454,9 @@ export class MainMenuScreen {
   }
 
   _drawBackground(ctx, offsetX, offsetY, scale, nowMs) {
-    if (this.bgLayers.draw(ctx, offsetX, offsetY, scale, nowMs)) return;
+    this._ctx = ctx;
+    this._now = nowMs;
+    if (this.bgLayers.draw(ctx, offsetX, offsetY, scale, nowMs, this._drawSymbols)) return;
     if (ready(this.bg)) {
       drawImageSnapped(ctx, this.bg.img, offsetX, offsetY, NATIVE_W * scale, NATIVE_H * scale);
     }
@@ -474,14 +537,24 @@ export class MainMenuScreen {
     this._drawPlate(ctx, this._altar().plate_screenPx, 'altar', 'menu.prep', false);
     // 빨간 점: 새 아이템 / 빈 칸에 넣을 아이템.
     this._drawPlate(ctx, this._chest().plate_screenPx, 'chest', 'menu.inventory', !!inv && (inv.hasUnseenItems(floor) || inv.hasFillableSlot(floor)));
-    this._drawPlate(ctx, RANKING_PLATE, 'crystal', 'menu.ranking', false);
+    this._drawPlate(ctx, RANKING_PLATE, 'crystal', 'menu.ranking', false, this._sym.get(this.manifest?.symbols?.plateIcons?.icon_crown.split(' ')[0]));
   }
 
   // 이름판(정비·보관함·랭킹 공통): plate 9-slice + 글자 18 + 오른쪽 위 빨간 점. 누르는 동안 이름판만 1px 아래로.
-  _drawPlate(ctx, [x, y0, w, h], id, key, badge) {
+  // icon(로드 상태) = 글자 앞 아이콘(화면 2배) - 아이콘 + 간격 + 글자를 묶어 가운데.
+  _drawPlate(ctx, [px, py, pw, ph], id, key, badge, icon = null) {
+    // 글자(18)가 틀에 닿아서 가운데 기준으로 조금 키운다(세 이름판 공통).
+    const [x, y0, w, h] = [px - PLATE_GROW_X, py - PLATE_GROW_Y, pw + PLATE_GROW_X * 2, ph + PLATE_GROW_Y * 2];
     const y = y0 + (this._pressed === id ? 1 : 0);
     if (!this._nine(ctx, 'menu/plate.png', [x, y, w, h])) this._panel(ctx, [x, y, w, h], COLORS.bg2, COLORS.bg3);
-    this._text(ctx, t(key), x + w / 2, y + h / 2, { size: 18, align: 'center' });
+    if (ready(icon)) {
+      const iw = icon.img.width * ASSET_SCALE;
+      const ih = icon.img.height * ASSET_SCALE;
+      const left = Math.round(x + (w - iw - PLATE_ICON_GAP - this._measure(ctx, t(key), 18)) / 2);
+      const { offsetX, offsetY, k } = this._transform;
+      drawImageSnapped(ctx, icon.img, offsetX + left * k, offsetY + Math.round(y + (h - ih) / 2) * k, iw * k, ih * k);
+      this._text(ctx, t(key), left + iw + PLATE_ICON_GAP, y + h / 2 + 1, { size: 18 });
+    } else this._text(ctx, t(key), x + w / 2, y + h / 2 + 1, { size: 18, align: 'center' }); // +1 = 글자만 1px 아래
     if (badge) this._sprite(ctx, 'menu/badge.png', x + w - 10, y0 - 6);
   }
 
@@ -715,12 +788,24 @@ export class MainMenuScreen {
     else this._text(ctx, t('net.att.streakLeft', { n: left }), tx, ty, { size: 11, align: 'center' });
   }
 
+  // 우편 목록 보기 영역(basis) = MAIL.rows줄.
+  _mailView(card) {
+    return [card[0] + 24, card[1] + MAIL.y, card[2] - 48, MAIL.rows * MAIL.rowH - 8];
+  }
+
+  // 보기 영역에 걸친 줄만(스크롤 범위도 여기서 자른다 - 그리기·누르기가 같은 자리를 쓴다).
   _mailRows(card) {
     const list = this.server.mail.list ?? [];
-    return list.slice(0, MAIL.rows).map((m, i) => {
-      const row = [card[0] + 24, card[1] + MAIL.y + i * MAIL.rowH, card[2] - 48, MAIL.rowH - 8];
-      return { m, row, btn: [row[0] + MAIL.claim[0] - 24, row[1] + MAIL.claim[1], MAIL.claim[2], MAIL.claim[3]] };
-    });
+    const view = this._mailView(card);
+    this._mailScroll = Math.max(0, Math.min(this._mailScroll, list.length * MAIL.rowH - 8 - view[3]));
+    const rows = [];
+    for (let i = 0; i < list.length; i++) {
+      const y = view[1] + i * MAIL.rowH - this._mailScroll;
+      if (y + MAIL.rowH - 8 <= view[1] || y >= view[1] + view[3]) continue;
+      const row = [view[0], y, view[2], MAIL.rowH - 8];
+      rows.push({ m: list[i], row, btn: [row[0] + MAIL.claim[0] - 24, row[1] + MAIL.claim[1], MAIL.claim[2], MAIL.claim[3]] });
+    }
+    return rows;
   }
 
   _drawMailPopup(ctx, card) {
@@ -731,6 +816,11 @@ export class MainMenuScreen {
       return;
     }
     const loc = getLocale();
+    const sv = this._toScreen(this._mailView(card));
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(sv.x, sv.y, sv.width, sv.height);
+    ctx.clip();
     for (const { m, row, btn } of this._mailRows(card)) {
       if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
       this._text(ctx, m.title?.[loc] || m.title?.ko || '', row[0] + 12, row[1] + 20, { size: 13 });
@@ -740,6 +830,7 @@ export class MainMenuScreen {
       if (!this._nine(ctx, img, btn)) this._panel(ctx, btn, COLORS.bg2, COLORS.bg3);
       this._text(ctx, t(m.claimed ? 'net.mail.delete' : 'net.mail.claim'), btn[0] + btn[2] / 2, btn[1] + btn[3] / 2 + (down ? 2 : 0), { size: 13, align: 'center' });
     }
+    ctx.restore();
   }
 
   _drawPlaceholderPopup(ctx, card) {
@@ -1406,7 +1497,7 @@ export class MainMenuScreen {
 
   // 게임 정보가 열려 있으면 휠로 스크롤하고 true(main.js가 기본 동작을 막는다).
   handleWheel(deltaY) {
-    const key = this.popup === 'about' ? '_aboutScroll' : this.popup === 'event' ? '_eventScroll' : null;
+    const key = { about: '_aboutScroll', event: '_eventScroll', mail: '_mailScroll' }[this.popup];
     if (!key) return false;
     this[key] += deltaY * 0.5; // 범위는 그릴 때 자른다.
     return true;
@@ -1493,7 +1584,7 @@ export class MainMenuScreen {
     if (!this._transform) return null;
 
     if (this.popup) return this._handlePopupPointerDown(x, y);
-    if (this.chestOpenAt != null) return null; // 상자 열기 연출 중 - 두 번 열리지 않게
+    if (this.chestOpenAt != null || this.crystalTapAt != null) return null; // 상자 열기·원석 누름 연출 중 - 다른 입력 무시
 
     const layout = this._layout();
     if (pressButton(x, y, this._toScreen(layout.playButton))) {
@@ -1523,6 +1614,7 @@ export class MainMenuScreen {
       this._pressed = id;
       this.popup = id;
       this._eventScroll = 0;
+      this._mailScroll = 0;
       // 서버가 켜져 있으면 main.js가 출석 상태·우편 목록을 새로 받는다.
       return this.server?.[id === 'attendance' ? 'att' : id] ? `open:${id}` : null;
     }
@@ -1704,10 +1796,14 @@ export class MainMenuScreen {
 
     if (this.popup === 'mail' && this.server?.mail) {
       if (this.server.mail.busy) return null;
-      for (const { m, btn } of this._mailRows(card)) {
-        if (!pressButton(x, y, this._toScreen(btn), 'none')) continue;
-        this._pressed = `mail:${m.id}`;
-        return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
+      if (pointInRect(x, y, this._toScreen(this._mailView(card)))) {
+        for (const { m, btn } of this._mailRows(card)) {
+          if (!pressButton(x, y, this._toScreen(btn), 'none')) continue;
+          this._pressed = `mail:${m.id}`;
+          return `${m.claimed ? 'mailDelete' : 'mailClaim'}:${m.id}`;
+        }
+        this._drag = { scrollFromY: y, scrollStart: this._mailScroll, key: '_mailScroll' }; // 버튼 밖 = 목록 끌기
+        return null;
       }
       // 그 밖은 아래 공통 처리로 - 카드 바깥 탭 = 닫기.
     }
@@ -1752,7 +1848,7 @@ export class MainMenuScreen {
   }
 
   // (x, y)가 없으면(pointercancel) 누름만 푼다. 영역 안에서 떼면 받침대 'openPrep'(정비 팝업), 원석 'openRanking'(랭킹 팝업),
-  // 상자 'openVault'(열기 연출을 시작한다 - main.js가 chestOpenMs() 뒤에 보관함 팝업을 연다).
+  // 상자 'openVault'(열기 연출을 시작한다 - main.js가 chestOpenMs() 뒤에 보관함 팝업을 연다). 원석도 누름 연출 crystalTapMs() 뒤에 연다.
   handlePointerUp(x, y) {
     const up = this._transform && x != null;
     const on = (id, r) => up && this._pressed === id && pointInRect(x, y, this._toScreen(r));
@@ -1767,6 +1863,7 @@ export class MainMenuScreen {
     if (!altar && !chest && !crystal) return null;
     audio.play('ui_click');
     if (chest) this.chestOpenAt = performance.now();
+    if (crystal) this.crystalTapAt = performance.now();
     return altar ? 'openPrep' : chest ? 'openVault' : 'openRanking';
   }
 }

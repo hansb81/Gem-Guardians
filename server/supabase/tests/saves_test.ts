@@ -189,6 +189,25 @@ Deno.test("rank 실어 보낸 save-put -> normal_best 갱신, 상한 넘는 값�
   assertEquals((await put(pg, A, { baseRev: 2, rank: { bestFloor: 9 } })).rank, { ok: false, reason: "banned" });
 });
 
+Deno.test("층 상승 속도 상한: 너무 빠르면 랭킹 숨김 + warn(기록은 올라감), 시간이 충분하면 통과", async () => {
+  const pg = await setup();
+  const hidden = async (who: string) => (await rows(pg, "select rank_hidden from public.players where id = $1", [who]))[0].rank_hidden;
+  await put(pg, A, { baseRev: 0, rank: { bestFloor: 20 } }); // 가입 직후 graceFloors까지는 통과
+  assertEquals(await hidden(A), false);
+  await pg.query("update public.normal_best set reached_at = now() - interval '1 hour' where player_id = $1", [A]);
+  await put(pg, A, { baseRev: 1, rank: { bestFloor: 380 } }); // 1시간 = 360층 + 20
+  assertEquals(await hidden(A), false);
+  await put(pg, A, { baseRev: 2, rank: { bestFloor: 500 } }); // 방금 380 -> +120
+  assertEquals(await hidden(A), true);
+  assertEquals((await rows(pg, "select best_floor from public.normal_best where player_id = $1", [A]))[0].best_floor, 500);
+  await put(pg, A, { baseRev: 3, rank: { bestFloor: 900 } });
+  const logs = await rows(pg, "select level, body from public.server_log where source = 'rank-normal'");
+  assertEquals(logs.length, 1, "이미 숨긴 계정은 다시 안 적음");
+  assertEquals([logs[0].level, (logs[0].body as { kind: string }).kind], ["warn", "floorSpeed"]);
+  await put(pg, B, { baseRev: 0, rank: { bestFloor: 9999 } }); // 가입 직후 9999층
+  assertEquals(await hidden(B), true);
+});
+
 Deno.test("이상치 기록(막지 않음): 다이아 +5000 넘게, 최고 층이 랭킹 기록 +50 넘게", async () => {
   const pg = await setup();
   await put(pg, A, { baseRev: 0 }); // bestFloor 8 > 0 + 50? 아님
