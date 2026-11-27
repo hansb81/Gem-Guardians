@@ -52,8 +52,8 @@ const queuePopup = (fn) => (popupChain = popupChain.then(fn).catch((e) => warn('
 
 // 보상형 미리 불러오기(docs/ads.md 2장) - AdMob 준비 직후 1개, show 후 다음 것. true = 불러옴, false = 실패.
 let rewardLoad = null;
-function prepareRewarded() {
-  rewardLoad = AdMob.prepareRewardVideoAd({ adId: ad.rewarded, isTesting: ad.testing }).then(
+function prepareRewarded(adId = ad.rewarded) {
+  rewardLoad = AdMob.prepareRewardVideoAd({ adId, isTesting: ad.testing }).then(
     () => true,
     (e) => {
       warn('rewarded load', e);
@@ -209,11 +209,15 @@ const platform = {
       }
     },
     // 미리 불러 둔 것을 띄운다. 아직 불러오는 중이면 loadTimeoutMs까지 기다리고, 넘으면 shown:false(로딩은 계속 - 다음 번에 씀).
-    async showRewarded(_placement, { loadTimeoutMs = 8000 } = {}) {
+    async showRewarded(placement, { loadTimeoutMs = 8000 } = {}) {
       if (!platform.caps.rewarded) return { rewarded: false, shown: false };
       let timer;
       const timeout = new Promise((r) => (timer = setTimeout(() => r('timeout'), loadTimeoutMs)));
-      const loaded = await Promise.race([rewardLoad ?? prepareRewarded(), timeout]);
+      // 위치 전용 단위(admob.rewardedBy)는 누를 때 불러온다. 플러그인이 보상형을 1개만 들고 있어서 진행 중인 기본 로드가 끝난 뒤에 덮어쓴다.
+      // shortcut: 전용 단위가 타임아웃되면 늦게 온 그 광고가 다음 기본 위치에서 나갈 수 있다(수익 집계만 섞임), 위치가 늘면 단위별 로드 상태로 나눈다.
+      const own = ad.rewardedBy?.[placement];
+      const load = own ? Promise.resolve(rewardLoad).then(() => prepareRewarded(own)) : rewardLoad ?? prepareRewarded();
+      const loaded = await Promise.race([load, timeout]);
       clearTimeout(timer);
       if (loaded !== true) {
         if (loaded === false) prepareRewarded(); // 실패(noFill 등)는 다시 요청, 타임아웃은 진행 중인 로드를 그대로 둔다.

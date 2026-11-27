@@ -26,13 +26,23 @@ const TAB_HIT_H = 38; // 탭 터치 높이(그림은 본문과 6 겹쳐 44)
 const TAB_OVERLAP = 6; // 켜진 탭이 tab_body 윗변 3px(원본)을 덮는다
 const ACTION_H = 48;
 const ROW_GAP = 6;
+const ROW_GAP_TIGHT = 4; // 줄이 ROW_MIN_H보다 낮을 때(층 클리어·패배 = 아래 버튼 있음)
 const ROW_MAX_H = 112;
+const ROW_MIN_H = 99; // 무대 93 + 여백
+const STAGE_K = 3; // 무대 그림(upgrade/stage, 27x31)은 x3
+const STAGE_W = 27 * STAGE_K;
+const STAGE_H = 31 * STAGE_K;
+const GLOW_MS = 300;
+const GLOW_FRAMES = 8;
 const FOOTER_H = 24;
 const ALL_H = 40; // 일괄 강화 버튼
 const UPGRADE_W = 116;
 const UPGRADE_H = 44; // 주 버튼
 const MAX_H = 36;
 const FX_PLUS_MS = 600;
+const FX_SPARK_MS = 600;
+const FX_FLASH_GAP_MS = 240; // 연속 강화 중 번쩍임 최소 간격
+const FX_GRADE_MS = 1200; // 마지막 강화 뒤 레벨 구간 이펙트를 보여 주는 시간
 const C = {
   title: HUD_CONFIG.text.title,
   text: HUD_CONFIG.text.primary,
@@ -48,7 +58,7 @@ const NAME_OUTLINE = { outlineColor: C.outline, outlineWidth: 3 };
 // 처음 열 때 상태. 층 클리어/패배는 같은 판에서 마지막에 본 탭(remembered), 신단·석상 탭은 수호자, 상자는 보관함.
 export function openPrepState(context, remembered = null, selectedTower = null) {
   const tab = context === 'vault' ? 'vault' : context === 'village' || context === 'towerTap' ? 'statue' : remembered ?? 'statue';
-  return { context, tab, selectedTower, flash: null, spirit: newSpiritSel() };
+  return { context, tab, selectedTower, fx: [], spirit: newSpiritSel() };
 }
 
 // 정령 탭을 잠가 두면(HUD_CONFIG.spiritTab.locked) "마지막 탭" 기억에는 남기지 않는다.
@@ -62,6 +72,18 @@ export function statueRowInfo(balance, level, gold) {
   const cost = maxed ? 0 : towerLevelCost(balance, level);
   const maxUps = maxed ? 0 : maxTowerLevelUps(balance, level, gold).levels;
   return { maxed, cost, affordable: !maxed && gold >= cost, maxUps };
+}
+
+// 강화 성공 연출의 줄별 시각. prev = 그 줄의 이전 값(없으면 null), at = 시작 시각(일괄 강화는 줄마다 늦춤),
+// attackMs = 공격 시트 한 번 길이. 공격·반짝이는 재생 중이면 이어서, 번쩍임은 240ms 뒤에만, "+1"은 매번 새로.
+export function stageFxOnUpgrade(prev, at, attackMs) {
+  return {
+    atk: prev && at < prev.atk + attackMs ? prev.atk : at,
+    flash: prev && at - prev.flash < FX_FLASH_GAP_MS ? prev.flash : at,
+    spark: prev && at < prev.spark + FX_SPARK_MS ? prev.spark : at,
+    plus: at,
+    grade: prev && at < prev.plus + FX_GRADE_MS ? prev.grade : at, // 레벨 구간 이펙트 시작 - 보이는 중이면 이어서
+  };
 }
 
 // 일괄 강화 버튼 - 골고루 올릴 레벨 수(+N)와 총 비용.
@@ -116,18 +138,21 @@ export function layoutPrepPopup(screenW, screenH, context, tab) {
 }
 
 function layoutStatueTab(c) {
-  const rowH = Math.min(ROW_MAX_H, Math.floor((c.height - FOOTER_H - ALL_H - ROW_GAP * 2 - ROW_GAP * 4) / 5));
+  const rowHFor = (g) => Math.min(ROW_MAX_H, Math.floor((c.height - FOOTER_H - ALL_H - g * 6) / 5));
+  let gap = ROW_GAP;
+  let rowH = rowHFor(gap);
+  if (rowH < ROW_MIN_H) rowH = rowHFor((gap = ROW_GAP_TIGHT));
   const rows = [];
   for (let i = 0; i < 5; i++) {
-    const card = rect(c.x, c.y + i * (rowH + ROW_GAP), c.width, rowH);
+    const card = rect(c.x, c.y + i * (rowH + gap), c.width, rowH);
     const mid = card.y + rowH / 2;
     const upgrade = rect(card.x + card.width - 8 - UPGRADE_W, Math.round(mid - (UPGRADE_H + 4 + MAX_H) / 2), UPGRADE_W, UPGRADE_H);
     const max = rect(upgrade.x, upgrade.y + UPGRADE_H + 4, UPGRADE_W, MAX_H);
-    const tx = card.x + 66;
+    const tx = card.x + 8 + STAGE_W + 14;
     const textW = upgrade.x - 8 - tx;
     rows.push({
       card,
-      statueBox: rect(card.x + 8, Math.round(mid - 28), 48, 56), // 석상 32x40 + 안쪽 8
+      statueBox: rect(card.x + 8, Math.round(mid - STAGE_H / 2), STAGE_W, STAGE_H), // 수호자 무대(27x31 x3)
       name: rect(tx, Math.round(mid - 42), textW, 22),
       // box_floor 테두리가 원본 5(화면 10)씩이라 32 높이여야 안쪽 12에 글자가 테를 안 덮는다("Lv.200"까지 폭 44).
       badge: rect(tx, Math.round(mid - 17), 64, 32),
@@ -137,9 +162,9 @@ function layoutStatueTab(c) {
       max,
     });
   }
-  const fy = rows[4].card.y + rowH + ROW_GAP;
+  const fy = rows[4].card.y + rowH + gap;
   const half = Math.floor(c.width / 2);
-  return { rows, hint: rect(c.x, fy, half, FOOTER_H), total: rect(c.x + half, fy, c.width - half, FOOTER_H), all: rect(c.x, fy + FOOTER_H + ROW_GAP, c.width, ALL_H) };
+  return { rows, hint: rect(c.x, fy, half, FOOTER_H), total: rect(c.x + half, fy, c.width - half, FOOTER_H), all: rect(c.x, fy + FOOTER_H + gap, c.width, ALL_H) };
 }
 
 const inside = (x, y, r) => r && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
@@ -179,9 +204,10 @@ export function hitPrepPopup(layout, x, y) {
   return null;
 }
 
-// state = openPrepState + flash { index, atMs, white } + view(그릴 값):
-// view = { floor, best, gold, totalAttack, towers: [{ color, name, level, atk, nextAtk, info: statueRowInfo }],
-//          nowMs, drawStatue(ctx, color, cx, cy, size, grade), drawVault(rect) -> 터치 사각형,
+// state = openPrepState + fx[줄] = stageFxOnUpgrade 결과 + view(그릴 값):
+// view = { floor, best, gold, totalAttack, towers: [{ color, name, level, look, fxTier(레벨 구간 이펙트 tier, 설정에서 끄면 0), atk, nextAtk, info: statueRowInfo }],
+//          nowMs, drawStatue(ctx, color, cx, cy, size, grade), drawStageGuardian(ctx, color, look, x, y, now, anim),
+//          drawVault(rect) -> 터치 사각형,
 //          spirit: { cfg, owned, slots, pending, stones, gold, floorReward } (spiritTab.js, 정령 설정이 없으면 null) }
 export function drawPrepPopup(ctx, assets, state, layout) {
   const { sheet, view } = { sheet: layout.sheet, view: state.view };
@@ -213,7 +239,7 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   if (layout.tabs[state.tab]) drawTab(ctx, assets, layout.tabs[state.tab], state.tab, true);
 
   if (layout.statue) drawStatueTab(ctx, assets, state, layout.statue, view);
-  else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStatue, view.nowMs, layout.scale) : null;
+  else if (layout.spirit) layout.spiritHits = view.spirit ? drawSpiritTab(ctx, assets, layout.content, view.spirit, state.spirit, view.towers, view.drawStageGuardian, view.nowMs, layout.scale) : null;
   else layout.vaultHits = view.drawVault ? view.drawVault(layout.content) : null;
 
   for (const a of layout.actions) {
@@ -225,30 +251,45 @@ export function drawPrepPopup(ctx, assets, state, layout) {
   ctx.restore();
 }
 
+const STAGE_ANIM = { row: 0, atk: -Infinity, flash: -Infinity, tier: 0 }; // drawStageGuardian에 넘기는 값(매 프레임 재사용)
+
 function drawStatueTab(ctx, assets, state, tab, view) {
-  const flash = state.flash;
+  const now = view.nowMs;
+  const sc = ctx.getTransform?.().a || 1; // 무대는 기기 px에 맞춰 그린다(x3 픽셀 굵기 균일)
   tab.rows.forEach((row, i) => {
     const tower = view.towers[i];
     if (!tower) return;
     const { info } = tower;
     const selected = state.selectedTower === i;
     nine(ctx, assets, selected ? 'upgrade/card_selected.png' : 'upgrade/card.png', row.card, '#1f1b2b');
-    const box = row.statueBox;
-    nine(ctx, assets, 'menu/inset.png', box, C.outline);
-    view.drawStatue?.(ctx, tower.color, box.x + box.width / 2, box.y + box.height / 2, 40, tower.look);
-    // 방금 강화: 받침 상자에 1프레임 흰 테 + Lv 옆 초록 "+1" 0.6초.
-    const justUp = flash && flash.index === i;
-    if (justUp && flash.white) {
-      ctx.strokeStyle = C.white;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(box.x + 1, box.y + 1, box.width - 2, box.height - 2);
+    // 무대: 바탕 → 바닥 빛(줄마다 엇갈려 숨쉼) → 받침 → 수호자(idle, 강화하면 공격 1번 + 번쩍임) → 반짝이.
+    const fx = state.fx?.[i];
+    const sx = Math.round(row.statueBox.x * sc) / sc;
+    const sy = Math.round(row.statueBox.y * sc) / sc;
+    stageImg(ctx, assets, 'stage_back', 0, 27, 31, sx, sy);
+    stageImg(ctx, assets, `stage_glow_${tower.color}`, ((Math.floor(now / GLOW_MS) + i) % GLOW_FRAMES) * 27, 27, 31, sx, sy);
+    stageImg(ctx, assets, 'stage_disc', 0, 19, 3, sx + 4 * STAGE_K, sy + 28 * STAGE_K);
+    STAGE_ANIM.row = i;
+    STAGE_ANIM.atk = fx ? fx.atk : -Infinity;
+    STAGE_ANIM.flash = fx ? fx.flash : -Infinity;
+    STAGE_ANIM.tier = fx && now >= fx.grade && now < fx.plus + FX_GRADE_MS ? tower.fxTier ?? 0 : 0;
+    view.drawStageGuardian?.(ctx, tower.color, tower.look, sx, sy, now, STAGE_ANIM);
+    const sparkAge = fx ? now - fx.spark : -1;
+    if (sparkAge >= 0 && sparkAge < FX_SPARK_MS) {
+      const ramp = assets?.skillManifest?.tint?.ramps?.[tower.color]?.[3] ?? C.white;
+      const neon = assets?.guardianFxManifest?.outline?.colors?.[tower.color]?.bright ?? C.white;
+      for (let k = 0; k < 6; k++) {
+        ctx.fillStyle = k % 2 ? neon : ramp;
+        const ny = Math.floor(25 - ((sparkAge / FX_SPARK_MS + k / 6) % 1) * 22);
+        ctx.fillRect(sx + (5 + ((k * 7) % 17)) * STAGE_K, sy + ny * STAGE_K, STAGE_K, STAGE_K);
+      }
     }
 
     label(ctx, tower.name, row.name, selected ? C.title : C.text, 15, true, 'left', NAME_OUTLINE);
     nine(ctx, assets, 'panels/box_floor.png', row.badge, HUD_CONFIG.panel.raised);
     label(ctx, `Lv.${tower.level}`, row.badge, C.text, 12, true, 'center');
-    const age = justUp ? view.nowMs - flash.atMs : Infinity;
-    if (age < FX_PLUS_MS) number(ctx, assets, '+1', row.plus.x + 18, row.plus.y + 16 - Math.round((age / FX_PLUS_MS) * 6), 'green');
+    const age = fx ? now - fx.plus : -1; // 일괄 강화는 시작 시각이 미래일 수 있다(음수 = 아직)
+    if (age >= 0 && age < FX_PLUS_MS) number(ctx, assets, '+1', row.plus.x + 18, row.plus.y + 16 - Math.round((age / FX_PLUS_MS) * 6), 'green');
 
     // 공격 412 › 498 - 글자는 회색, 숫자는 데미지 폰트(현재 흰, 다음 초록).
     const ay = row.attack.y + row.attack.height / 2;
@@ -291,6 +332,12 @@ function drawStatueTab(ctx, assets, state, tab, view) {
   const allMeta = nine(ctx, assets, can ? 'buttons/btn_primary.png' : 'upgrade/btn_disabled.png', tab.all, HUD_CONFIG.popup.disabled);
   const allText = can ? t('popup.prep.allN', { n: all.count, cost: fmtGold(all.cost) }) : t('popup.prep.all');
   label(ctx, allText, tab.all, can ? allMeta?.textColor ?? C.text : C.sub, 14, true, 'center');
+}
+
+// 무대 그림 한 장(x3). sx = 시트 안 프레임 x.
+function stageImg(ctx, assets, name, sx, w, h, x, y) {
+  const st = getUi(assets, `upgrade/stage/${name}.png`);
+  if (uiReady(st)) ctx.drawImage(st.img, sx, 0, w, h, x, y, w * STAGE_K, h * STAGE_K);
 }
 
 function drawTab(ctx, assets, r, key, on) {

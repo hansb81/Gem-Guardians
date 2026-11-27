@@ -18,6 +18,7 @@ import { boltPath, drawPixelBolt } from './effects/pixelBolt.js';
 import { ItemBarRenderer, drawItemIconFallback } from './itemBarRenderer.js';
 import { InventoryTab } from './inventoryTab.js';
 import { layoutPrepPopup, drawPrepPopup } from './ui/prepPopup.js';
+import { drawStageGuardian } from './ui/stageGuardian.js';
 import { layoutRankingPopup, drawRankingPopup } from './ui/rankingPopup.js';
 import { DETONATION_CONFIG } from '../config/detonation.js';
 import { TutorialRenderer } from './tutorialRenderer.js';
@@ -315,6 +316,26 @@ export class CanvasRenderer {
     ctx.fillStyle = `rgba(0, 0, 0, ${Math.min(1, alpha)})`;
     const F = screen.full; // 블리드까지 덮는다.
     ctx.fillRect(F.x, F.y, F.width, F.height);
+  }
+
+  // 서버 응답 대기(경쟁 판 시작) - 화면을 어둡게 덮고 가운데에 도는 고리. 입력 막기는 main.js.
+  drawBusyOverlay(nowMs) {
+    const { ctx, cssWidth: width, cssHeight: height } = this;
+    if (width === 0 || height === 0) return;
+    this.drawFadeOverlay(0.55);
+    const a = (nowMs / 1000) * Math.PI * 2; // 1초에 한 바퀴
+    ctx.save();
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+    ctx.beginPath();
+    ctx.arc(width / 2, height / 2, 16, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(width / 2, height / 2, 16, a, a + Math.PI * 0.6);
+    ctx.stroke();
+    ctx.restore();
   }
 
   // itemUi = { items(ItemController), config(items.json), equipped, counts, aim } | null(아이템 기능 없음).
@@ -3019,6 +3040,7 @@ export class CanvasRenderer {
     const layout = layoutPrepPopup(width, height, state.context, state.tab);
     this._prepItemUi = itemUi;
     state.view.drawStatue ??= (c, color, cx, cy, size, grade) => this._battleRenderer.drawTowerIcon(c, this.assets, color, cx, cy, size, grade);
+    state.view.drawStageGuardian ??= (c, color, look, x, y, now, anim) => drawStageGuardian(c, this.assets, color, look, x, y, now, anim);
     state.view.drawVault ??= (rect) =>
       this._prepItemUi?.config && this._prepItemUi.inventory ? this.inventoryTab.draw(this.ctx, rect, this.assets, this._prepItemUi, this._slotDrawers(), performance.now()) : null;
     drawPrepPopup(ctx, this.assets, state, layout);

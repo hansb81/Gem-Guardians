@@ -25,14 +25,16 @@ import { towerAttack, normalFloorReward } from './core/economy/economy.js';
 import { compLock } from './core/comp/endless.js';
 import { RankingUi } from './game/rankingUi.js';
 import { pressButton } from './render/uiKit.js';
-import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup } from './render/ui/prepPopup.js';
-import { cycleFilter, resetFilter } from './render/ui/spiritTab.js';
+import { openPrepState, rememberTab, statueRowInfo, statueAllInfo, hitPrepPopup, stageFxOnUpgrade } from './render/ui/prepPopup.js';
+import { stageAttackMs } from './render/ui/stageGuardian.js';
+import { cycleFilter, resetFilter, dragList, scrollList } from './render/ui/spiritTab.js';
 import { Tutorial, shouldStartTutorial, completeTutorial } from './tutorial/tutorial.js';
 import { resolveFloorSpawns } from './core/balance/floorGen.js';
 import { platform, DEV_MODE, DEV_ALLOWED } from './platform/index.js';
 import { restore, flushPendingPurchases, startPendingPurchases } from './shop/iap.js';
 import { storage } from './platform/storage.js';
-import { guardianFxSetting, lookGrade } from './render/guardianFx.js';
+import { guardianFxSetting, lookGrade, fxTier } from './render/guardianFx.js';
+import { UpgradeSfx, BULK_STAGGER_MS } from './audio/upgradeSfx.js';
 import { loadServerConfig, setupServer, autoOpenAttendance } from './game/serverUi.js';
 import { titleLoginMode, linkFromTitle } from './game/titleLogin.js';
 import { showRewarded } from './game/ads.js';
@@ -107,10 +109,12 @@ const ranking = new RankingUi({
 });
 mainMenuScreen.compStatus = () => compStatus();
 mainMenuScreen.crown = () => ranking.devCrown ?? ranking.crown;
+ranking.crownSheet = (metal) => mainMenuScreen.crownSheet(metal);
 if (DEV_ALLOWED) {
   // ?crown=iron|bronze|silver|gold 메뉴 왕관 금속 고정, ?swirl=1 새 시즌 소용돌이 한 번(개발 빌드만).
   const q = new URLSearchParams(location.search);
   ranking.devCrown = q.get('crown');
+  if (q.has('rankPlayers')) ranking.devPlayers = Number(q.get('rankPlayers')) || 0; // ?rankPlayers=3|30 가짜 순위표 인원
   ranking.swirl = q.has('swirl');
 }
 mainMenuScreen.normalFloor = () => playerState.floor; // controller.floor는 경쟁·튜토리얼 판이면 다른 값
@@ -284,6 +288,7 @@ let invPress = null;
 let invDrag = null;
 const INV_DRAG_PX = 8;
 const INV_HOLD_MS = 500;
+let spiritDrag = null; // 정령 목록 끌기 { y, startScroll, moved, id } - 끌지 않고 떼면 그 칸(id)을 연다
 let spiritPress = null; // 정령 탭 필터 버튼 누름 { kind, downMs, done } - 길게(INV_HOLD_MS) = 전체로
 let mineVeinToast = false; // 새 광맥 토스트 대기(보상 팝업이 닫히면 띄운다)
 // 메뉴의 광산 버튼 상태(객체 하나를 재사용 - 매 프레임 만들지 않는다). 설정을 읽은 뒤 mainMenuScreen.mine에 연결.
@@ -417,6 +422,14 @@ function compStatus() {
   }
   const left = svc.compLeft;
   return { unlocked: true, open: left !== 0, left, daily: compCfg.dailyEntries, hint: left === 0 ? t('comp.noEntries') : null };
+}
+
+// 일반 모드 시작(메뉴 플레이 버튼·랭킹 내 기록 카드 "도전하러 가기").
+function startNormalGame() {
+  playGameBgm(1000);
+  startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
+    scene = 'game';
+  });
 }
 
 async function startCompGame() {
@@ -726,6 +739,7 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       player: playerState,
       save: () => playerState.save(),
       showReward: (r) => rewardPopup.show(r),
+      watchAd: () => showRewarded('shop', { loadTimeoutMs: balanceData.items.adContinue.loadTimeoutMs }), // 오늘의 무료 1개
       itemIcons: () => renderer.itemAssets?.icons,
       serverToday: () => serverUi.att?.status?.today ?? null, // 상점·패스 하루 기준도 광산과 같은 서버 날짜(KST) 우선
       playerId: () => net.playerId ?? null, // 환불 안내 팝업의 회원 번호(설정 > 게임 정보의 회원 번호와 같은 id)
@@ -1092,6 +1106,7 @@ function handlePrepPointerDown(x, y) {
       return;
     case 'reserve':
       audio.play('ui_click');
+      invSel = hit.id; // 예약 아이템도 아래 설명 패널에 보여 준다(켜기/끄기는 그대로 한 번에).
       if (!togglePreFloor(hit.id)) audio.play('gem_swap_fail');
       return;
     case 'detailAction': {
@@ -1112,9 +1127,9 @@ function handlePrepPointerDown(x, y) {
     case 'spiritFilter': // 탭 = 다음 값(손을 뗄 때), 길게 누르기 = 그 필터만 전체로(processSpiritHold)
       spiritPress = { kind: hit.kind, downMs: performance.now(), done: false };
       return;
-    case 'spiritItem':
-      audio.play('ui_click');
-      prep.spirit.detail = hit.id;
+    case 'spiritItem': // 목록은 끌면 스크롤, 그냥 떼면 그 칸을 연다(pointerup)
+    case 'spiritList':
+      spiritDrag = { y: y / layout.scale, startScroll: prep.spirit.scroll, moved: false, id: hit.id ?? null };
       return;
     case 'spiritBack':
       audio.play('ui_cancel');
@@ -1129,7 +1144,15 @@ function handlePrepPointerDown(x, y) {
   }
 }
 
-// 일괄 강화 - 다섯 석상을 골고루. 오른 석상마다 탑 연출, 팝업 흰 테는 첫 번째 오른 석상.
+// 정비 팝업 그 줄의 강화 연출(공격 동작·번쩍임·반짝이·"+1")을 delayMs 뒤에 시작한다.
+function bumpStageFx(index, delayMs = 0) {
+  if (!prep) return;
+  const look = lookGrade(playerState.towerLevel(index), controller.balance.towerLookTiers);
+  const attackMs = stageAttackMs(renderer.assets, controller.battleState.towers[index].color, look);
+  prep.fx[index] = stageFxOnUpgrade(prep.fx[index], performance.now() + delayMs, attackMs);
+}
+
+// 일괄 강화 - 다섯 석상을 골고루. 오른 석상마다 탑 연출, 팝업 연출은 오른 줄마다 위에서 아래로 80ms씩 늦춰서.
 function upgradeAllStatues() {
   if (!controller) return false;
   const before = playerState.towerLevels.slice();
@@ -1137,20 +1160,30 @@ function upgradeAllStatues() {
   if (!ok) { audio.play('gem_swap_fail'); return false; }
   const upped = before.map((l, i) => (playerState.towerLevel(i) > l ? i : -1)).filter((i) => i >= 0);
   if (scene === 'game') for (const i of upped) renderer.triggerTowerTapFx(controller.battleState.towers[i].id, true, playerState.towerLevel(i));
-  else audio.play('ui_click');
-  if (prep) prep.flash = { index: upped[0], atMs: performance.now(), white: true };
+  upgradeSfx.all(upped, upped.some((i) => towerLook(before[i]) !== towerLook(playerState.towerLevel(i))));
+  for (const i of upped) bumpStageFx(i, i * BULK_STAGGER_MS);
   return true;
 }
 
-// 석상 강화(1레벨/MAX). 성공하면 그 줄을 card_selected + "+1"·흰 테, 전투 화면이 뒤에 있으면 탑 연출도 같이.
+const towerLook = (level) => lookGrade(level, controller.balance.towerLookTiers);
+// 지연 재생은 타이머로 - audio.play의 minGapMs/maxInstances는 호출 시각 기준이라 delayMs만 다른
+// 같은 소리를 한 번에 여러 개 걸면(일괄 강화) 첫 번째만 난다.
+const upgradeSfx = new UpgradeSfx((key, { delayMs = 0, ...opts } = {}) => {
+  if (delayMs) setTimeout(() => audio.play(key, opts), delayMs);
+  else audio.play(key, opts);
+});
+
+// 석상 강화(1레벨/MAX). 성공하면 그 줄을 card_selected + "+1"·공격 동작, 전투 화면이 뒤에 있으면 탑 연출도 같이.
 function upgradeStatue(index, max) {
   if (!controller) return false;
+  const before = playerState.towerLevel(index);
   const ok = max ? controller.maxLevelUpTower(index) : controller.tryLevelUpTower(index);
   if (scene === 'game') renderer.triggerTowerTapFx(controller.battleState.towers[index].id, ok, playerState.towerLevel(index));
-  else audio.play(ok ? 'ui_click' : 'gem_swap_fail');
+  if (ok) upgradeSfx.one(index, performance.now(), towerLook(before) !== towerLook(playerState.towerLevel(index)), max);
+  else audio.play('gem_swap_fail');
   if (ok && prep) {
     prep.selectedTower = index;
-    prep.flash = { index, atMs: performance.now(), white: true };
+    bumpStageFx(index);
   }
   return ok;
 }
@@ -1188,8 +1221,8 @@ function inventorySlotTap(slot) {
     audio.play('gem_swap_fail');
     return;
   }
-  if (invSel == null) {
-    // 고른 게 없으면 그 칸의 아이템을 골라 설명만 보여 준다.
+  if (invSel == null || inv.config?.items[invSel]?.group !== 'hotbar') {
+    // 고른 게 없거나 장착할 수 없는 것(예약·부활)을 골라 둔 상태면 그 칸의 아이템을 골라 설명만 보여 준다.
     invSel = (inv.pendingHotbar() ?? inv.hotbar())[slot] ?? null;
     audio.play('ui_click');
     return;
@@ -1220,7 +1253,7 @@ function processInventoryHold(nowMs) {
 // 일시정지 버튼(재화 바 오른쪽)/팝업 버튼/탑 탭 클릭 판정. 보드 스와이프
 // (PointerInput)와는 별개의 영역이라 겹치지 않는다.
 canvas.addEventListener('pointerdown', (e) => {
-  if (fade) return; // 화면 전환 페이드 중에는 입력을 받지 않는다.
+  if (fade || compBusy) return; // 화면 전환 페이드·경쟁 판 시작 응답 대기 중에는 입력을 받지 않는다.
   if (rewardPopup.active) {
     rewardPopup.handlePointerDown(frameX(e), frameY(e));
     return;
@@ -1242,7 +1275,9 @@ canvas.addEventListener('pointerdown', (e) => {
 
   if (scene === 'menu') {
     if (ranking.isOpen) {
-      if (ranking.pointerDown(x, y) === 'openMode') mainMenuScreen.popup = 'mode';
+      const go = ranking.pointerDown(x, y);
+      if (go === 'openMode') mainMenuScreen.popup = 'mode';
+      else if (go === 'startNormal') startNormalGame();
       return;
     }
     if (prep) {
@@ -1251,12 +1286,8 @@ canvas.addEventListener('pointerdown', (e) => {
     }
     const action = mainMenuScreen.handlePointerDown(x, y);
     if (action === 'replayTutorial') startTutorialPractice();
-    else if (action === 'startNormalGame') {
-      playGameBgm(1000);
-      startFade(ENTER_FADE_MS, 'ui_game_enter', () => {
-        scene = 'game';
-      });
-    } else if (action === 'startCompGame') startCompGame();
+    else if (action === 'startNormalGame') startNormalGame();
+    else if (action === 'startCompGame') startCompGame();
     else if (action === 'openShop') enterShop();
     else if (action === 'openMine') enterMine();
     else if (action === 'openShopGold') enterShop('dia', 'goldex');
@@ -1388,6 +1419,10 @@ canvas.addEventListener('pointerdown', (e) => {
 
 canvas.addEventListener('pointermove', (e) => {
   if (invDragMove(frameY(e))) return;
+  if (spiritDrag && prep) {
+    dragList(prep.spirit, spiritDrag, frameY(e) / (renderer.prepLayout?.scale ?? 1));
+    return;
+  }
   if (ranking.pointerMove(frameY(e))) return;
   // 터치는 누른 동안만, 마우스는 떼고 움직여도 미리보기가 따라온다.
   if (aim) {
@@ -1421,10 +1456,15 @@ window.addEventListener('pointerup', (e) => {
     audio.play('ui_click');
   }
   spiritPress = null;
+  if (spiritDrag && !spiritDrag.moved && spiritDrag.id && prep) {
+    prep.spirit.detail = spiritDrag.id;
+    audio.play('ui_click');
+  }
+  spiritDrag = null;
   if (aim?.down) aimPointerUp();
   upgradeHold = null;
   sliderDrag = null;
-  const menuUp = scene === 'menu' && !fade ? mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
+  const menuUp = scene === 'menu' && !fade && !compBusy ?mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
   if (menuUp === 'openRanking') rankingOpenAt = mainMenuScreen.crystalTapAt + mainMenuScreen.crystalTapMs();
   if (menuUp === 'openPrep') openPrep('village');
   if (menuUp === 'openVault') vaultOpenAt = mainMenuScreen.chestOpenAt + mainMenuScreen.chestOpenMs();
@@ -1437,6 +1477,7 @@ window.addEventListener('pointercancel', () => {
   ranking.pointerUp();
   invPress = null;
   spiritPress = null;
+  spiritDrag = null;
   invDrag = null;
   if (aim) aim.down = false;
   upgradeHold = null;
@@ -1449,6 +1490,7 @@ window.addEventListener('pointercancel', () => {
 canvas.addEventListener(
   'wheel',
   (e) => {
+    if (compBusy) return;
     if (scene === 'menu' && ranking.isOpen) {
       e.preventDefault();
       ranking.wheel(e.deltaY);
@@ -1456,6 +1498,11 @@ canvas.addEventListener(
     }
     if (scene === 'menu' && mainMenuScreen.handleWheel(e.deltaY)) {
       e.preventDefault();
+      return;
+    }
+    if (prep?.tab === 'spirit' && !prep.spirit.detail && (scene === 'menu' || scene === 'game')) {
+      e.preventDefault();
+      scrollList(prep.spirit, prep.spirit.scroll + e.deltaY * 0.5);
       return;
     }
     if (inventoryOpen()) {
@@ -1473,7 +1520,7 @@ canvas.addEventListener(
 // 뒤로가기(안드로이드 버튼·토스 backEvent - platform.lifecycle.onBack). 위에서부터 처음 처리한 핸들러에서 멈춘다:
 // 열린 팝업 닫기 -> 게임 중이면 일시정지 팝업 -> 메뉴면 종료 확인 모달. true = 처리함(앱이 닫히지 않는다).
 const backHandlers = [
-  () => fade != null, // 화면 전환 중엔 무시.
+  () => fade != null || compBusy, // 화면 전환·경쟁 판 시작 응답 대기 중엔 무시.
   // 타이틀도 바로 끄지 않고 종료 확인(토스 심사: 종료할 때 확인 모달). 모달이 떠 있으면 닫기.
   // 문 열림 전환 중엔 무시(삼킴).
   () => scene === 'title' && (titleScreen.exiting || mainMenuScreen.closePopup() || (platform.caps.exit && openExitConfirm('app'))),
@@ -1794,14 +1841,13 @@ function drawPrep(now) {
     const level = playerState.towerLevel(i);
     const atk = towerAttack(balance, level);
     v.totalAttack += atk;
-    v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, look: lookGrade(level, balance.towerLookTiers), atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
+    v.towers[i] = { color: tower.color, name: tOr(`names.tower.${tower.color}`, tower.name), level, look: lookGrade(level, balance.towerLookTiers), fxTier: guardianFxSetting.enabled() && balance.towerFxTiers ? fxTier(level, balance.towerFxTiers) : 0, atk, nextAtk: towerAttack(balance, level + 1), info: statueRowInfo(balance, level, playerState.gold) };
   });
   v.all = statueAllInfo(balance, playerState.towerLevels, playerState.gold);
   const inv = playerState.inventory;
   // 정령 탭: 층 중에 바꾼 장착(pendingSpirits)이 있으면 그쪽을 보여 준다(하단 아이템 장착 칸과 같은 규칙).
   v.spirit = spiritEnv && { cfg: spiritEnv.cfg, owned: inv.data.perm.spirits, slots: inv.pendingSpirits() ?? inv.spiritSlots(), pending: inv.inFloor, stones: inv.spiritStones, gold: playerState.gold, floorReward: spiritEnv.floorReward() };
   renderer.drawPrepPopup(prep, buildItemUi());
-  if (prep.flash) prep.flash.white = false; // 흰 테는 1프레임만.
 }
 
 let lastBattleStatus = null;
@@ -1884,6 +1930,7 @@ function loop(now) {
     }
     renderer.drawRankingPopup(ranking, now);
     renderer.drawRewardPopup(rewardPopup); // 출석·우편 받기
+    if (compBusy) renderer.drawBusyOverlay(now); // 경쟁 판 시작 응답 대기
     drawFade(rawDtMs);
     requestAnimationFrame(loop);
     return;

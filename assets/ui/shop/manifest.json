@@ -186,6 +186,24 @@
    "h": 36,
    "group": "diaTier"
   },
+  "gold_t1": {
+   "src": "ui/shop/gold_t1.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "gold_t2": {
+   "src": "ui/shop/gold_t2.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
+  "gold_t3": {
+   "src": "ui/shop/gold_t3.png",
+   "w": 40,
+   "h": 36,
+   "group": "diaTier"
+  },
   "card_dia_silver": {
    "src": "ui/shop/card_dia_silver.png",
    "w": 12,

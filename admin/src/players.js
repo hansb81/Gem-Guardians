@@ -2,6 +2,9 @@
 import { call, isOwner, write } from './api.js';
 import { bundleText, itemName, TOWERS } from './bundle.js';
 import { h, json, kst, num, reasonText, table, uid, writeButton } from './ui.js';
+import shop from '../../config/shop.json';
+import { ko } from '../../src/config/locales/ko.js';
+import { addDays, daysBetween } from '../../src/core/kst.js';
 
 export async function search(root, { query }) {
   const q = h('input', { placeholder: '플레이어 코드(앞 8자) / uid / 닉네임 / 주문번호 / legacy_id', style: 'flex:1;min-width:260px' });
@@ -23,6 +26,23 @@ export async function search(root, { query }) {
   q.addEventListener('keydown', (e) => e.key === 'Enter' && go());
   root.replaceChildren(h('h1', '플레이어'), h('div.panel', h('div.row', q, h('button.primary', { onclick: go }, '찾기'))), out);
   if (q.value) go();
+}
+
+// 저장 탭 패스 표: 현재 패스(shop.passes) + 다시 살 때 밀려난 이전 패스(shop.passHistory). 일수 규칙 = src/core/shop/shop.js.
+function passRows(d) {
+  const row = (pack, kind, p) => {
+    const days = shop.packs[pack]?.pass?.days;
+    // 받을 때마다 그날까지 전부 받으므로(밀린 날 합산) 마지막 수령일까지는 다 받은 것. 수령일이 없는 옛 저장은 알 수 없다.
+    const got = days && p.claimedDay ? Math.min(days, Math.max(0, days - daysBetween(p.claimedDay, p.endDay))) : null;
+    return {
+      name: ko.shop.pack[pack]?.name ?? pack, kind, boughtDay: p.boughtDay ?? (days ? addDays(p.endDay, -days) : '-'), endDay: p.endDay,
+      claimedDay: p.claimedDay ?? '-', got: got ?? '?', left: got == null ? '?' : days - got,
+    };
+  };
+  return [
+    ...Object.entries(d.passes ?? {}).filter(([, p]) => p?.endDay).map(([pack, p]) => row(pack, '현재', p)),
+    ...(d.passHistory ?? []).filter((p) => p?.endDay).map((p) => row(p.pack, '이전', p)).reverse(),
+  ];
 }
 
 const TABS = ['요약', '저장', '결제', '받은 보상', '우편', '랭킹', '로그'];
@@ -86,6 +106,12 @@ export async function detail(root, { id, query }) {
         h('h2', '아이템'),
         table([{ key: 'id', label: '아이템' }, { key: 'n', label: '개수', num: true }],
           Object.entries(d.items ?? {}).map(([id, n]) => ({ id: itemName(id), n }))),
+        h('h2', '패스'),
+        table([
+          { key: 'name', label: '패스' }, { key: 'kind', label: '구분' }, { key: 'boughtDay', label: '구매일' }, { key: 'endDay', label: '종료일' },
+          { key: 'claimedDay', label: '마지막 수령일' }, { key: 'got', label: '받은 일수', num: true }, { key: 'left', label: '안 받은 일수', num: true },
+        ], passRows(d), { empty: '패스 기록 없음' }),
+        h('p.muted', '받은 일수 = 전체 일수 − (종료일 − 마지막 수령일). 구매일은 종료일에서 되짚은 값이라 결제 탭의 구매 시각과 대조하세요. 이전 패스는 최근 5건까지.'),
         h('p.muted', '읽기 전용 - 기기가 주인이라 서버에서 고칠 수 없어요.'),
       ];
     },

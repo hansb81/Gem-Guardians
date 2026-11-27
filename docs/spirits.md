@@ -99,7 +99,7 @@
 ## 7. 화면
 
 - 강화 팝업 탭 `수호자 / 정령 / 보관함`(토템 탭 자리, 잠금 해제).
-- 정령 탭: 위 = 수호자 5줄(수호자 그림 + 정령 칸 1개 + 공명 표시 + 효과 한 줄). 칸을 누르면 아래 = 보유 정령 목록(속성·등급 필터, 5열) + 상세(이름, 등급, 레벨, 별, 효과 수치, 레벨업 버튼, 장착/해제).
+- 정령 탭(2026-11-27 바꿈): 위 = 수호자 무대 5칸 가로 한 줄(30x34 x3, idle 수호자 + 어깨 옆 정령, 공명이면 밝은 빛 + "공명") + 고른 수호자 정보 카드(이름 + 정령 이름, 효과 한 줄, "해제"). 무대를 누르면 그 수호자 선택, 아래 = 정령 목록(속성·등급 필터, 5열, 칸 86x92 고정, 세로 스크롤) + 상세(이름, 등급, 레벨, 별, 효과 수치, 레벨업 버튼, 장착/해제).
 - 전투: 0번 원칙의 자리. 효과가 발동할 때 정령이 1회 번쩍.
 - 목록·도감(2026-11-24, 상점 정령 레일에서 옮겨 하나로 합침): 정령 탭 목록 위 오른쪽 "보유 n / 30"(항상), 그 아래 같은 폭 필터 버튼 3개 - 속성(전체 → 불 → 얼음 → 숲 → 독 → 번개, 잼 미니 아이콘 + 이름), 등급(전체 → 일반 → 희귀 → 영웅 → 전설, 등급 색 글자), 보유("보유만"(기본) ↔ "전체"). 누를 때마다 다음 값, 길게 누르면 그 필터만 전체로, 전체가 아닌 값이면 slot_selected 틀. 목록은 하나(config 순서): 보유 "전체"면 안 가진 정령이 #221c2b 실루엣으로 섞인다(칸 테두리는 가진 정령과 같은 등급 색). 가진 정령을 누르면 상세(레벨업·장착), 안 가진 정령은 도감 설명(이름·등급·속성·역할·1레벨 기준 효과, 버튼 없음). 상세·설명은 칸 오른쪽 위 X로 닫는다("목록" 버튼 없음). 결과가 없으면 "조건에 맞는 정령이 없어요". 상점에는 정령 레일이 없다(판매가 생기면 다시 검토).
 - 그림(완료): 전투 = `assets/spirits/spirits.png`(40x300, 정령마다 한 줄 10x10 4프레임), 초상 = `portraits.png`(24x24, 6열), 정령석 = `assets/ui/icons/spirit_stone.png`. 줄·칸 번호는 `assets/spirits/manifest.json`. 등급 테두리 색 = 일반 #655a74 · 희귀 #386cbc · 영웅 #7a3cae · 전설 #f2d264.
@@ -176,10 +176,10 @@
 |---|---|
 | 정령 그림(시트·초상·정령석, 없는 id는 속성 색 마름모) · 등급 테두리 색 | `src/render/spiritSprite.js` |
 | 전투 표시·번쩍·추가 사격 투사체 | `src/render/battleRenderer.js` `_spiritRect` / `_drawSpirits` |
-| 정령 탭(수호자 5줄, 목록, 상세, 레벨업·장착) | `src/render/ui/spiritTab.js`(입력은 `main.js` `spirit*` hit) |
+| 정령 탭(수호자 무대 5칸, 정보 카드, 스크롤 목록, 상세, 레벨업·장착) | `src/render/ui/spiritTab.js`(입력은 `main.js` `spirit*` hit) |
 | 효과 문구(역할별 틀 `spirit.effect.{role}` + 숫자) | `core/spirits effectInfo` + `shopText.js spiritEffectText` |
 | 보스 보상·소급 지급 알림 | `rewardPopup.js`(`spirits`, `spiritStones`), `main.js withSpirits` |
-| 목록·도감 | `core/spirits dexEntries` + `spiritTab.js`(`spiritList` / `cycleFilter` / `resetFilter`) + `src/render/ui/spiritDex.js`(`drawDexCell` / `drawDexInfo`), 길게 누르기 = `main.js spiritPress` |
+| 목록·도감 | `core/spirits dexEntries` + `spiritTab.js`(`spiritList` / `cycleFilter` / `resetFilter`) + `src/render/ui/spiritDex.js`(`drawDexInfo`), 길게 누르기 = `main.js spiritPress`, 목록 끌기 = `main.js spiritDrag` + `spiritTab.js dragList` |
 | 화면 확인 스크립트 | `node art/spirits/shoot_ui.mjs` |
 
 화면을 붙이면서 정한 것:
@@ -212,3 +212,11 @@ F 판정 뒤 확인(2026-11-23, `node art/spirits/shoot_ui2.mjs`): 짧은 화면
 9. **물감 정령**: `Board.randomType` 한 곳(보충·나무상자 자리 채움). 층 시작 보드 생성·섞기에는 안 걸린다. 발동 번쩍 없음(항상 켜짐). 희귀 최대 배율(2.32)에서도 +7%p라 상한 +8%p에는 닿지 않는다.
 10. **망치 정령**: 쿨다운 중인 아이템만 줄인다. 분노의 북은 버프가 끝난 뒤부터 쿨다운이라 버프 중에는 그대로.
 11. 같은 key의 전설·보조가 여럿이면 값이 가장 높은 것만(지금은 종류마다 정령이 하나라 실제로 겹칠 일은 없다).
+
+정령 탭 무대·스크롤 목록(2026-11-27, 위 5번·8번의 "수호자 줄", "스크롤 없이 6줄", "10x10 실루엣"을 대신한다):
+
+- 그림: `assets/ui/upgrade/stage/spirit_stage_*`(x3), `assets/ui/spirit_cell/*`(43x46 x2), 규격은 `assets/ui/manifest.json`의 `spiritCell`.
+- 무대 칸 순서: 바탕 → 빛(공명이면 `_res`) → 받침 (8, 31) → 수호자 (8, 6) → 정령 (1, 4 + 둥실) → 테두리(고른 칸 #c28a20). 빈 칸은 정령 자리에 점 9개 원이 돈다.
+- 목록 칸 순서: 속성 배경 → 빛(영웅·전설) → 초상(그려진 픽셀 경계 상자 기준 가운데, x2) → 등급 테두리 → Lv(왼쪽 아래)·별(오른쪽 아래)·장착 띠(왼쪽 위). 안 가진 정령 = #0d0a10 바탕 + #221c2b 테두리·초상 실루엣.
+- 스크롤: 끌기(8px 이상이면 칸 터치 취소) + 휠, 관성 없음. 필터를 바꾸면 맨 위로, 상세·설명을 닫으면 위치 유지. 목록 칸은 손을 뗄 때 열린다.
+- 본문 폭이 444라 무대 줄·목록(둘 다 450)이 양옆으로 3씩 넘치고, 스크롤 막대(4px)는 격자 오른쪽 탭 본문 테두리 위에 놓인다.

@@ -444,6 +444,7 @@ export async function loadAssets(onProgress) {
     // battleRenderer가 frameW/frameH/drawScale/muzzle을 읽는 곳 - 그림을 석상으로 바꿨으니
     // 이 수치도 statueManifest 기준(투사체 발사 위치 등)으로 맞춘다.
     towerManifest: statueManifest,
+    rankingHall: rankingUiManifest.hall ?? null, // 명예의 전당 좌표(assets/ui/ranking/manifest.json hall)
     uiImages,
     uiManifest,
     uiFont,

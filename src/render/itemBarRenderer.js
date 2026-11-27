@@ -156,9 +156,9 @@ export class ItemBarRenderer {
   // 패배 팝업이 같이 쓴다. count = 오른쪽 아래 보유 수(null이면 생략), center = 가운데 숫자(쿨다운/
   // 남은 스왑), dim = 아이콘을 #0d0a10 체커 디더로 어둡게(반투명 알파 금지). 보관함용: silhouette = 아이콘을
   // #3b3347 단색 실루엣(#0d0a10 외곽선 유지), countBg = 개수 뒤 #0d0a10 바탕(1 원본px 여백), countVariant = 숫자 색, countK = 숫자 배율(기본 칸과 같음).
-  drawSlot(ctx, assets, icons, id, x, y, k, { selected = false, count = null, center = null, centerVariant = 'white', dim = false, silhouette = false, countBg = false, countVariant = 'white', countK = k } = {}) {
+  drawSlot(ctx, assets, icons, id, x, y, k, { selected = false, count = null, center = null, centerVariant = 'white', dim = false, silhouette = false, countBg = false, countVariant = 'white', countK = k, skin = null } = {}) {
     const size = 22 * k;
-    const slotPath = selected ? 'items/slot_selected.png' : 'items/slot_normal.png';
+    const slotPath = skin ?? (selected ? 'items/slot_selected.png' : 'items/slot_normal.png'); // skin = 틀 그림 직접 지정(예약됨 초록 틀)
     const slotState = getUi(assets, slotPath);
     ctx.save();
     ctx.imageSmoothingEnabled = false;

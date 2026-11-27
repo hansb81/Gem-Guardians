@@ -45,7 +45,7 @@ export function productText(p, env) {
       return {
         name: t('shop.free.name'), sub: t('shop.free.sub'), tag: ['shop.tag.free', 'gold'],
         desc: [p.adFree ? t('shop.free.descAdFree') : t('shop.free.desc', { item: itemName(p.item), n: p.count })],
-        label: t(p.adFree ? 'shop.free.btnAdFree' : platform.caps.ads ? 'shop.free.btn' : 'shop.free.btnNoAds'), // 광고 없는 빌드(웹 등)는 광고 없이 바로 지급. soldText: t('shop.sold.tomorrow'),
+        label: t(p.adFree ? 'shop.free.btnAdFree' : platform.caps.rewarded ? 'shop.free.btn' : 'shop.free.btnNoAds'), // 광고 없는 빌드(웹 등)는 광고 없이 바로 지급. soldText: t('shop.sold.tomorrow'),
         long: t('shop.free.long'), info: [[t('shop.info.today'), t('shop.grant.item', { name: itemName(p.item), n: p.count })]],
         note: p.adFree ? null : [t('shop.free.adNote')],
       };
@@ -104,7 +104,7 @@ export function productText(p, env) {
         const mine = minePct ? t('shop.pass.mine', { pct: minePct }) : '';
         return {
           name, desc: [t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus, t('shop.pass.total', { n: fmt(pass.now + pass.daily * pass.days) }) + (minePct ? t('shop.pass.mineCard', { pct: minePct }) : '')], // 카드는 세 줄뿐이라 짧은 문구
-          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus + mine,
+          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus + mine + ' ' + t('shop.pass.missed', { n: cfg.packs.passGraceDays }),
           info: [[t('shop.info.instant'), t('shop.grant.dia', { n: pass.now })], [t('shop.info.daily'), t('shop.grant.dia', { n: pass.daily }) + plus], [t('shop.info.period'), t('shop.info.days', { n: pass.days })], ...(minePct ? [[t('shop.pass.mineInfo'), t('shop.pass.mineVal', { pct: minePct })]] : [])],
         };
       }
@@ -116,10 +116,11 @@ export function productText(p, env) {
     }
     case 'passClaim': {
       const pass = cfg.packs[p.pack].pass;
-      const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n })).join('');
+      const k = Math.max(1, p.pending ?? 1); // 밀린 날 합산 - 지금 누르면 받는 일수(오늘 받았으면 내일 몫 1일치를 보여 준다)
+      const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n: n * k })).join('');
       return {
-        name: t(`shop.pack.${p.pack}.name`), sub: t('shop.pass.left', { n: p.daysLeft }), desc: [t('shop.pass.today', { n: pass.daily }) + plus],
-        label: t('shop.pass.claim', { n: pass.daily }), soldText: t('shop.sold.tomorrow'), tag: p.state === 'sold' ? null : ['shop.tag.claim', ''],
+        name: t(`shop.pack.${p.pack}.name`), sub: t('shop.pass.left', { n: p.daysLeft }), desc: [t('shop.pass.today', { n: pass.daily * k }) + plus],
+        label: t('shop.pass.claim', { n: pass.daily * k }), soldText: t('shop.sold.tomorrow'), tag: p.state === 'sold' ? null : ['shop.tag.claim', ''],
       };
     }
     case 'diaBundle': {

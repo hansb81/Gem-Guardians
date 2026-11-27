@@ -21,8 +21,8 @@ export async function loadBalanceData() {
       fetchJson('config/products.json').catch(() => null),
       // 랭킹(config/ranking.json)도 없으면 원석 랭킹만 안 열린다.
       fetchJson('config/ranking.json').catch(() => null),
-      // 광산(config/mine.json)도 없으면 광산만 안 열린다.
-      fetchJson('config/mine.json').catch(() => null),
+      // 광산(config/mine.json)도 없으면 광산만 안 열린다. enabled:false = 닫아 둠(메뉴·화면·상점 문구 전부 숨김, 저장은 그대로 남는다).
+      fetchJson('config/mine.json').then((m) => (m.enabled === false ? null : m)).catch(() => null),
       // 정령(config/spirits.json)도 없으면 정령만 없다.
       fetchJson('config/spirits.json').catch(() => null),
     ]);

@@ -111,6 +111,42 @@ export function drawSpiritPortrait(ctx, assets, id, element, x, y, size, nowMs =
   drawSpirit(ctx, assets, id, element, Math.round(x + (size - SPIRIT_SIZE * k) / 2), Math.round(y + (size - SPIRIT_SIZE * k) / 2), k, nowMs, tint);
 }
 
+// 칸(x0, y0, w, h) 안에서 실제로 그려진(alpha > 0) 픽셀의 경계 상자(칸 기준). data = RGBA. 빈 칸이면 칸 전체.
+export function alphaBBox(data, sheetW, x0, y0, w, h) {
+  let l = w, t = h, r = -1, b = -1;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (!data[((y0 + y) * sheetW + x0 + x) * 4 + 3]) continue;
+      if (x < l) l = x;
+      if (x > r) r = x;
+      if (y < t) t = y;
+      if (y > b) b = y;
+    }
+  }
+  return r < 0 ? { x: 0, y: 0, w, h } : { x: l, y: t, w: r - l + 1, h: b - t + 1 };
+}
+
+// 초상의 경계 상자 - 시트를 한 번만 읽어 정령별로 캐시. 초상 시트가 없으면(임시 그림) 칸 전체.
+const FULL_PORTRAIT = { x: 0, y: 0, w: PORTRAIT_SIZE, h: PORTRAIT_SIZE };
+let portraitBoxes = null;
+export function portraitBBox(assets, id) {
+  const m = assets?.spiritManifest;
+  if (m?.portraits?.[id] == null || !uiReady(assets.spiritPortraitSheet)) return FULL_PORTRAIT;
+  if (!portraitBoxes) {
+    const img = assets.spiritPortraitSheet.img;
+    const c = Object.assign(document.createElement('canvas'), { width: img.width, height: img.height });
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0);
+    const data = g.getImageData(0, 0, img.width, img.height).data;
+    const pw = m.portraitW ?? PORTRAIT_SIZE;
+    const ph = m.portraitH ?? PORTRAIT_SIZE;
+    const cols = m.portraitCols ?? 6;
+    portraitBoxes = {};
+    for (const [key, cell] of Object.entries(m.portraits)) portraitBoxes[key] = alphaBBox(data, img.width, (cell % cols) * pw, Math.floor(cell / cols) * ph, pw, ph);
+  }
+  return portraitBoxes[id];
+}
+
 // 정령석 아이콘(16x16 x k, 가운데 기준). 재화 아이콘 폴더 그림이 없으면 코드로 그린 마름모.
 export function drawSpiritStone(ctx, assets, cx, cy, k = 2) {
   const st = assets?.uiImages?.get('icons/spirit_stone.png');

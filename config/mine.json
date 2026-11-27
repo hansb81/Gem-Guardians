@@ -1,5 +1,6 @@
 {
   "_doc": "저주받은 수정 광산(docs/mine.md 10장). 아이템 키는 config/items.json과 같다.",
+  "enabled": false,
   "unlockFloor": 10,
   "veins": [
     { "id": "emerald",  "unlockBossFloor": 10 },

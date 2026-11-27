@@ -23,6 +23,7 @@
 | 4번째 슬롯 팩 | 구매 즉시 적용돼요. 슬롯을 전투에서 쓰거나 무지개를 쓰면 청약철회할 수 없어요. | Applied instantly. Cannot be cancelled once the slot is used in battle or a rainbow is used. |
 | 광고 제거 | 구매 즉시 적용돼요. 광고 없이 보상을 한 번 받거나 다이아를 쓰면 청약철회할 수 없어요. | Applied instantly. Cannot be cancelled once you claim an ad-free reward or use the diamonds. |
 | 주간/월간 패스 | 보상을 받기 시작하면 청약철회는 안 되고, 남은 일수만큼 해지 환불(위약금 10%)을 신청할 수 있어요. | Once you start claiming rewards, you can't cancel, but you may terminate for a pro-rated refund of the remaining days (10% fee). |
+| 주간/월간 패스 설명(shop.pass.missed) | 접속하지 못한 날의 보상은 다음에 받을 때 합산됩니다(종료 후 3일까지). | Missed days add up on your next claim (up to 3 days after it ends). |
 
 ## ③ "환불 안내" 팝업 (링크를 누르면 나오는 짧은 버전, 끝에 전문 링크)
 

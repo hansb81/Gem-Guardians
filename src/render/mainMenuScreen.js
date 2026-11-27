@@ -69,6 +69,8 @@ const DEFAULT_CHEST = {
 // 랭킹 이름판 - 원석 영역 아래쪽(목업 mockups/ranking 시안 1). 받침대 영역과 겹치지 않는다. 폭 = 원석 누르는 영역과 같다.
 const RANKING_PLATE = [204, 466, 132, 36];
 const PLATE_ICON_GAP = 6;
+const PLATE_GROW_X = 6; // 이름판을 좌우·상하로 이만큼씩 키운다.
+const PLATE_GROW_Y = 3;
 const TAP_LIFT = [-2, -1, 0]; // 누름 연출 프레임마다 왕관 y(네이티브 px, manifest.symbols.rankCrown.tap)
 
 // 재화 바 내부(바 왼쪽 위 기준). 아이콘은 16x16(화면 32), 숫자 칸은 inset 9-slice.
@@ -348,6 +350,14 @@ export class MainMenuScreen {
   }
 
   // 시트의 frame번째 칸을 네이티브 (x, y)에.
+  // 랭킹 내 기록 카드가 쓰는 왕관 시트(0프레임) - { img, w, h } | null.
+  crownSheet(metal) {
+    const sheets = this.manifest?.symbols?.rankCrown?.sheets;
+    const meta = sheets?.[metal] ?? sheets?.iron;
+    const st = meta && this._sym.get(meta.file);
+    return ready(st) ? { img: st.img, w: meta.w, h: meta.h } : null;
+  }
+
   _symFrame(ctx, place, meta, frame, x, y) {
     const st = this._sym.get(meta.file);
     if (!ready(st)) return;
@@ -532,7 +542,9 @@ export class MainMenuScreen {
 
   // 이름판(정비·보관함·랭킹 공통): plate 9-slice + 글자 18 + 오른쪽 위 빨간 점. 누르는 동안 이름판만 1px 아래로.
   // icon(로드 상태) = 글자 앞 아이콘(화면 2배) - 아이콘 + 간격 + 글자를 묶어 가운데.
-  _drawPlate(ctx, [x, y0, w, h], id, key, badge, icon = null) {
+  _drawPlate(ctx, [px, py, pw, ph], id, key, badge, icon = null) {
+    // 글자(18)가 틀에 닿아서 가운데 기준으로 조금 키운다(세 이름판 공통).
+    const [x, y0, w, h] = [px - PLATE_GROW_X, py - PLATE_GROW_Y, pw + PLATE_GROW_X * 2, ph + PLATE_GROW_Y * 2];
     const y = y0 + (this._pressed === id ? 1 : 0);
     if (!this._nine(ctx, 'menu/plate.png', [x, y, w, h])) this._panel(ctx, [x, y, w, h], COLORS.bg2, COLORS.bg3);
     if (ready(icon)) {
@@ -541,8 +553,8 @@ export class MainMenuScreen {
       const left = Math.round(x + (w - iw - PLATE_ICON_GAP - this._measure(ctx, t(key), 18)) / 2);
       const { offsetX, offsetY, k } = this._transform;
       drawImageSnapped(ctx, icon.img, offsetX + left * k, offsetY + Math.round(y + (h - ih) / 2) * k, iw * k, ih * k);
-      this._text(ctx, t(key), left + iw + PLATE_ICON_GAP, y + h / 2, { size: 18 });
-    } else this._text(ctx, t(key), x + w / 2, y + h / 2, { size: 18, align: 'center' });
+      this._text(ctx, t(key), left + iw + PLATE_ICON_GAP, y + h / 2 + 1, { size: 18 });
+    } else this._text(ctx, t(key), x + w / 2, y + h / 2 + 1, { size: 18, align: 'center' }); // +1 = 글자만 1px 아래
     if (badge) this._sprite(ctx, 'menu/badge.png', x + w - 10, y0 - 6);
   }
 

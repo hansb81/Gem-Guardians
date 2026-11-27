@@ -4,10 +4,10 @@
 import { createRankingService } from '../ranking/rankingService.js';
 import { ServerRankingService } from '../ranking/serverRankingService.js';
 import { isSettling, splitRemain, isNewSeason } from '../ranking/season.js';
-import { crownBand } from '../ranking/tiers.js';
+import { crownBand, cardMetal, tierOf, pctOf } from '../ranking/tiers.js';
 import { storage } from '../platform/storage.js';
 import { isValidNickname } from '../ranking/rankingSave.js';
-import { hitRankingPopup, scrollToMeValue } from '../render/ui/rankingPopup.js';
+import { hitRankingPopup, scrollToMeValue, STATUE_PICKS } from '../render/ui/rankingPopup.js';
 import { audio } from '../audio/AudioManager.js';
 import { t } from '../config/i18n.js';
 import { platform } from '../platform/index.js';
@@ -38,6 +38,8 @@ export class RankingUi {
     this._crownSave = null; // 기기에 남긴 { seasonId, band } - 서버에서 못 받은 동안 쓰는 값
     this._crownAsked = null; // 내 기록을 물어본 시즌
     this._crownSeen = null; // 마지막으로 반영한 service.compMine
+    this.crownSheet = null; // main.js: (metal) => 메뉴 왕관 시트 { img, w, h } - 내 기록 카드
+    this.devPlayers = null; // 개발용 ?rankPlayers=N - 가짜 순위표 인원(두 탭 모두)
   }
 
   // server = 서버 랭킹(일반 모드) 사용 - config/server.json enabled이고 마켓 리더보드(토스)가 없을 때(main.js).
@@ -89,7 +91,7 @@ export class RankingUi {
       this.service.me('comp', { seasonId }),
     ]);
     if (seq !== this._loadSeq || this.state !== st) return;
-    st.data = { normal: { ...nt, me: nm }, comp: { ...ct, me: cm } };
+    st.data = this.devPlayers != null ? { normal: this._fakeBoard('normal'), comp: this._fakeBoard('comp') } : { normal: { ...nt, me: nm }, comp: { ...ct, me: cm } };
     st.loaded = true;
     // 서버가 기기 닉네임을 거절해 비웠으면 바로 다시 고르게(이유 한 줄과 함께).
     if (this.service.nickResetReason && st.sub == null) this._openNick(true);
@@ -161,6 +163,10 @@ export class RankingUi {
     // 서버 랭킹 오프라인 - 마지막으로 받은 순위표 + 몇 분 전인지.
     st.offlineText = d.offlineAt ? t('ranking.offlineAgo', { n: Math.max(0, Math.floor((Date.now() - d.offlineAt) / 60e3)) }) : null;
     st.me = d.me ?? null;
+    // 전당 아래 = 참가자가 cardBelow 미만이면 내 기록 카드(탭마다 따로 센다). 카드 금속·왕관.
+    st.cardBelow = this.config.cardModeBelow ?? 10;
+    st.myMetal = cardMetal(st.tab, st.compState === 'none' ? null : st.me, this.config.crown?.bands ?? []);
+    st.crown = this.crownSheet?.(st.myMetal) ?? null;
     st.history = r.comp.history;
     st.tiers = this.config.tiers;
     st.floorGold = this.service.floorGold();
@@ -193,7 +199,7 @@ export class RankingUi {
   }
 
   // ---------- 입력 ----------
-  // 메뉴 scene pointerdown. 돌려주는 값: 'openMode'(경쟁 모드 하러 가기) | null.
+  // 메뉴 scene pointerdown. 돌려주는 값: 'openMode'(경쟁 모드 하러 가기) | 'startNormal'(일반 모드 바로 시작) | null.
   pointerDown(x, y) {
     const st = this.state;
     const L = this.layout;
@@ -231,6 +237,10 @@ export class RankingUi {
         // 리더보드가 열리면 게임은 백그라운드로 간다 - 소리 정지·저장은 lifecycle.onPause가 맡는다.
         platform.leaderboard.open().catch(() => {});
         return null;
+      case 'challenge': // 내 기록 카드 "도전하러 가기" - 일반 = 바로 시작, 경쟁 = 모드 팝업(남은 입장을 보고 고르게)
+        audio.play('ui_click');
+        this.close();
+        return st.tab === 'comp' ? 'openMode' : 'startNormal';
       case 'goComp':
         audio.play('ui_click');
         this.close();
@@ -351,6 +361,24 @@ export class RankingUi {
     this._input?.remove();
     this._input = null;
     if (this.state?.nick) this.state.nick.domInput = false;
+  }
+
+  // 개발용 가짜 순위표(?rankPlayers=N): N명, 나는 3위(3명 미만이면 꼴찌)·10명 이상이면 뒤쪽. 값은 전부 임시.
+  _fakeBoard(tab) {
+    const n = Math.max(0, this.devPlayers);
+    const names = ['크히하', '봉식이', '졸린원석', '황금별', '번개여우', 'FrostBear4', 'PixelKnight', '달빛토끼', '무쇠망치', '별사탕'];
+    const p = this.player.ranking.profile;
+    const meAt = n >= 10 ? Math.floor(n * 0.7) : Math.min(2, n - 1);
+    const all = Array.from({ length: n }, (_, i) => {
+      const me = i === meAt;
+      const floor = Math.max(1, Math.round(105 * (1 - i / n) ** 2));
+      return {
+        playerId: `dev${i}`, nickname: me ? p.nickname || '봉식이아빠' : names[i % names.length] + (i >= names.length ? i : ''), statue: me ? p.statue || this.defaultStatue() : STATUE_PICKS[i % STATUE_PICKS.length],
+        value: tab === 'comp' ? floor * 310 : floor, sub: tab === 'comp' ? floor : null, at: Date.UTC(2026, 10, 26 - (i % 20)), rank: i + 1, frame: null, tierId: tierOf(this.config.tiers, i + 1, n)?.id ?? null, me,
+      };
+    });
+    const mine = all[meAt];
+    return { entries: all.slice(0, this.config.topLimit ?? 100), total: n, me: mine ? { ...mine, total: n, pct: pctOf(mine.rank, n), next: null } : null };
   }
 
   // ---------- 개발 패널 ----------

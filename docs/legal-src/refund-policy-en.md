@@ -21,7 +21,7 @@ Effective date: [YYYY-MM-DD]
 
 First-purchase bonus: reclaimed together with the base diamonds on refund, and not granted again on repurchase.
 
-Pass termination after claiming: refund = price × daily share × (remaining days ÷ total days) − 10% of price (rounded down to 10 KRW, minimum 0). Daily share: Weekly 89%, Monthly 91%. Example: Weekly Pass, 3 days claimed → 5,900 × 0.89 × 4/7 − 590 = 2,410 KRW. No fee for days missed because of our error. Passes bought on the App Store cannot be partially refunded by us; request a refund from Apple, which decides whether and how much to refund.
+Pass termination after claiming: refund = price × daily share × (remaining days ÷ total days) − 10% of price (rounded down to 10 KRW, minimum 0). Daily share: Weekly 89%, Monthly 91%. Example: Weekly Pass, 3 days claimed → 5,900 × 0.89 × 4/7 − 590 = 2,410 KRW. Missed days add up on your next claim (up to 3 days after it ends); unclaimed rewards expire after that. No fee for days missed because of our error. Passes bought on the App Store cannot be partially refunded by us; request a refund from Apple, which decides whether and how much to refund.
 
 **5. How to request.**
 - Google Play: within 48 hours, request in Google Play (Payments & subscriptions > Budget & history); after that, email us.

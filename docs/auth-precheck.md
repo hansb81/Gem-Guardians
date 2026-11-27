@@ -70,7 +70,7 @@
 | `log` | `{t, src, d, tx?}`[] | `LOG_MAX` = **50**(normalizeInv·_commit 둘 다 자름) |
 | `seenItems` | 문자열[] | 아이템 종류 수 |
 
-**shop** (src/core/shop/shop.js `defaultShopSave`, `skillLv`는 저장에서 빠짐): `purchasedOnce[]`(1회 상품 id), `firstBuyUsed[]`(다이아 묶음 index ≤ 6), `passes{weekly,monthly:{endDay, claimedDay}}`(구매 날짜 기준, 2026-11-26), `freeClaimedDate`, `day`, `offers{starter: ms, boss:{floor, expiresAt}}`. 계속 늘어나는 필드는 없다. `purchasedOnce`는 `pack.boss.{층}`까지 쳐도 몇십 개다.
+**shop** (src/core/shop/shop.js `defaultShopSave`, `skillLv`는 저장에서 빠짐): `purchasedOnce[]`(1회 상품 id), `firstBuyUsed[]`(다이아 묶음 index ≤ 6), `passes{weekly,monthly:{endDay, claimedDay}}`(종료일은 구매 날짜 기준, 못 받은 날은 다음에 받을 때 합산·종료 후 3일까지, 2026-11-27), `passHistory[]`(다시 살 때 밀려난 이전 패스 `{pack, boughtDay, endDay, claimedDay}`, 최근 5건까지만), `freeClaimedDate`, `day`, `offers{starter: ms, boss:{floor, expiresAt}}`. 계속 늘어나는 필드는 없다. `purchasedOnce`는 `pack.boss.{층}`까지 쳐도 몇십 개다.
 
 **ranking** (src/ranking/rankingSave.js): `profile{playerId, nickname, statue}`, `normal{bestFloor, reachedAt}`, `comp{seasonId, best{points, floor, at}, runs, pending|null, history[]}`, `lastTab`. `history`는 normalizeRanking에서 `slice(0, 8)`로 **최대 8**이다(config/ranking.json historyMax 8과 같음).
 
@@ -89,7 +89,7 @@
 | `tutorial_complete` | src/tutorial/tutorial.js | 평생 1번 | ✗ |
 | `boss:10` … `boss:90` | battleController._grantFirstClearItems | 보스층 첫 클리어마다(최대 9~10) | ✗ |
 | `free:2026-11-13` | shop.js buyProduct `free` | 하루 1번 | ✓(기기 날짜 `localDay`) |
-| `pass:monthly:2026-11-13`, `pass:weekly:…` | shop.js `passClaim` | 패스 기간 중 하루 1번(팩마다) | ✓ |
+| `pass:monthly:2026-11-13`, `pass:weekly:…` | shop.js `passClaim` | 패스 기간 + 종료 후 3일 중 하루 1번(팩마다, 밀린 날은 한 번에 합산 - txId 날짜는 받은 날) | ✓ |
 | `iap:dia.3:GPA.3312-…` | iap-verify / s2·s3 마이그레이션 `'iap:'‖key‖':'‖order`, shopScreen.grantPaid | 결제마다 | ✗ |
 | `refund:iap:pack.adfree:{주문}` | shop.js revokePaidProduct | 환불마다(드묾) | ✗ |
 | `att:2026-11-13` | 마이그레이션 s1 `att_claim` `'att:'‖to_char(KST날짜)` | 하루 1번 | ✓(KST) |

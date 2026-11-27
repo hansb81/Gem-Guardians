@@ -39,6 +39,8 @@
 | ui_door_open | 타이틀 터치 -> 문 열림 전환 시작 순간(0ms). 0~280ms 짧게 차오르는 소리 -> 280ms 묵직하고 둔탁한 충돌음(문 봉인이 풀림) -> 문이 열리는 동안 낮은 울림, 1000ms 작은 쿵. 문 열림 약 1.1초 기준 |
 | ui_purchase | 상점 구매 성공 (재화가 빠지고 아이템을 받는 순간). 동전 쏟아짐 -> 금빛 차임 |
 | ui_purchase_fail | 재화 부족 등으로 구매 실패 |
+| guardian_upgrade | 수호자 강화 성공 1회. 같은 수호자를 1.2초 안에 또 강화하면 다음 단계(1~8, 8에서 멈춤). MAX는 8 한 번, 일괄 강화는 오른 줄마다 1, 2, 3 … (src/audio/upgradeSfx.js) |
+| guardian_tier_up | 강화로 수호자 모습 등급이 바뀜(towerLookTiers). guardian_upgrade 대신 한 번 |
 
 ## 타이밍 (이펙트 manifest와 맞춤)
 - line: `line_fire`는 발동 순간, 각 칸 pop 소리는 그 칸 pop 이펙트와 같은 지연(stepMs × 거리)에 `gem_pop_n`.
