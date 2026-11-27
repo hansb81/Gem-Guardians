@@ -45,14 +45,14 @@
   "diaItems": ["gold_coin", "revive", { "id": "stones", "spiritStones": 5, "dia": 40 }],
   "slot4Dia": 300,
   "packs": {
-    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems). 종료일은 구매일 기준 고정, 못 받은 날은 다음에 받을 때 합산, 끝난 뒤 passGraceDays일까지 남은 몫을 받을 수 있고 그 뒤엔 사라진다 | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
+    "_doc": "노출: starter = 최고 층 >= minBestFloor(5층 클리어 후) 처음 본 때부터 offerHours, 1회 | boss = 보스층 패배 직후 offerHours, 보스(층)당 1회 | slot4 = 최고 층 <= maxBestFloor이고 4번째 슬롯이 아직 잠김, 1회 | pass = 반복 구매, 즉시 products.json grant + 다음 날부터 days일 동안 하루 한 번 daily(+dailyItems, +dailyGoldFloors = 골드 교환과 같은 '일반 층 1개 보상' 배수, 받을 때 최고 층 기준). 종료일은 구매일 기준 고정, 못 받은 날은 다음에 받을 때 합산, 끝난 뒤 passGraceDays일까지 남은 몫을 받을 수 있고 그 뒤엔 사라진다 | chapter = 챕터(보스 사이 10층)당 1회 | adfree = 1회. banner = 패키지 탭 맨 위 큰 카드(starter 우선, 없으면 boss).",
     "order": ["starter", "boss", "slot4", "weekly", "monthly", "chapter", "adfree"],
     "passGraceDays": 3,
     "starter": { "once": true, "minBestFloor": 6, "offerHours": 72, "banner": "banner_starter", "icon": "pack_starter", "value": 5 },
     "boss": { "offerHours": 24, "banner": "banner_boss", "icon": "pack_boss", "value": 3 },
     "slot4": { "once": true, "maxBestFloor": 20, "icon": "pack_slot4" },
     "weekly": { "icon": "pack_weekly", "pass": { "daily": 120, "days": 7 } },
-    "monthly": { "icon": "pack_monthly", "pass": { "daily": 100, "days": 30, "dailyItems": { "dye": 1 } } },
+    "monthly": { "icon": "pack_monthly", "pass": { "daily": 60, "days": 30, "dailyGoldFloors": 1 } },
     "chapter": { "perChapter": true, "icon": "pack_chapter" },
     "adfree": { "once": true, "icon": "pack_adfree" }
   }

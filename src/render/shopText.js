@@ -25,11 +25,17 @@ function grantParts(grant) {
   return parts;
 }
 
+// 패스 매일 받는 다이아 외의 것(아이템 + 골드) " + 이름 n" 이어 붙이기, k일치.
+function passPlus(pass, dailyGold, k) {
+  const items = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n: n * k })).join('');
+  return items + (dailyGold ? t('shop.pass.plusGold', { n: fmt(dailyGold * k) }) : '');
+}
+
 // 받은 것(buyProduct 결과 got) -> 한 줄.
 export function gotText(got) {
   const parts = [];
   if (got.diamonds) parts.push(t('shop.grant.dia', { n: fmt(got.diamonds) }));
-  if (got.gold) parts.push(`+${fmt(got.gold)}`);
+  if (got.gold) parts.push(t('shop.grant.gold', { n: fmt(got.gold) }));
   for (const [id, n] of Object.entries(got.items ?? {})) parts.push(t('shop.grant.item', { name: itemName(id), n }));
   if (got.spiritStones) parts.push(t('spirit.got.stones', { n: got.spiritStones }));
   if (got.slot4) parts.push(t('shop.grant.slot4'));
@@ -99,12 +105,12 @@ export function productText(p, env) {
       const info = [[t('shop.info.expose'), t(`shop.pack.${p.pack}.expose`, { ch: p.chapter })]];
       if (pk.pass) {
         const pass = { ...pk.pass, now: cfg.products[p.id].grant.diamonds };
-        const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n })).join('');
-        const minePct = Math.round((env.data?.mine?.passBonus?.[p.pack] ?? 0) * 100); // 월간 패스 = 광산 생산 +25%(config/mine.json)
+        const plus = passPlus(pass, p.dailyGold, 1);
+        const minePct = Math.round((env.data?.mine?.passBonus?.[p.pack] ?? 0) * 100); // 광산 생산 보너스(config/mine.json passBonus, 0이면 안 보임)
         const mine = minePct ? t('shop.pass.mine', { pct: minePct }) : '';
         return {
           name, desc: [t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus, t('shop.pass.total', { n: fmt(pass.now + pass.daily * pass.days) }) + (minePct ? t('shop.pass.mineCard', { pct: minePct }) : '')], // 카드는 세 줄뿐이라 짧은 문구
-          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus + mine + ' ' + t('shop.pass.missed', { n: cfg.packs.passGraceDays }),
+          tag: ['shop.tag.repeat', 'blue'], long: t('shop.pass.desc', { now: pass.now, days: pass.days, daily: pass.daily }) + plus + mine + (p.dailyGold ? '. ' + t('shop.pass.goldNote', { n: pass.dailyGoldFloors }) : '') + ' ' + t('shop.pass.missed', { n: cfg.packs.passGraceDays }),
           info: [[t('shop.info.instant'), t('shop.grant.dia', { n: pass.now })], [t('shop.info.daily'), t('shop.grant.dia', { n: pass.daily }) + plus], [t('shop.info.period'), t('shop.info.days', { n: pass.days })], ...(minePct ? [[t('shop.pass.mineInfo'), t('shop.pass.mineVal', { pct: minePct })]] : [])],
         };
       }
@@ -117,7 +123,7 @@ export function productText(p, env) {
     case 'passClaim': {
       const pass = cfg.packs[p.pack].pass;
       const k = Math.max(1, p.pending ?? 1); // 밀린 날 합산 - 지금 누르면 받는 일수(오늘 받았으면 내일 몫 1일치를 보여 준다)
-      const plus = Object.entries(pass.dailyItems ?? {}).map(([id, n]) => t('shop.pass.plusItem', { name: itemName(id), n: n * k })).join('');
+      const plus = passPlus(pass, p.dailyGold, k);
       return {
         name: t(`shop.pack.${p.pack}.name`), sub: t('shop.pass.left', { n: p.daysLeft }), desc: [t('shop.pass.today', { n: pass.daily * k }) + plus],
         label: t('shop.pass.claim', { n: pass.daily * k }), soldText: t('shop.sold.tomorrow'), tag: p.state === 'sold' ? null : ['shop.tag.claim', ''],
@@ -139,7 +145,8 @@ export function productText(p, env) {
     case 'goldEx':
       return {
         name: t(`shop.goldex.${p.exId}`), sub: `+${fmt(p.gold)}`, wide: true, desc: [t('shop.goldex.desc', { n: p.floors }), t('shop.goldex.desc2')],
-        long: t('shop.goldex.long', { dia: p.price, gold: fmt(p.gold), n: p.floors }), info: [[t('shop.info.got'), fmt(p.gold)]],
+        long: t('shop.goldex.long', { dia: p.price, gold: fmt(p.gold), n: p.floors }),
+        info: [[t('shop.info.got'), fmt(p.gold)], [t('shop.goldex.basis'), t('shop.goldex.basisVal', { n: p.floors })]],
       };
     default:
       return { name: p.id, desc: [] };

@@ -34,9 +34,9 @@
 > • 패스는 받기 시작한 뒤에도 남은 일수만큼 해지 환불할 수 있어요.
 > • 신청 방법
 >   – Google Play: 48시간 안에는 Google Play에서, 그 뒤에는 아래 이메일로
->   – 원스토어: 원스토어 구매내역 또는 아래 이메일로
->   – App Store: Apple(reportaproblem.apple.com)에 직접
->   – 토스: 아래 이메일로
+<!-- 마켓 보류: >   – 원스토어: 원스토어 구매내역 또는 아래 이메일로 -->
+<!-- 마켓 보류: >   – App Store: Apple(reportaproblem.apple.com)에 직접 -->
+<!-- 토스 보류: >   – 토스: 아래 이메일로 -->
 > • 보내 주실 것: 회원 번호(이 화면 아래), 마켓 주문 번호, 구매 날짜, 상품명
 > • 문의: [이메일]
 > 회원 번호: {playerId}　　[전문 보기]
@@ -48,9 +48,9 @@
 > • Passes can be terminated for a pro-rated refund of the remaining days.
 > • How to request
 >   – Google Play: via Google Play within 48 hours, by email after that
->   – ONE store: ONE store purchase history or by email
->   – App Store: directly with Apple (reportaproblem.apple.com)
->   – Toss: by email
+<!-- 마켓 보류: >   – ONE store: ONE store purchase history or by email -->
+<!-- 마켓 보류: >   – App Store: directly with Apple (reportaproblem.apple.com) -->
+<!-- 토스 보류: >   – Toss: by email -->
 > • Please include: player ID (below), store order number, purchase date, product
 > • Contact: [email]
 > Player ID: {playerId}　　[Full policy]
