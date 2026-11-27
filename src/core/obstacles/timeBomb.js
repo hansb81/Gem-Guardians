@@ -2,6 +2,7 @@
 // 처리되므로(hp 1 -> 지워지면 바로 해제), 여기서는 "플레이어 스왑 횟수로 줄어드는 타이머"
 // (onMove)와 "타이머가 0이 됐을 때"(onExpire)만 다룬다.
 export function onMove(instance) {
+  if (instance.timer <= 0) return { expired: false }; // 0에서 그 스왑이 끝나기를 기다리는 중 - 더 줄이지 않는다.
   instance.timer -= 1;
   return { expired: instance.timer <= 0 };
 }
