@@ -16,7 +16,9 @@
 | `feature_1024x500.png` | 1024×500, 알파 없음 | Google Play 피처 그래픽 |
 | `screenshots/play_1080x1920/*.png` | 1080×1920 | Google Play, 원스토어 (5장) |
 | `screenshots/ios69_1320x2868/*.png` | 1320×2868 | App Store 6.9인치 (5장) |
-| `native/*.png` | 64 / 256×125 | 원본 픽셀(수정용) |
+| `toss_thumbnail_1932x828.png` | 1932×828 | 앱인토스 썸네일 (native 322×138 ×6 - 피처 원본 둘레를 벽 무늬 반복으로 넓힘) |
+| `screenshots/toss_636x1048/*.png` | 636×1048 | 앱인토스 미리보기 (6장, `node tools/store_screenshots.mjs --toss`) |
+| `native/*.png` | 64 / 256×125 / 322×138 | 원본 픽셀(수정용) |
 
 ## 적용 (쑹의 Claude Code)
 

@@ -65,6 +65,16 @@ test('시작 판정: owner 다름 + 서버 save 없음 -> baseRev 0으로 올리
   assert.equal(s.store.get('cloudMeta').owner, 'me');
 });
 
+test('시작 판정: 새로 깐 기기(튜토리얼 전·1층, cloudMeta 없음) + 서버 save 있음 -> 묻지 않고 서버 save 적용(토스 재설치 복구)', async () => {
+  const s = setup();
+  s.player.snapshot = () => ({ saveVersion: 3, bestFloor: 1, tutorial: { done: false } });
+  assert.equal((await s.cs.syncOnStart({ rev: 9, updatedAt: 1, deviceId: 'x' })).action, 'applied');
+  assert.equal(s.puts().length, 0);
+  assert.equal(s.reloads.length, 1);
+  assert.deepEqual(s.store.get('gemGuardians.save.v2'), SERVER_DATA);
+  assert.equal(s.store.get('cloudMeta').owner, 'me');
+});
+
 test('시작 판정: owner 다름 + 서버 save 있음 -> conflict(이 계정 / 이 기기), put 0번', async () => {
   const s = setup({ meta: { owner: 'old-id', rev: 3, dirty: false } });
   const r = await s.cs.syncOnStart({ rev: 7, updatedAt: 1, deviceId: 'x' });

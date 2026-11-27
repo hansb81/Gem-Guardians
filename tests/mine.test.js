@@ -14,6 +14,7 @@ import { Inventory } from '../src/game/inventory.js';
 
 const load = (name) => JSON.parse(readFileSync(new URL(`../config/${name}`, import.meta.url), 'utf8'));
 const CFG = load('mine.json');
+const PASS25 = { ...CFG, passBonus: { monthly: 0.25 } }; // 패스 보너스 계산 경로 검사용(config 값은 0)
 const ITEMS = load('items.json');
 const HOUR = 3600e3;
 const KST = (iso) => Date.parse(`${iso}+09:00`);
@@ -56,7 +57,8 @@ test('보관 상한: 창고 Lv별 8~12시간, 큰 창고 +4시간, 월간 패스
   assert.equal(capHours(CFG, { ...mine, bigStorage: true }), 12, 'Lv1 + 큰 창고');
   assert.equal(capHours(CFG, { ...mine, storageLv: 5, bigStorage: true }), 16, 'Lv5 + 큰 창고');
   assert.equal(ratePerHour(CFG, mine), 10);
-  assert.equal(ratePerHour(CFG, mine, true), 12.5);
+  assert.equal(ratePerHour(CFG, mine, true), 10, '지금 config는 패스 보너스 0(2026-11-27 뺌)');
+  assert.equal(ratePerHour(PASS25, mine, true), 12.5);
   assert.equal(capacity(CFG, mine), 80);
   assert.equal(ratePerHour(CFG, { ...mine, veins: [5, 4, 4, 3, 0] }).toFixed(1), '56.4'); // 15.7 + 14.0 + 14.0 + 12.5, 잠긴 광맥은 0
 });
@@ -241,7 +243,9 @@ test('가속: 광고 하루 2회, 다이아 20/40/80 하루 3회, 상한과 무�
   assert.equal(boost(CFG, mine, 'dia', ctx()).reason, 'limit');
   assert.equal(mine.cart, 180);
   assert.equal(boost(CFG, mine, 'ad', ctx(T0, { pass: true })).reason, 'limit');
-  assert.equal(boost(CFG, { ...mine, daily: { ...mine.daily, ads: 0 } }, 'ad', ctx(T0, { pass: true })).amount, 25, '패스면 2시간 x 12.5');
+  const fresh = () => ({ ...mine, daily: { ...mine.daily, ads: 0 } });
+  assert.equal(boost(CFG, fresh(), 'ad', ctx(T0, { pass: true })).amount, 20, '지금 config는 패스 보너스 0(2026-11-27 뺌)');
+  assert.equal(boost(PASS25, fresh(), 'ad', ctx(T0, { pass: true })).amount, 25, '값을 넣으면 2시간 x 12.5');
 });
 
 test('가속 직전 정산: 지난 시간이 먼저 쌓인 뒤 더해진다', () => {
@@ -349,7 +353,7 @@ test('화면용 보조: 다음 최대 Lv 층, 가득까지 시간, 수레 3상�
   assert.deepEqual(dailyLeft(CFG, { ...mine, day: '2026-11-20', daily: { gold: 4, items: 1, ads: 2, diaBoost: 1, stones: 0 } }, ctx()), { gold: 0, items: 2, ads: 0, dia: 2, stones: 3 });
   assert.equal(dailyLeft(CFG, { ...mine, day: '2026-11-19', daily: { gold: 4, items: 3, ads: 2, diaBoost: 3 } }, ctx()).gold, 4, '어제 기록');
   assert.equal(boostAmount(CFG, mine, 'ad'), 20);
-  assert.equal(boostAmount(CFG, mine, 'dia', true), 25);
+  assert.equal(boostAmount(PASS25, mine, 'dia', true), 25);
   assert.equal(pouchGold(CFG, 250), 500);
 });
 

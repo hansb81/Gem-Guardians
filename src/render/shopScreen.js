@@ -563,7 +563,7 @@ export class ShopScreen {
     const pct = Math.round(((p.floors / p.price) / (base.floors / base.dia) - 1) * 100);
     let sx = left;
     if (pct > 0) {
-      const label = `+${pct}%`;
+      const label = t('shop.goldex.pct', { n: pct });
       const pw = this._measure(ctx, label, 11) + 12;
       this._nine(ctx, 'shop/pill_gold.png', left, iy + 54, pw, 20);
       this._text(ctx, label, left + pw / 2, iy + 64, 11, C.outline, 'center');

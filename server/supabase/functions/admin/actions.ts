@@ -147,6 +147,26 @@ export const ACTIONS: Record<string, Action> = {
     },
   },
 
+  // 순위표(비정상 계정 찾기): 게임 순위표와 달리 숨김·정지·탈퇴도 포함하고 표시만 한다. 가입 시각·save 요약을 같이.
+  "rank.list": {
+    role: "viewer",
+    run: async ({ body, db }) => {
+      const limit = limitOf(body.limit, 200);
+      const who = "players!inner(nickname, created_at, banned, rank_hidden, deleted_at, platform, app_version, saves(summary))";
+      const hiddenOnly = body.hiddenOnly === true;
+      if (body.mode === "comp") {
+        const seasonId = body.seasonId ?? must(await db.rpc("comp_season", { p_at: new Date().toISOString() }));
+        if (typeof seasonId !== "string" || !/^\d{4}-W\d{2}$/.test(seasonId)) return fail("badRequest");
+        let q = db.from("comp_best").select(`player_id, points, floor, at, ${who}`).eq("season_id", seasonId);
+        if (hiddenOnly) q = q.eq("players.rank_hidden", true);
+        return { ok: true, seasonId, rows: must(await q.order("points", { ascending: false }).order("at").limit(limit)) };
+      }
+      let q = db.from("normal_best").select(`player_id, best_floor, reached_at, ${who}`);
+      if (hiddenOnly) q = q.eq("players.rank_hidden", true);
+      return { ok: true, rows: must(await q.order("best_floor", { ascending: false }).order("reached_at").limit(limit)) };
+    },
+  },
+
   "player.note": playerSet("note", (b) => (b.note === null ? null : str(b.note, 2000) ?? undefined)),
   "player.ban": playerSet("banned", (b) => (typeof b.banned === "boolean" ? b.banned : undefined)),
   "player.rankHide": playerSet("rank_hidden", (b) => (typeof b.hidden === "boolean" ? b.hidden : undefined)),

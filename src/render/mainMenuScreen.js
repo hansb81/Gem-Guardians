@@ -110,7 +110,7 @@ const ACCOUNT_BUTTON = { id: 'account', labelKey: 'menu.settings.account', rect:
 const ACCOUNT_EXTRA_H = 56;
 // 계정 팝업(카드 왼쪽 위 기준). google = Google 브랜드 버튼(흰 바탕·G 로고 - 픽셀 아트로 다시 그리지 않음, assets/ui/auth/CREDITS.md).
 const ACCOUNT = {
-  line1Y: 100, noteY: [132, 152], msgY: 256,
+  line1Y: 100, noteY: [132, 152], msgY: 250, code: [40, 264, 220, 40], copy: [270, 264, 90, 40], // code·copy = 게임 정보 회원 번호 줄과 같은 동작
   google: [60, 190, 280, 40], signOut: [100, 186, 200, 46], deleteY: 330,
   confirmY: [110, 138, 166], cancel: [40, 220, 150, 46], ok: [210, 220, 150, 46],
 };
@@ -1238,6 +1238,7 @@ export class MainMenuScreen {
         if (a.googleOn()) this._drawGoogleButton(ctx, at(ACCOUNT.google));
       }
       if (a.msg) this._text(ctx, t(`menu.account.fail.${a.msg}`), mid, cy + ACCOUNT.msgY, { size: 13, align: 'center', color: COLORS.redLight });
+      if (this.server) this._drawCodeRow(ctx, cx, cy, ACCOUNT.code, ACCOUNT.copy);
       this._text(ctx, t('menu.account.delete'), mid, cy + ACCOUNT.deleteY, { size: 12, align: 'center', color: this._pressed === 'accountDelete' ? COLORS.title : COLORS.redLight });
     }
     if (a.busy) {
@@ -1278,6 +1279,10 @@ export class MainMenuScreen {
       this._pressed = 'accountGoogle';
       a.msg = null;
       return 'accountLink';
+    }
+    if (this.server) {
+      const act = this._codeRowPointerDown(x, y, card, ACCOUNT.code, ACCOUNT.copy);
+      if (act) return act;
     }
     if (!pointInRect(x, y, this._toScreen(card))) {
       this.popup = 'settings';
@@ -1437,20 +1442,34 @@ export class MainMenuScreen {
     if (this.server) this._drawAboutNet(ctx, card);
   }
 
+  // 회원 번호 칸 + [복사](게임 정보·계정 팝업 공용). c·cp = 카드 왼쪽 위 기준 rect.
+  _drawCodeRow(ctx, cx, cy, c, cp) {
+    const code = this.server.playerCode();
+    const notice = this.aboutNotice && performance.now() < this.aboutNotice.until ? t(this.aboutNotice.key) : null;
+    if (!this._nine(ctx, 'panels/panel_inset.png', [cx + c[0], cy + c[1], c[2], c[3]])) this._panel(ctx, [cx + c[0], cy + c[1], c[2], c[3]], COLORS.bg2, COLORS.bg3);
+    const text = notice ?? (code ? t('net.about.code', { code }) : t('net.about.noCode'));
+    this._text(ctx, text, cx + c[0] + c[2] / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
+    if (code) this._drawButton(ctx, [cx + cp[0], cy + cp[1], cp[2], cp[3]], 'aboutCopy', 'btn_secondary', t('net.about.copy'));
+  }
+
+  // 회원 번호 칸 누름 -> 'playerCodeDown'(길게 누르면 복사) / [복사] -> 'playerCodeCopy' / 아니면 null.
+  _codeRowPointerDown(x, y, card, c, cp) {
+    const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
+    if (pointInRect(x, y, at(c))) return 'playerCodeDown'; // main.js: 0.5초 누르고 있으면 복사
+    if (this.server.playerCode() && pressButton(x, y, at(cp))) {
+      this._pressed = 'aboutCopy';
+      return 'playerCodeCopy';
+    }
+    return null;
+  }
+
   _aboutBottom() {
     return this.server ? ABOUT_NET.viewBottom : ABOUT.viewBottom;
   }
 
   // 회원 번호(서버 id 앞 8자 - 문의 대응용, [복사] 또는 길게 누르면 전체 복사) + 내 데이터 삭제 요청.
   _drawAboutNet(ctx, [cx, cy, cw]) {
-    const code = this.server.playerCode();
-    const notice = this.aboutNotice && performance.now() < this.aboutNotice.until ? t(this.aboutNotice.key) : null;
-    const c = ABOUT_NET.code;
-    if (!this._nine(ctx, 'panels/panel_inset.png', [cx + c[0], cy + c[1], c[2], c[3]])) this._panel(ctx, [cx + c[0], cy + c[1], c[2], c[3]], COLORS.bg2, COLORS.bg3);
-    const text = notice ?? (code ? t('net.about.code', { code }) : t('net.about.noCode'));
-    this._text(ctx, text, cx + c[0] + c[2] / 2, cy + c[1] + c[3] / 2, { size: 13, align: 'center', color: notice ? COLORS.title : COLORS.bone });
-    const cp = ABOUT_NET.copy;
-    if (code) this._drawButton(ctx, [cx + cp[0], cy + cp[1], cp[2], cp[3]], 'aboutCopy', 'btn_secondary', t('net.about.copy'));
+    this._drawCodeRow(ctx, cx, cy, ABOUT_NET.code, ABOUT_NET.copy);
     const cs = this.server.cloud?.();
     if (cs && (cs.on || cs.offline)) {
       const line = cs.on && cs.lastSyncAt ? t('menu.saveConflict.line', { time: shortTime(cs.lastSyncAt) }) : t('menu.saveConflict.pending');
@@ -1677,12 +1696,8 @@ export class MainMenuScreen {
         return null;
       }
       if (this.server) {
-        const at = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
-        if (pointInRect(x, y, at(ABOUT_NET.code))) return 'playerCodeDown'; // main.js: 0.5초 누르고 있으면 복사
-        if (this.server.playerCode() && pressButton(x, y, at(ABOUT_NET.copy))) {
-          this._pressed = 'aboutCopy';
-          return 'playerCodeCopy';
-        }
+        const act = this._codeRowPointerDown(x, y, card, ABOUT_NET.code, ABOUT_NET.copy);
+        if (act) return act;
       }
     }
 

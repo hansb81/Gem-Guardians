@@ -9,15 +9,16 @@ import * as mail from './mail.js';
 import * as purchases from './purchases.js';
 import * as coupons from './coupons.js';
 import * as logs from './logs.js';
+import * as ranking from './ranking.js';
 
 const MENU = [
-  ['dashboard', '대시보드'], ['players', '플레이어'], ['grant', '보상 지급'], ['mail', '우편함'],
+  ['dashboard', '대시보드'], ['players', '플레이어'], ['ranking', '랭킹'], ['grant', '보상 지급'], ['mail', '우편함'],
   ['purchases', '결제'], ['coupons', '쿠폰'], ['logs', '로그·감사'],
 ];
 // 해시 첫 칸 -> 화면. #player/<uid>, #grant/<id>는 상세.
 const ROUTES = {
   dashboard: dashboard.render, players: players.search, player: players.detail, grant: grant.render,
-  mail: mail.render, purchases: purchases.render, coupons: coupons.render, logs: logs.render,
+  mail: mail.render, purchases: purchases.render, coupons: coupons.render, logs: logs.render, ranking: ranking.render,
 };
 
 const app = document.getElementById('app');

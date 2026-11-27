@@ -172,7 +172,7 @@ export class MineScreen {
     this.v = {
       ore: mine.ore,
       rate: t('mine.perHour', { n: fmtRate(ratePerHour(cfg, mine, pass)) }),
-      passPct: pass ? `+${Math.round(cfg.passBonus.monthly * 100)}%` : null,
+      passPct: pass && cfg.passBonus.monthly > 0 ? `+${Math.round(cfg.passBonus.monthly * 100)}%` : null,
       storeLabel: `${t('mine.store')} Lv${mine.storageLv}${mine.bigStorage ? '★' : ''}`,
       fill: cap > 0 ? Math.min(1, cart / cap) : 0,
       full,
