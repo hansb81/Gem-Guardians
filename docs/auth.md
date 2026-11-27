@@ -138,7 +138,7 @@
 | Google Play | Google | 기기 Google 로그인 창(Credential Manager) → ID 토큰 → `linkIdentity({provider:'google', token})` | `['google']` |
 | 원스토어 | Google | Play와 같은 코드. Google Play 서비스 없는 폰이면 "이 기기에선 Google 로그인을 쓸 수 없어요" | `['google']` |
 | App Store | **Apple + Google** | 네이티브 Apple 로그인 / Google 로그인 → ID 토큰. **Google을 넣으면 Apple 로그인 필수(심사 4.8)** | `['apple','google']` |
-| 토스 | 없음 | 토스 계정이 곧 로그인. 버튼 숨김. 재설치 복구는 §8 T(선택) | `[]` |
+| 토스 | 토스(자동) | 토스 계정이 곧 로그인. 버튼 숨김. 재설치하면 hello가 같은 토스 키의 옛 계정 기록을 새 계정으로 옮김(§8 T, 2026-11-27) | `[]` |
 
 - 앱 플러그인: **`@capgo/capacitor-social-login`** (Google·Apple 둘 다, Capacitor 8 지원 확인 필요). ID 토큰만 받아 Supabase에 넘기고, Google 접근 토큰은 안 씀.
 - 요청 범위는 `openid email profile`만(민감 범위 아님 → Google 앱 심사 불필요, 동의 화면 "프로덕션" 게시만).
@@ -355,7 +355,7 @@ Apple Developer > Identifiers에 Sign in with Apple 켜기, Services ID·Key(.p8
 | **L2 Google 로그인** | 플러그인, `caps.login`, 계정 팝업, 연결·충돌 화면·merge 티켓·account-merge·로그아웃, 웹 리다이렉트, RevenueCat `logIn` 전환 | 웹(pages.dev / localhost) → Play 내부 테스트 AAB |
 | **L3 삭제·정리** | `me-delete` 확장(saves·auth 삭제·RevenueCat), 계정 삭제 화면, `delete-account.html`, 익명 정리 cron, 개인정보처리방침 갱신, Play 데이터 보안 양식(§9) | 삭제 후 재실행 = 새 게스트 |
 | L4 iOS | Apple 로그인 + 토큰 취소, iOS 클라이언트 ID | App Store 준비 때 |
-| T (선택) | 토스: `toss_key_hash`가 같은 기존 플레이어가 있으면 시작 때 "이전 진행 불러오기" | 토스 출시 때 |
+| T | 토스: 새 계정(save·결제 없음)이 hello에 토스 키를 보내면 같은 `toss_key_hash`의 옛 계정(삭제·Google 연결 아님, save 있음) 기록 전부를 새 계정으로(`toss_restore`, O auth 사용자 삭제). 기기 save가 비어 있으면(튜토리얼 전·1층) 묻지 않고 서버 save 적용. 토스 키는 서버 확인이 없어 키를 알면 가져갈 수 있음 | 2026-11-27 완료 |
 
 L1·L2는 **Play 비공개 테스트(12명×14일)를 시작하기 전에** 넣는 걸 추천합니다. 테스터가 폰을 바꾸거나 재설치하면 지금은 진행이 사라지기 때문입니다.
 

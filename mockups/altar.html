@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gem Guardians - 수호의 제단 시안 (입구 연출 + 화면 A/B/C)</title>
+<style>
+  @font-face { font-family: 'Galmuri11'; src: url('../assets/fonts/Galmuri11.woff2') format('woff2'); font-display: swap; }
+  :root {
+    --outline: #0d0a10; --bg1: #221c2b; --bg2: #3b3347; --bg3: #655a74; --bone: #e8dcc0; --dim: #a59cb2;
+    --gold: #c28a20; --gold-l: #f2d264; --yellow: #ffe14a; --blue-l: #8cc4ee; --green-l: #9cd872; --red-l: #ec6a6a; --rune: #4fc3ff;
+    --c-red: #e0483c; --c-blue: #4aa0e8; --c-yellow: #f0c030; --c-green: #5cc04a; --c-purple: #a060e0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000; color: var(--bone); font-family: 'Galmuri11', monospace; font-size: 16px; -webkit-font-smoothing: none; }
+  body { padding: 20px; display: flex; gap: 28px; justify-content: center; flex-wrap: wrap; align-items: flex-start; }
+  img, .px { image-rendering: pixelated; }
+  .ol { text-shadow: 2px 0 var(--outline), -2px 0 var(--outline), 0 2px var(--outline), 0 -2px var(--outline); }
+
+  /* ---- 검토용 글(게임 UI 아님) ---- */
+  .col { display: flex; flex-direction: column; gap: 10px; }
+  .cap { color: var(--yellow); font-size: 22px; }
+  .cap small { color: var(--dim); font-size: 16px; margin-left: 8px; }
+  .notes { width: 540px; background: var(--bg1); border: 2px solid var(--bg2); padding: 12px 16px; line-height: 1.7; }
+  .notes b { color: var(--gold-l); }
+  .notes li { margin-left: 18px; }
+  .notes .tag { color: var(--blue-l); }
+  .wide { flex-basis: 100%; display: flex; justify-content: center; }
+
+  /* ---- 폰(540x960 = 게임 기준 화면 px) ---- */
+  .phone { width: 540px; height: 960px; position: relative; overflow: hidden; border: 2px solid #333; box-sizing: content-box;
+    background: url('../assets/menu/menu_bg.png') 0 0 / 540px 960px; image-rendering: pixelated; }
+  .dim { position: absolute; inset: 0; background: rgba(13, 10, 16, 0.78); }
+
+  /* ---- 입구 연출 4컷: 메뉴 배경 x2, 원본 (36,150)부터 108x100 ---- */
+  .seq { display: flex; gap: 12px; }
+  .fr { width: 216px; }
+  .fr .shot { width: 216px; height: 200px; position: relative; overflow: hidden; border: 2px solid var(--bg2);
+    background: url('../assets/menu/menu_bg.png') -72px -300px / 360px 640px; image-rendering: pixelated; }
+  .fr p { color: var(--dim); margin-top: 4px; line-height: 1.4; }
+  .fr p b { color: var(--bone); }
+  .glow { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+  .sigil { left: 108px; top: 84px; width: 44px; height: 44px; background: radial-gradient(#fff6c0 0 18%, #f2d264cc 30%, #f2d26400 70%); }
+  .lamp { top: 181px; width: 30px; height: 30px; }
+  .beam { position: absolute; left: 100px; top: 0; width: 16px; height: 84px; background: linear-gradient(#fff6c000, #f2d264cc); }
+  .flash { position: absolute; inset: 0; background: radial-gradient(circle at 108px 60px, #fff6c0 0 20%, #f2d264aa 50%, #f2d26433 100%); }
+
+  /* ---- 수호자(20x26 시트 x3). 원본은 왼쪽을 본다 - .r = 오른쪽 보기 ---- */
+  .g { position: absolute; width: 20px; height: 26px; transform-origin: 0 0; transform: scale(3); image-rendering: pixelated; }
+  .g.r { transform: translateX(60px) scale(-3, 3); }
+  .g.red { background-image: url('../assets/statues/sheets/guardian_idle_red.png'); }
+  .g.blue { background-image: url('../assets/statues/sheets/guardian_idle_blue.png'); }
+  .g.yellow { background-image: url('../assets/statues/sheets/guardian_idle_yellow.png'); }
+  .g.green { background-image: url('../assets/statues/sheets/guardian_idle_green.png'); }
+  .g.purple { background-image: url('../assets/statues/sheets/guardian_idle_purple.png'); }
+
+  /* ---- 공통 부품 ---- */
+  .popup { position: absolute; left: 12px; right: 12px; top: 96px; bottom: 48px; border: 32px solid transparent;
+    border-image: url('../assets/ui/menu/popup_menu.png') 16 fill / 32px stretch; }
+  .emblem { position: absolute; left: 50%; top: -58px; margin-left: -24px; width: 48px; }
+  .close { position: absolute; right: -14px; top: -18px; width: 32px; }
+  .title { text-align: center; font-size: 22px; color: var(--gold-l); }
+  .tabs { display: flex; gap: 6px; }
+  .tab { flex: 1; height: 40px; display: grid; place-items: center; color: var(--dim);
+    border: 8px solid transparent; border-image: url('../assets/ui/upgrade/tab_off.png') 4 fill / 8px stretch; }
+  .tab.on { border-image-source: url('../assets/ui/upgrade/tab_on.png'); color: var(--bone); }
+  .body { border: 8px solid transparent; border-image: url('../assets/ui/upgrade/tab_body.png') 4 fill / 8px stretch; display: flex; flex-direction: column; gap: 6px; }
+  .row { height: 74px; display: flex; align-items: center; gap: 10px; padding: 0 4px;
+    border: 8px solid transparent; border-image: url('../assets/ui/upgrade/card.png') 4 fill / 8px stretch; }
+  .row.sel { border-image-source: url('../assets/ui/upgrade/card_selected.png'); }
+  .pip { width: 12px; height: 12px; border: 2px solid var(--outline); flex: none; }
+  .row .nm { font-size: 22px; width: 92px; white-space: nowrap; flex: none; }
+  .popup .row { gap: 6px; padding: 0; }
+  .popup .row .btn { width: 72px; }
+  .lv { border: 2px solid var(--gold); padding: 0 6px; line-height: 22px; color: var(--gold-l); background: var(--outline); }
+  .atk { flex: 1; color: var(--dim); white-space: nowrap; }
+  .atk b { color: var(--bone); } .atk i { color: var(--green-l); font-style: normal; }
+  .btn { height: 44px; display: grid; place-items: center; color: var(--outline); white-space: nowrap; padding: 0 6px;
+    border: 8px solid transparent; border-image: url('../assets/ui/buttons/btn_gold.png') 4 4 5 4 fill / 8px 8px 10px 8px stretch; }
+  .btn.pri { border-image-source: url('../assets/ui/buttons/btn_primary.png'); color: var(--bone); }
+  .row .btn { width: 84px; }
+  .foot { display: flex; justify-content: space-between; color: var(--dim); }
+  .foot b { color: var(--bone); }
+  .goldbox { display: inline-flex; align-items: center; gap: 6px; padding: 0 6px; height: 32px; color: var(--gold-l); font-size: 22px;
+    border: 8px solid transparent; border-image: url('../assets/ui/menu/inset.png') 4 fill / 8px stretch; }
+  .goldbox img { width: 24px; }
+
+  /* A: 지금 화면 캡처 위에 문장·룬 띠만 얹음 */
+  .a-shot { position: absolute; inset: 0; background: url('altar/current_village.png'); }
+  .a-emblem { position: absolute; left: 240px; top: 66px; width: 60px; height: 60px; background: #16121c; display: grid; place-items: center; }
+  .a-emblem img { width: 48px; }
+  .runes { position: absolute; left: 150px; top: 160px; width: 240px; text-align: center; color: var(--rune); letter-spacing: 10px; font-size: 16px; }
+  .a-cover { position: absolute; left: 36px; top: 172px; width: 150px; height: 24px; background: #221c2b; }
+  .runes.a { top: 166px; }
+
+  /* B: 팝업 안 성소 띠 */
+  .banner { height: 174px; position: relative; overflow: hidden; margin: 6px 0 8px; border: 2px solid var(--outline);
+    background: url('../assets/menu/menu_bg.png') -46px -372px / 540px 960px; image-rendering: pixelated; }
+  .banner::before { content: ''; position: absolute; inset: 0; background: linear-gradient(rgba(13,10,16,0.15), rgba(13,10,16,0.6)); }
+  .banner .g { top: 92px; }
+  .banner .power { position: absolute; left: 8px; top: 6px; color: var(--dim); }
+  .banner .goldbox { position: absolute; right: 6px; top: 6px; }
+  .ring { position: absolute; width: 66px; height: 12px; border-radius: 50%; top: 162px; opacity: 0.7; }
+
+  /* C: 전용 화면 - 위 성소 장면(메뉴 배경 원본 y 112부터 136줄 x3) + 아래 판 */
+  .scene { position: absolute; left: 0; top: 0; width: 540px; height: 408px; overflow: hidden;
+    background: url('../assets/menu/menu_bg.png') 0 -336px / 540px 960px; image-rendering: pixelated; }
+  .scene .lightcol { position: absolute; left: 240px; top: 96px; width: 60px; height: 84px; background: linear-gradient(#e0483c00, #e0483c88); }
+  .scene .halo { position: absolute; left: 270px; top: 176px; width: 150px; height: 22px; border-radius: 50%; transform: translate(-50%, -50%); background: radial-gradient(#e0483ccc, #e0483c00 70%); }
+  .topbar { position: absolute; left: 0; right: 0; top: 0; height: 84px; background: linear-gradient(rgba(13,10,16,0.9), rgba(13,10,16,0)); }
+  .topbar .back { position: absolute; left: 20px; top: 28px; width: 48px; }
+  .topbar .ttl { position: absolute; left: 0; right: 0; top: 36px; text-align: center; font-size: 22px; color: var(--gold-l); }
+  .topbar .goldbox { position: absolute; right: 16px; top: 32px; }
+  .sheet { position: absolute; left: 0; right: 0; top: 408px; bottom: 0; background: var(--bg1); border-top: 4px solid var(--gold); padding: 10px 14px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 -8px 0 var(--outline); }
+  .sheet .row { height: 70px; }
+  .tagline { position: absolute; left: 0; right: 0; top: 372px; text-align: center; color: var(--bone); }
+</style>
+</head>
+<body>
+
+<!-- ============ 입구 연출 ============ -->
+<div class="col wide" style="align-items:center">
+  <div class="cap">입구 연출 — 제단을 누르면 "깨어난다" <small>보물상자 열기(0.34초)와 같은 길이 · A/B/C 어느 안에도 붙는다</small></div>
+  <div class="seq">
+    <div class="fr"><div class="shot"></div><p><b>① 평소</b><br>지금 그대로(받침대 금빛 훑기)</p></div>
+    <div class="fr"><div class="shot"><i class="glow sigil"></i></div><p><b>② 0~90ms</b><br>받침대 문양이 켜진다</p></div>
+    <div class="fr"><div class="shot"><i class="glow sigil"></i><i class="beam"></i>
+      <i class="glow lamp" style="left:20px;background:radial-gradient(var(--c-red),transparent 70%)"></i>
+      <i class="glow lamp" style="left:60px;background:radial-gradient(var(--c-blue),transparent 70%)"></i>
+      <i class="glow lamp" style="left:112px;background:radial-gradient(var(--c-yellow),transparent 70%)"></i>
+      <i class="glow lamp" style="left:164px;background:radial-gradient(var(--c-green),transparent 70%)"></i>
+      <i class="glow lamp" style="left:204px;background:radial-gradient(var(--c-purple),transparent 70%)"></i>
+    </div><p><b>③ 90~250ms</b><br>바닥 등불 5개가 수호자 색으로 차례로, 빛이 원석으로 오른다</p></div>
+    <div class="fr"><div class="shot"><i class="flash"></i></div><p><b>④ 250~340ms</b><br>번쩍 → 제단 화면 열림</p></div>
+  </div>
+</div>
+
+<!-- ============ A ============ -->
+<div class="col">
+  <div class="cap">A. 문장만 바꾸기 <small>가장 가벼움</small></div>
+  <div class="phone">
+    <div class="a-shot px"></div>
+    <div class="a-emblem"><img src="altar/emblem_altar_draft.png" alt=""></div>
+    <div class="runes a">ᚠᚱᛒᛗᛋ</div>
+  </div>
+  <div class="notes">
+    <ul>
+      <li>보관함이 <b>emblem_vault</b>를 받은 것처럼 제단도 <b>전용 문장</b>(금 고리 + 금 간 원석)과 제목 밑 <b>룬 띠</b>.</li>
+      <li>본문·배치는 지금 그대로. 층 클리어·패배 때는 지금 문장(모루) 유지.</li>
+      <li>새 그림: 문장 24x24 1장 + 입구 연출 시트. 코드: 문장 고르기 1줄 + 연출.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ B ============ -->
+<div class="col">
+  <div class="cap">B. 팝업 + 성소 띠 <small>중간</small></div>
+  <div class="phone">
+    <div class="dim"></div>
+    <div class="popup">
+      <img class="emblem" src="altar/emblem_altar_draft.png" alt="">
+      <img class="close" src="../assets/ui/upgrade/btn_close.png" alt="닫기">
+      <div class="title ol" style="margin-top:-10px">수호의 제단</div>
+      <div class="banner">
+        <span class="power ol">전체 공격 <b style="color:var(--bone)">50</b></span>
+        <span class="goldbox"><img src="../assets/ui/icons/gold.png" alt="">5,000,000</span>
+        <i class="ring" style="left:11px;background:var(--c-red)"></i><i class="g red r" style="left:14px"></i>
+        <i class="ring" style="left:103px;background:var(--c-blue)"></i><i class="g blue r" style="left:106px"></i>
+        <i class="ring" style="left:195px;background:var(--c-yellow)"></i><i class="g yellow r" style="left:198px"></i>
+        <i class="ring" style="left:287px;background:var(--c-green)"></i><i class="g green" style="left:290px"></i>
+        <i class="ring" style="left:379px;background:var(--c-purple)"></i><i class="g purple" style="left:382px"></i>
+      </div>
+      <div class="tabs"><div class="tab on">수호자</div><div class="tab">정령</div></div>
+      <div class="body" id="rowsB"></div>
+      <div class="foot" style="margin:8px 2px"><span>길게 누르면 연속 강화</span></div>
+      <div class="btn pri">일괄 강화 +488 (4,998,867)</div>
+    </div>
+  </div>
+  <div class="notes">
+    <ul>
+      <li>팝업은 유지, 위에 <b>성소 띠</b>(원석 아래 수호자 5명). 줄의 초상 칸이 띠로 올라가 줄이 낮아진다(110 → 74).</li>
+      <li>강화하면 띠의 그 수호자가 공격 동작 + 번쩍(지금 무대 칸 연출을 띠로 옮김).</li>
+      <li>정령 탭은 이 띠가 곧 "수호자 고르기" 줄 — 두 탭이 같은 머리를 쓴다.</li>
+      <li>새 그림: 문장 + 띠 배경(메뉴 배경 잘라 쓰면 0장). 코드: 팝업 머리 배치 + 줄 높이.</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============ C ============ -->
+<div class="col">
+  <div class="cap">C. 전용 화면 "성소 안으로" <small>추천 · 가장 큼</small></div>
+  <div class="phone">
+    <div class="scene">
+      <i class="lightcol"></i><i class="halo"></i>
+      <i class="g red" style="left:240px;top:98px"></i>
+      <i class="g blue r" style="left:22px;top:284px"></i>
+      <i class="g yellow r" style="left:104px;top:284px"></i>
+      <i class="g green" style="left:376px;top:284px"></i>
+      <i class="g purple" style="left:458px;top:284px"></i>
+      <div class="topbar">
+        <img class="back" src="../assets/ui/upgrade/btn_close.png" alt="닫기">
+        <div class="ttl ol">수호의 제단</div>
+        <span class="goldbox"><img src="../assets/ui/icons/gold.png" alt="">5,000,000</span>
+      </div>
+      <div class="tagline ol">전체 공격 <b>50</b> · 최고 기록 1층</div>
+    </div>
+    <div class="sheet">
+      <div class="tabs"><div class="tab on">수호자</div><div class="tab">정령</div></div>
+      <div class="col" style="gap:6px" id="rowsC"></div>
+      <div class="foot" style="margin:2px"><span>길게 누르면 연속 강화</span></div>
+      <div class="btn pri">일괄 강화 +488 (4,998,867)</div>
+    </div>
+  </div>
+  <div class="notes">
+    <ul>
+      <li>상점·광산처럼 <b>팝업이 아닌 화면</b>. 전투 화면과 같은 구도: 위 = 성소 장면, 아래 = 판.</li>
+      <li>마지막에 만진 수호자가 <b>제단 위에 올라서고</b> 원석 빛을 받는다. 나머지 넷은 바닥 자기 색 등불 옆.</li>
+      <li>강화 = 원석에서 빛기둥이 내려와 번쩍 + 공격 동작. 등급이 바뀌면 크게 한 번.</li>
+      <li>정령 탭: 장면의 수호자를 눌러 고르고(지금 무대 5칸 대신), 아래 판은 정보 카드 + 목록.</li>
+      <li>층 클리어·패배·전투 중 정비는 지금 팝업 그대로(메뉴 제단만 전용 화면).</li>
+      <li>새 그림: 문장 불필요, 배경은 메뉴 배경 재사용. 코드: 새 화면 1개(mineScreen처럼) + 줄 그리기 재사용.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="notes wide" style="width:auto;max-width:1100px;display:block">
+  <b>기획에 없는 것 <span class="tag">(결정 필요)</span></b>
+  <ul>
+    <li>A / B / C 중 어느 것으로 갈지. (입구 연출은 따로 — 넣을지 말지만)</li>
+    <li>C면: 메뉴 제단만 전용 화면이고 층 사이 정비는 팝업으로 남는 "두 벌"을 받아들일지.</li>
+    <li>B·C면: 수호자 줄에서 초상 칸을 빼도 되는지(위 장면이 대신함).</li>
+    <li>룬 글자·문장 그림은 임시(mockups/altar/emblem_altar_draft.png). 확정되면 pixel-art로 다시 그린다.</li>
+  </ul>
+</div>
+
+<script>
+  const G = [['이그니스', 'red'], ['프로스트', 'blue'], ['볼테르', 'yellow'], ['실바', 'green'], ['베놈', 'purple']];
+  const rows = (sel) => G.map(([n, c], i) => `<div class="row${i === sel ? ' sel' : ''}"><i class="pip" style="background:var(--c-${c})"></i><span class="nm">${n}</span><span class="lv">Lv.1</span><span class="atk">공격 <b>10</b> › <i>11</i></span><span class="btn">20</span><span class="btn pri">MAX</span></div>`).join('');
+  rowsB.innerHTML = rows(-1);
+  rowsC.innerHTML = rows(0);
+</script>
+</body>
+</html>

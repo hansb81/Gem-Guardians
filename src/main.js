@@ -819,6 +819,8 @@ const gameDataReady = Promise.all([loadBattleData(), loadBalanceData(), loadServ
       get gameState() { return gameState; },
       get tutorial() { return tutorial; },
       startTutorialPractice,
+      addSpecial: devAddSpecial, // 스토어 스크린샷(tools/store_screenshots.mjs)
+      triggerCombo: devTriggerCombo,
       back: () => backHandlers.some((h) => h()), // 뒤로가기 버튼 흉내(웹엔 없음).
       playerState,
       renderer,

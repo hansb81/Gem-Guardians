@@ -39,7 +39,7 @@ export const ko = {
       body: [
         { head: 'Gem Guardians' },
         '{versionLine}',
-        '제작: Team SDB',
+        '제작: 한칸스튜디오',
         '문의: hankan.studio81@gmail.com',
         { head: '크레딧' },
         '몬스터 스프라이트: "16x16 DungeonTileset II" by 0x72 (CC0)',
@@ -410,12 +410,12 @@ export const ko = {
       contents: '구성',
       timer: '남은',
     },
-    grant: { dia: '다이아 {n}', item: '{name} {n}', slot4: '하단 4번째 슬롯 바로 열림', adFree: '무료 아이템 광고 없이' },
-    pass: { desc: '즉시 {now} + {days}일간 매일 {daily}', total: '(총 {n})', left: '남은 {n}일', today: '오늘 받을 것: 다이아 {n}', claim: '받기 +{n}', missed: '접속하지 못한 날의 보상은 다음에 받을 때 합산됩니다(종료 후 {n}일까지).', plusItem: ' + {name} {n}', mine: ' · 광산 생산 +{pct}%', mineCard: ' · 광산 생산 +{pct}%', mineInfo: '광산', mineVal: '생산 +{pct}%' },
+    grant: { dia: '다이아 {n}', gold: '골드 {n}', item: '{name} {n}', slot4: '하단 4번째 슬롯 바로 열림', adFree: '무료 아이템 광고 없이' },
+    pass: { desc: '즉시 {now} + {days}일간 매일 {daily}', total: '(총 {n})', left: '남은 {n}일', today: '오늘 받을 것: 다이아 {n}', claim: '받기 +{n}', missed: '접속하지 못한 날의 보상은 다음에 받을 때 합산됩니다(종료 후 {n}일까지).', plusItem: ' + {name} {n}', plusGold: ' + 골드 {n}', goldNote: '매일 골드는 받는 날의 최고 층에서 일반 층을 {n}번 깰 때 버는 만큼이라, 높이 올라갈수록 많아져요.', mine: ' · 광산 생산 +{pct}%', mineCard: ' · 광산 생산 +{pct}%', mineInfo: '광산', mineVal: '생산 +{pct}%' },
     dia: { badge: { popular: '인기', best: '최고 혜택' }, name: '다이아 {n}', bonus: '보너스 +{n}', first: '첫 구매: {n}', amount: '받는 양 {n}', long: '다이아 {n}개를 산다.', longFirst: '다이아 {n}개를 산다. 첫 구매라 기본 다이아가 2배.' },
     stones: { name: '정령석 묶음', desc: '정령석 {n}개 · 하루 1번', long: '정령석 {n}개를 받는다. 하루에 한 번 살 수 있고 자정(한국 시간)에 다시 열린다.' },
     slot4: { name: '4번째 슬롯', desc: '하단 아이템 슬롯 1칸', desc2: '영구 추가', long: '하단 슬롯 4번째 칸을 바로 연다. 20층 보스를 처음 잡아도 무료로 열린다.' },
-    goldex: { small: '골드 소', mid: '골드 중', big: '골드 대', desc: '약 일반 층 {n}개 분량', desc2: '최고 층이 오르면 같이 커짐', long: '다이아 {dia}개로 골드 {gold}을 받는다. 양은 최고 도달 층의 일반 층 보상 {n}개 분량.' },
+    goldex: { small: '골드 소', mid: '골드 중', big: '골드 대', desc: '일반 층 {n}번 깬 만큼의 골드', desc2: '최고 층이 오를수록 더 많이 받아요', long: '다이아 {dia}개로 골드 {gold}을 받아요. 지금 최고 층 근처의 일반 층을 {n}번 깰 때 버는 골드와 같아요. 최고 층이 오르면 같은 다이아로 더 많이 받아요.', basis: '기준', basisVal: '최고 층 일반 층 × {n}', pct: '+{n}% 이득' },
     // 약관·환불 고지(docs/legal-src/shop-refund-notice.md ①②③ 그대로). 상점 맨 아래 작은 글씨 + 링크 줄.
     legal: { restore: '구매 내역 복원', terms: '이용약관', refund: '환불 안내' },
     notice: {

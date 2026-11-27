@@ -23,6 +23,23 @@ handle("hello", async ({ uid, user, body, db }) => {
     row.toss_key_hash = [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
   }
   must(await db.from("players").upsert(row));
+  // 토스 재설치 복구(docs/auth.md §8 T): 새 계정이면 같은 토스 사용자의 옛 계정 기록을 이 계정으로. 실패해도 hello는 계속.
+  let restored = false;
+  if (row.toss_key_hash) {
+    try {
+      const r = must(await db.rpc("toss_restore", { p_to: uid, p_hash: row.toss_key_hash })) as { ok: boolean; from?: string };
+      if (r.ok) {
+        restored = true;
+        const { error } = await db.auth.admin.deleteUser(r.from!);
+        await db.from("server_log").insert({
+          source: "toss-restore", level: error ? "error" : "info",
+          body: { from: r.from, to: uid, deleteError: error ? String(error.message ?? error) : null },
+        });
+      }
+    } catch (e) {
+      await db.from("server_log").insert({ source: "toss-restore", level: "error", body: { to: uid, error: String(e) } });
+    }
+  }
   const start = await startInfo(db, uid);
   let features = {};
   try {
@@ -39,6 +56,6 @@ handle("hello", async ({ uid, user, body, db }) => {
   const now = Date.now();
   return {
     ok: true, now, today: kstDate(now), pending: start.claims.claims.length, features: { ...FEATURES, ...features },
-    revoke: revokeOrders.length ? ["adFree"] : [], revokeOrders, ...start,
+    revoke: revokeOrders.length ? ["adFree"] : [], revokeOrders, restored, ...start,
   };
 });

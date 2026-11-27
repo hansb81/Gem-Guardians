@@ -189,6 +189,7 @@ function railPacks(ctx) {
   for (const id of cfg.packs.order) {
     const p = cfg.packs[id];
     const base = { id: `pack.${id}`, kind: 'pack', pack: id, cur: 'krw', price: cfg.products[`pack.${id}`].priceKRW, state: '' };
+    if (p.pass?.dailyGoldFloors) base.dailyGold = goldOf(ctx, p.pass.dailyGoldFloors); // 패스 매일 골드 = 지금 최고 층 기준
     const daysLeft = p.pass ? passDaysLeft(shop.passes[id], ctx.today) : 0;
     const pending = p.pass ? passPending(shop.passes[id], ctx.today, cfg.packs.passGraceDays) : 0;
     if (ctx.canSell && !ctx.canSell(base.id) && !(daysLeft > 0 || pending > 0)) continue;
@@ -200,7 +201,7 @@ function railPacks(ctx) {
       if (offer && now < offer.expiresAt && !bought(`pack.boss.${offer.floor}`)) out.push({ ...base, expiresAt: offer.expiresAt, bossFloor: offer.floor, onceKey: `pack.boss.${offer.floor}` });
     } else if (p.pass) {
       // 끝난 뒤에도 받을 몫이 남아 있으면 받기 카드가 먼저(다시 사면 남은 몫이 덮어써지므로, 받은 뒤에 다시 살 수 있다).
-      if (daysLeft > 0 || pending > 0) out.push({ id: `pass.${id}`, kind: 'passClaim', pack: id, cur: 'claim', daysLeft, pending, state: pending > 0 ? '' : 'sold' });
+      if (daysLeft > 0 || pending > 0) out.push({ id: `pass.${id}`, kind: 'passClaim', pack: id, cur: 'claim', daysLeft, pending, dailyGold: base.dailyGold ?? 0, state: pending > 0 ? '' : 'sold' });
       else out.push(base);
     } else if (id === 'slot4') {
       if (player.bestFloor <= p.maxBestFloor && !player.inventory.isUnlocked('slot4') && !bought('pack.slot4')) out.push({ ...base, onceKey: 'pack.slot4' });
@@ -330,6 +331,7 @@ export function buyProduct(ctx, id, qty = 1, txId = null) {
       const pass = cfg.packs[p.pack].pass;
       giveDia(pass.daily * p.pending); // 밀린 날 합산(p.pending일치)
       for (const [item, count] of Object.entries(pass.dailyItems ?? {})) giveItem(item, count * p.pending);
+      if (p.dailyGold) bundle.gold = p.dailyGold * p.pending; // 밀린 날도 받는 날의 최고 층 기준
       src = 'pass';
       tx = `pass:${p.pack}:${today}`;
       after = () => {

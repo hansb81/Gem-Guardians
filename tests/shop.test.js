@@ -160,7 +160,7 @@ test('패스: 사면 즉시 다이아, 다음 날부터 하루 한 번 받기', 
 
 // 2026-11-27 결정: 못 받은 날은 다음에 받을 때 합산, 끝난 뒤 passGraceDays일까지(11-26의 "사라진다"를 대체).
 test('패스: 밀린 날 합산 - 1일, 밀린 3일, 종료 후 수령, 종료 3일 지남, 시계 되감기', () => {
-  const { daily, days, dailyItems } = SHOP.packs.monthly.pass;
+  const { daily, days, dailyGoldFloors } = SHOP.packs.monthly.pass;
   const grace = SHOP.packs.passGraceDays;
   const now = SHOP.products['pack.monthly'].grant.diamonds;
   const fresh = () => {
@@ -179,7 +179,9 @@ test('패스: 밀린 날 합산 - 1일, 밀린 3일, 종료 후 수령, 종료 3
   r = claim(p, '2026-11-11'); // 밀린 3일(11-09 ~ 11-11)
   assert.equal(r.product.pending, 3);
   assert.equal(p.diamonds, now + daily * 4);
-  assert.equal(p.items.dye, dailyItems.dye * 4, '매일 아이템도 일수만큼');
+  assert.equal(dailyGoldFloors, 1);
+  assert.equal(p.gold, Math.round(normalFloorReward(DATA, p.bestFloor)) * 4, '매일 골드(최고 층 일반 층 보상 x1)도 일수만큼');
+  assert.equal(p.items.dye, undefined, '염료는 더 안 준다');
   assert.equal(p.shop.passes.monthly.claimedDay, '2026-11-11');
   assert.equal(p.shop.passes.monthly.endDay, END, '종료일은 안 밀린다');
   assert.equal(claim(p, '2026-11-11').reason, 'sold', '하루 한 번');

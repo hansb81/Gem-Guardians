@@ -93,14 +93,17 @@ export function createCloudSave() {
       // owner 다름 + 이 계정에 서버 save 있음: 확인 없이 덮지 않는다 -> 충돌 팝업(이 계정 / 이 기기).
       // 서버 쪽 S > L, 기기 dirty: 두 기기에서 각각 진행 -> 충돌 팝업(다른 기기 / 이 기기).
       const owner = meta.owner !== uid;
-      if (owner || (S > L && meta.dirty)) {
+      // 새로 깐 기기(튜토리얼 전·1층)면 잃을 게 없다 -> 묻지 않고 서버 save(토스 재설치 복구 §8 T 등).
+      const d = saveSummary(deps.playerState.snapshot());
+      const fresh = !d.tutorialDone && d.bestFloor <= 1;
+      if (!fresh && (owner || (S > L && meta.dirty))) {
         const got = await deps.call('save-get');
         if (!got.ok || !got.save) return { action: 'none' }; // 못 받았으면 이번 세션은 올리지 않음(다음 시작 때 다시)
         blocked = true;
         conflict = got.save;
         return { action: 'conflict', server: got.save, kind: owner ? 'owner' : 'device' };
       }
-      if (S > L) {
+      if (S > L || (fresh && (owner || S !== L))) {
         const got = await deps.call('save-get');
         if (!got.ok || !got.save) return { action: 'none' };
         await api.applyServer(got.save);

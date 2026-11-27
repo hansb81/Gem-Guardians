@@ -18,7 +18,7 @@
   "items": { "perDay": 3, "costs": { "shuffle": 60, "hammer": 80, "scythe_h": 100, "dye": 120 } },
   "ads":   { "perDay": 2, "hours": 2 },
   "diaBoost": { "hours": 2, "costs": [20, 40, 80] },
-  "passBonus": { "monthly": 0.25 },
+  "passBonus": { "monthly": 0 },
   "unlockGift": 50,
   "badgeFill": 0.8,
   "emptyFill": 0.1
