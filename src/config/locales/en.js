@@ -415,21 +415,21 @@ export const en = {
     goldex: { small: 'Gold S', mid: 'Gold M', big: 'Gold L', desc: 'About {n} normal floors', desc2: 'Grows with your best floor', long: '{gold} gold for {dia} gems. Worth {n} normal floors at your best floor.' },
     legal: { restore: 'Restore Purchases', terms: 'Terms of Service', refund: 'Refund Policy' },
     notice: {
-      refund: 'You may cancel within 7 days if none of the purchased items have been used. Bundles with any used items, diamonds whose bonus was spent, and products already applied and used cannot be cancelled. Store refund policies also apply.',
+      refund: 'You may cancel the unused part within 7 days. Diamonds and items already used, and products already applied and used (Ad Removal, 4th Slot), cannot be cancelled. Store refund policies also apply.',
       minor: 'Users under 19 need consent from a parent or guardian. Purchases made without consent can be cancelled.',
       guest: 'Guest data may be lost if you delete the app or change devices. Link an account before purchasing.',
     },
     withdraw: {
-      dia: 'Cannot be cancelled once any of the diamonds (incl. first-purchase bonus) are used.',
+      dia: 'Used diamonds cannot be cancelled. The unused part is refundable within 7 days.',
       diaFirst: 'First purchase ×2! The bonus is reclaimed on refund and is not granted again.',
-      pack: 'Cannot be cancelled once any item in the pack is used.',
+      pack: 'Used items cannot be cancelled. Unused items in the pack are refundable within 7 days.',
       slot4: 'Applied instantly. Cannot be cancelled once the slot is used in battle or a rainbow is used.',
       adfree: 'Applied instantly. Cannot be cancelled once you claim an ad-free reward or use the diamonds.',
       pass: "Once you start claiming rewards, you can't cancel, but you may terminate for a pro-rated refund of the remaining days (10% fee).",
     },
     refundPop: {
       title: 'Refund Policy',
-      lines: ['• Full refund within 7 days if nothing from the purchase has been used.', '• A refund reclaims all diamonds, items and bonuses from that purchase.', '• Passes can be terminated for a pro-rated refund of the remaining days.', '• How to request'],
+      lines: ['• Within 7 days the unused part is refunded (in full if nothing was used).', '• A refund reclaims the refunded diamonds, items and bonuses.', '• Passes can be terminated for a pro-rated refund of the remaining days.', '• How to request'],
       market: {
         android: '  – Google Play: via Google Play within 48 hours, by email after that',
         onestore: '  – ONE store: ONE store purchase history or by email',

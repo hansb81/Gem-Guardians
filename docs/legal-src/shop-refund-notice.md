@@ -6,7 +6,7 @@
 
 | 키 | ko | en |
 |---|---|---|
-| shop.notice.refund | 구매 후 7일 안에, 받은 아이템을 하나도 쓰지 않았다면 청약철회(환불)할 수 있어요. 일부를 쓴 묶음 상품, 보너스를 쓴 다이아, 이미 적용되어 쓴 상품은 철회가 제한돼요. 결제·환불은 각 마켓 정책을 함께 따릅니다. | You may cancel within 7 days if none of the purchased items have been used. Bundles with any used items, diamonds whose bonus was spent, and products already applied and used cannot be cancelled. Store refund policies also apply. |
+| shop.notice.refund | 구매 후 7일 안에 쓰지 않은 부분은 청약철회(환불)할 수 있어요. 이미 쓴 다이아·아이템과, 이미 적용되어 쓴 상품(광고 제거·4번째 슬롯)은 철회가 제한돼요. 결제·환불은 각 마켓 정책을 함께 따릅니다. | You may cancel the unused part within 7 days. Diamonds and items already used, and products already applied and used (Ad Removal, 4th Slot), cannot be cancelled. Store refund policies also apply. |
 | shop.notice.minor | 만 19세 미만은 부모님 등 법정대리인의 동의를 받고 구매해 주세요. 동의 없는 결제는 취소할 수 있어요. | Users under 19 need consent from a parent or guardian. Purchases made without consent can be cancelled. |
 | shop.notice.guest | 게스트 계정은 앱을 지우거나 기기를 바꾸면 아이템이 사라질 수 있어요. 구매 전에 계정 연결을 권해요. | Guest data may be lost if you delete the app or change devices. Link an account before purchasing. |
 | shop.link.terms | 이용약관 | Terms of Service |
@@ -17,9 +17,9 @@
 
 | 상품 | ko | en |
 |---|---|---|
-| 다이아 dia_0~5 | 받은 다이아(첫 구매 보너스 포함)를 쓰면 청약철회할 수 없어요. | Cannot be cancelled once any of the diamonds (incl. first-purchase bonus) are used. |
+| 다이아 dia_0~5 | 쓴 다이아는 청약철회할 수 없어요. 쓰지 않은 만큼은 7일 안에 환불돼요. | Used diamonds cannot be cancelled. The unused part is refundable within 7 days. |
 | 다이아 첫 구매 배지 | 첫 구매 2배! 환불 시 보너스도 함께 회수되고 다시 받을 수 없어요. | First purchase ×2! The bonus is reclaimed on refund and is not granted again. |
-| 스타터/보스/챕터 팩 | 구성품을 하나라도 쓰면 청약철회할 수 없어요. | Cannot be cancelled once any item in the pack is used. |
+| 스타터/보스/챕터 팩 | 쓴 구성품은 청약철회할 수 없어요. 쓰지 않은 구성품만큼은 7일 안에 환불돼요. | Used items cannot be cancelled. Unused items in the pack are refundable within 7 days. |
 | 4번째 슬롯 팩 | 구매 즉시 적용돼요. 슬롯을 전투에서 쓰거나 무지개를 쓰면 청약철회할 수 없어요. | Applied instantly. Cannot be cancelled once the slot is used in battle or a rainbow is used. |
 | 광고 제거 | 구매 즉시 적용돼요. 광고 없이 보상을 한 번 받거나 다이아를 쓰면 청약철회할 수 없어요. | Applied instantly. Cannot be cancelled once you claim an ad-free reward or use the diamonds. |
 | 주간/월간 패스 | 보상을 받기 시작하면 청약철회는 안 되고, 남은 일수만큼 해지 환불(위약금 10%)을 신청할 수 있어요. | Once you start claiming rewards, you can't cancel, but you may terminate for a pro-rated refund of the remaining days (10% fee). |
@@ -29,8 +29,8 @@
 
 **ko**
 > **환불 안내**
-> • 구매 후 7일 안에, 받은 것을 하나도 쓰지 않았다면 전액 환불돼요.
-> • 환불하면 그 결제로 받은 다이아·아이템·보너스를 회수해요.
+> • 구매 후 7일 안에 쓰지 않은 부분은 환불돼요(하나도 안 썼다면 전액).
+> • 환불되는 만큼의 다이아·아이템·보너스를 회수해요.
 > • 패스는 받기 시작한 뒤에도 남은 일수만큼 해지 환불할 수 있어요.
 > • 신청 방법
 >   – Google Play: 48시간 안에는 Google Play에서, 그 뒤에는 아래 이메일로
@@ -43,8 +43,8 @@
 
 **en**
 > **Refund Policy**
-> • Full refund within 7 days if nothing from the purchase has been used.
-> • A refund reclaims all diamonds, items and bonuses from that purchase.
+> • Within 7 days the unused part is refunded (in full if nothing was used).
+> • A refund reclaims the refunded diamonds, items and bonuses.
 > • Passes can be terminated for a pro-rated refund of the remaining days.
 > • How to request
 >   – Google Play: via Google Play within 48 hours, by email after that
