@@ -16,7 +16,7 @@ const manifest = JSON.parse(readFileSync(join(__dirname, '..', 'assets', 'sfx', 
 // 테스트 사이에 값이 새지 않도록 매번 새 저장소(platform.storage 모양, async)를 끼운다. 캐시 비우기는 동기라
 // 기본값만 보는 테스트는 기다리지 않아도 된다. 저장값을 미리 넣은 경우·저장 결과를 보는 경우만 await.
 async function stubStorage(initial = {}) {
-  const data = { dataEpoch: '2', ...initial };
+  const data = { dataEpoch: '1', ...initial };
   await initStorage({
     get: async (k) => (k in data ? data[k] : null),
     set: async (k, v) => {
@@ -201,7 +201,7 @@ test('storage: dataEpoch가 다르면 아는 키를 지우고 새로 시작한�
   const data = { dataEpoch: '0', sfxVolume: '0.1', other: 'x' };
   await initStorage({ get: async (k) => data[k] ?? null, set: async (k, v) => { data[k] = v; }, remove: async (k) => { delete data[k]; } });
   assert.equal(storage.load('sfxVolume'), null);
-  assert.deepEqual(data, { dataEpoch: '2', other: 'x' });
+  assert.deepEqual(data, { dataEpoch: '1', other: 'x' });
 });
 
 test("pauseFor('ad')는 AudioContext를 suspend(효과음 포함), 결제('purchase')는 BGM만 끈다", async () => {
