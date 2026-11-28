@@ -1469,7 +1469,6 @@ window.addEventListener('pointerup', (e) => {
   sliderDrag = null;
   const menuUp = scene === 'menu' && !fade && !compBusy ?mainMenuScreen.handlePointerUp(frameX(e), frameY(e)) : mainMenuScreen.handlePointerUp();
   if (menuUp === 'openRanking') rankingOpenAt = mainMenuScreen.crystalTapAt + mainMenuScreen.crystalTapMs();
-  if (menuUp === 'openPrep') openPrep('village');
   if (menuUp === 'openVault') vaultOpenAt = mainMenuScreen.chestOpenAt + mainMenuScreen.chestOpenMs();
   if (scene === 'shop') shopScreen.handlePointerUp();
   mineScreen.handlePointerUp(); // 강화 버튼 꾹 누르기 끝 + 미뤄 둔 저장
@@ -1539,7 +1538,7 @@ const backHandlers = [
   },
   () => scene === 'menu' && ranking.isOpen && (ranking.close(), true),
   () => scene === 'menu' && prep != null && ((prep = null), (upgradeHold = null), true),
-  () => scene === 'menu' && vaultOpenAt != null, // 상자 열기 연출 중(0.34초)에는 뒤로가기도 받지 않는다.
+  () => scene === 'menu' && (vaultOpenAt != null || mainMenuScreen.altarTapAt != null), // 상자 열기·제단 탭 연출 중에는 뒤로가기도 받지 않는다.
   () => scene === 'menu' && mainMenuScreen.closePopup(),
   // 메뉴 맨 끝 = 종료 확인. 앱을 스스로 못 닫는 마켓(iOS·웹)은 처리 안 함(OS 기본 동작).
   () => scene === 'menu' && platform.caps.exit && openExitConfirm('app'),
@@ -1908,6 +1907,8 @@ function loop(now) {
     if (vaultOpenAt == null && !prep) mainMenuScreen.chestOpenAt = null;
     // 원석: 누름 연출이 끝나면 랭킹 팝업. 새 시즌 소용돌이는 메뉴가 가려지지 않았을 때 한 번.
     const menuFree = !mainMenuScreen.popup && !ranking.isOpen && !rewardPopup.active && !prep && !fade;
+    // 제단 문양: 탭 연출이 끝나면 정비 팝업(뒤로가기·입력은 연출 중 막혀 있다).
+    if (mainMenuScreen.altarTapDone(now) && menuFree) openPrep('village');
     if (rankingOpenAt != null && now >= rankingOpenAt) {
       rankingOpenAt = mainMenuScreen.crystalTapAt = null;
       if (menuFree) ranking.open();

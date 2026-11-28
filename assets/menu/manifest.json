@@ -344,6 +344,28 @@
   "plate": "ui/menu/plate.png 9-slice [8,8,8,8] x2, text '정비' (i18n menu.prep) #e8dcc0 + #0d0a10 outline",
   "badge": "없음(빨간 점은 vaultChest 이름판으로 옮김)"
  },
+ "altarRune": {
+  "note": "제단 기둥 패널의 + 고리를 고대문자 하나로 덮는다. idle은 altarInventory.idle 다음에 그린다(패널 안쪽 불투명이라 옛 + 고리를 가림). 탭하면 tap을 idle 위에 한 번 재생하고 끝나면 정비 팝업을 연다. 좌표 native (x3).",
+  "idle": {
+   "file": "menu_altar_rune_idle.png",
+   "x": 85,
+   "y": 185,
+   "w": 12,
+   "h": 17,
+   "frames": 16,
+   "frameMs": 150
+  },
+  "tap": {
+   "file": "menu_altar_rune_tap.png",
+   "x": 74,
+   "y": 177,
+   "w": 33,
+   "h": 33,
+   "frames": 6,
+   "frameMs": 60,
+   "openAfterMs": 360
+  }
+ },
  "vaultChest": {
   "note": "보물상자 = 아이템 보관함 입구. idle 조각은 altarInventory.idle처럼 배경 루프와 같은 시계로 pieces 끝에 붙인다. 열기 연출은 코드가 open 시트로 그 위에 덮어 그린다.",
   "idle": {

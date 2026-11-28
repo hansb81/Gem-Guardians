@@ -194,3 +194,19 @@ test('우편함: 6통까지는 그대로, 넘으면 끌어서 아래 우편을 �
   const r = m.handlePointerDown(last[0] + 10, view[1] + view[3] + 4);
   assert.ok(r == null || !String(r).startsWith('mail'));
 });
+
+test('제단 문양: 떼면 탭 연출 시작, 360ms 전엔 안 열리고 뒤에 한 번만 열림, 연출 중 두 번째 탭 무시', () => {
+  const m = menu();
+  m.handlePointerDown(270, 600);
+  assert.equal(m.handlePointerUp(280, 620), 'openPrep');
+  assert.notEqual(m.altarTapAt, null);
+  const t0 = m.altarTapAt;
+  assert.equal(m.altarTapMs(), 360);
+  assert.equal(m.handlePointerDown(270, 600), null); // 연출 중 - 눌림도 안 잡힌다
+  assert.equal(m.handlePointerUp(270, 600), null);
+  assert.equal(m.altarTapAt, t0, '두 번째 탭이 연출을 다시 시작하지 않는다');
+  assert.equal(m.altarTapDone(t0 + 359), false);
+  assert.equal(m.altarTapDone(t0 + 360), true);
+  assert.equal(m.altarTapDone(t0 + 400), false, '한 번만');
+  assert.equal(m.altarTapAt, null);
+});

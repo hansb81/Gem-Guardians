@@ -272,6 +272,8 @@ export class MainMenuScreen {
     this._chestOpenImg = null;
     // 원석 누름 연출(crystal_tap)을 시작한 시각(ms). null이 아닌 동안 메뉴 입력을 안 받는다 - main.js가 crystalTapMs() 뒤 랭킹을 열며 null로.
     this.crystalTapAt = null;
+    // 제단 문양 탭 연출(altarRune.tap)을 시작한 시각(ms). null이 아닌 동안 메뉴 입력을 안 받는다 - main.js가 altarTapDone()으로 정비를 연다.
+    this.altarTapAt = null;
     this.swirlAt = null; // 새 시즌 소용돌이를 시작한 시각(ms) - main.js가 켜고, 다 돌면 그리면서 null로
     this.crown = () => 'iron'; // main.js: 왕관 금속(iron|bronze|silver|gold = 이번 주 경쟁 구간)
     this._sym = new Map(); // manifest.symbols 시트 파일 -> 로드 상태
@@ -321,6 +323,7 @@ export class MainMenuScreen {
       const files = [...Object.values(sy.rankCrown?.sheets ?? {}), ...Object.values(sy.rankAura?.sheets ?? {}), sy.crystalTap, sy.seasonSwirl].map((x) => x?.file);
       if (sy.plateIcons) files.push(sy.plateIcons.icon_crown.split(' ')[0]);
       for (const f of files) if (f) loadImage(`assets/${f}`).then((s) => this._sym.set(f, s));
+      for (const r of [m?.altarRune?.idle, m?.altarRune?.tap]) if (r) loadImage(`assets/menu/${r.file}`).then((s) => this._sym.set(r.file, s));
     });
     loadImage('assets/menu/menu_bg.png').then((s) => {
       this.bg = s;
@@ -363,6 +366,34 @@ export class MainMenuScreen {
     return tap ? tap.frames * tap.frameMs : 0;
   }
 
+  // 제단 문양 탭 연출 길이(ms) - 시트 정보가 없으면 0(바로 열기).
+  altarTapMs() {
+    return this.manifest?.altarRune?.tap?.openAfterMs ?? 0;
+  }
+
+  // 탭 연출이 끝난 첫 호출에만 true(연출을 끝낸다) - main.js가 이때 정비 팝업을 연다.
+  altarTapDone(nowMs) {
+    if (this.altarTapAt == null || nowMs < this.altarTapAt + this.altarTapMs()) return false;
+    this.altarTapAt = null;
+    return true;
+  }
+
+  // 가로 한 줄 시트의 frame번째 칸을 네이티브 (x, y)에.
+  _runeFrame(place, meta, frame) {
+    const st = this._sym.get(meta.file);
+    if (ready(st)) this._ctx.drawImage(st.img, frame * meta.w, 0, meta.w, meta.h, ...place(meta.x, meta.y, meta.w, meta.h));
+  }
+
+  // 제단 패널 문양(altarRune): 받침대 idle 조각 다음에 은은한 idle, 탭하면 그 위에 tap 한 번.
+  _drawRune(place) {
+    const rune = this.manifest?.altarRune;
+    if (!rune) return;
+    this._runeFrame(place, rune.idle, Math.floor(this._now / rune.idle.frameMs) % rune.idle.frames);
+    if (this.altarTapAt == null) return;
+    const f = Math.floor((this._now - this.altarTapAt) / rune.tap.frameMs);
+    if (f >= 0 && f < rune.tap.frames) this._runeFrame(place, rune.tap, f);
+  }
+
   // 시트의 frame번째 칸을 네이티브 (x, y)에.
   // 랭킹 내 기록 카드가 쓰는 왕관 시트(0프레임) - { img, w, h } | null.
   crownSheet(metal) {
@@ -380,6 +411,7 @@ export class MainMenuScreen {
 
   // 배경 조각(원석) 다음·불씨 전: 오라 -> 왕관 -> (누를 때) crystal_tap -> (새 시즌) season_swirl. 전부 원석과 같이 둥실거린다.
   _drawSymbols(place) {
+    this._drawRune(place);
     const sy = this.manifest?.symbols;
     if (!sy) return;
     const ctx = this._ctx;
@@ -1800,7 +1832,7 @@ export class MainMenuScreen {
     if (!this._transform) return null;
 
     if (this.popup) return this._handlePopupPointerDown(x, y);
-    if (this.chestOpenAt != null || this.crystalTapAt != null) return null; // 상자 열기·원석 누름 연출 중 - 다른 입력 무시
+    if (this.chestOpenAt != null || this.crystalTapAt != null || this.altarTapAt != null) return null; // 상자 열기·원석·제단 누름 연출 중 - 다른 입력 무시
 
     const layout = this._layout();
     if (pressButton(x, y, this._toScreen(layout.playButton))) {
@@ -2070,7 +2102,7 @@ export class MainMenuScreen {
     else this._applySliderAt(x, this._drag.geom);
   }
 
-  // (x, y)가 없으면(pointercancel) 누름만 푼다. 영역 안에서 떼면 받침대 'openPrep'(정비 팝업), 원석 'openRanking'(랭킹 팝업),
+  // (x, y)가 없으면(pointercancel) 누름만 푼다. 영역 안에서 떼면 받침대 'openPrep'(문양 탭 연출 - main.js가 altarTapDone() 때 정비 팝업), 원석 'openRanking'(랭킹 팝업),
   // 상자 'openVault'(열기 연출을 시작한다 - main.js가 chestOpenMs() 뒤에 보관함 팝업을 연다). 원석도 누름 연출 crystalTapMs() 뒤에 연다.
   handlePointerUp(x, y) {
     const up = this._transform && x != null;
@@ -2088,6 +2120,7 @@ export class MainMenuScreen {
     audio.play('ui_click');
     if (chest) this.chestOpenAt = performance.now();
     if (crystal) this.crystalTapAt = performance.now();
+    if (altar) this.altarTapAt = performance.now();
     return altar ? 'openPrep' : chest ? 'openVault' : 'openRanking';
   }
 }
