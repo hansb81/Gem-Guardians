@@ -37,7 +37,7 @@ const REASONS = {
   role: '권한이 없어요(조회 전용 계정)', rateLimited: '요청이 너무 많아요. 1분 뒤 다시', badAction: '모르는 요청', badRequest: '입력값이 잘못됐어요',
   error: '서버 오류(로그 확인)', network: '네트워크 오류', badBundle: '지급 내용이 잘못됐어요(상한·키 확인)', badMode: '지급 방식이 잘못됐어요',
   badPlayers: '받는 사람은 1~200명', missing: '없는 플레이어가 있어요', notFound: '찾을 수 없어요', confirm: '확인 문구가 달라요',
-  dailyLimit: '전체 발송은 하루 3회까지', notEligible: '복구 대상이 아니에요(verified·미지급만)', unknownProduct: '모르는 상품',
+  dailyLimit: '전체 발송은 하루 3회까지', exists: '이미 있는 id예요', bundleChanged: '이미 받은 사람이 있어요', notEligible: '복구 대상이 아니에요(verified·미지급만)', unknownProduct: '모르는 상품',
 };
 export const reasonText = (r) => (r?.reason ? `${REASONS[r.reason] ?? r.reason}${r.message ? `: ${r.message}` : ''}` : '실패');
 export const done = (r, okText) => (r.ok ? toast(okText) : toast(reasonText(r), false), r.ok);

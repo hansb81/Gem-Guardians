@@ -108,7 +108,15 @@ export const en = {
       line: 'Cloud save · {time}', pending: 'Cloud save · waiting to sync',
     },
     attendance: { title: 'Daily Attendance' },
-    event: { title: 'Event', body: 'New events are coming soon', ad: 'Ad' },
+    event: { title: 'Event', body: 'New events are coming soon', ad: 'Ad', hint: 'Tap a banner for details' },
+    eventDetail: {
+      title: 'Event', reward: 'Rewards', period: 'Period  {range} (KST)', once: 'One claim per account',
+      claim: 'Claim', busy: 'Claiming…', claimed: 'Claimed', expired: 'Event has ended', offline: 'Internet connection required',
+      err: {
+        notFound: 'This event is not available now', notStarted: 'This event has not started yet',
+        platform: 'This event is not available on this store', banned: 'This account cannot claim rewards', error: 'Please try again later',
+      },
+    },
     mail: { title: 'Mailbox' },
     help: {
       title: "Help",
@@ -320,9 +328,11 @@ export const en = {
       totalAttack: 'Total ATK {n}',
       holdHint: 'Hold to keep upgrading',
       max: 'MAX',
-      maxN: 'MAX +{n}',
+      maxLevel: 'MAX LEVEL',
+      maxTo: 'MAX ▶ Lv.{lv}',
+      noGold: 'Need Gold',
       all: 'Upgrade All',
-      allN: 'Upgrade All +{n} ({cost})',
+      allN: 'Upgrade All ({cost}) · Lowest first',
     },
     button: {
       resume: 'Resume',

@@ -24,6 +24,7 @@ import { guardianFxSetting } from './guardianFx.js';
 import { drawImageSnapped, screen } from './screenFit.js';
 import { createDomInput, placeDomInput } from './ui/domInput.js';
 import { splitName } from './rewardPopup.js';
+import { eventPeriodText, eventButtonState, canClaimEvent, isTap } from '../game/eventRules.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -88,6 +89,7 @@ const POPUP_SIZES = {
   about: [480, 820],
   attendance: [400, 180], // 서버가 켜져 있으면 ATT 높이(_popupCardBasis)
   event: [520, 640], // 폭 520 = 360dp 폰에서 320dp 배너(basis 480)+여백이 들어가게. 이벤트 목록은 스크롤, 광고 칸은 아래 고정.
+  eventDetail: [500, 660], // 광고 없음(main.js syncPopupBanner는 popup === 'event'일 때만)
   mail: [400, 180],
   exit: [400, 240],
   coupon: [400, 312],
@@ -101,7 +103,12 @@ const POPUP_SIZES = {
 // 칸은 카드 아랫변에서 bottom만큼 위, 라벨은 칸 위 labelGap.
 const EVENT_AD = { labelGap: 12, pad: 4, bottom: 24, bannerW: 320, bannerH: 50, minCanvasCss: 340 };
 // 이벤트 목록(배너 줄) - viewY부터 광고 라벨 위 gap까지 보이고 그 안에서 스크롤.
-const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12 };
+const EVENT_LIST = { viewY: 84, side: 24, gap: 20, rowH: 110, rowGap: 12, hintH: 40 };
+// 배너 줄(목록·상세 공통, 줄 왼쪽 위 기준): 그림 236x55를 2배, 제목·기간 글자, 받음 도장 2배, 빨간 점 3배.
+const EVENT_ROW = { w: 472, h: 110, title: [52, 36], period: [52, 78], stamp: [388, 22], badge: [442, 6], srcW: 236, srcH: 55 };
+// 상세 팝업(카드 왼쪽 위 기준, 가운데 정렬). 보상 칸 아이콘: 14px 아이템 4배, 16px 다이아·골드·정령석 3배.
+const EVENT_DETAIL = { bannerY: 84, bodyY: 226, bodyLineH: 24, bodyW: 440, rewardY: 296, box: [314, 472, 128], iconY: 46, qtyY: 99,
+  periodY: 476, onceY: 500, msgY: 528, btn: [240, 60], btnBottom: 104 };
 // 진동 토글 줄(진동을 지원하는 기기에서만 설정 팝업 맨 아래에 붙는다 - 팝업도 그만큼 길어진다).
 const HAPTICS_BUTTON = { id: 'haptics', rect: [40, 524, 320, 46] };
 const HAPTICS_EXTRA_H = 56;
@@ -129,6 +136,7 @@ const COUPON = { hintY: 100, input: [40, 124, 320, 56], msgY: 206, cancel: [40, 
 export const COUPON_REASONS = ['notFound', 'already', 'expired', 'notStarted', 'soldOut', 'platform', 'tooMany', 'badCode', 'offline', 'banned'];
 // 도움말·게임 정보·쿠폰은 X·뒤로가기로 설정에 돌아간다.
 const BACK_TO_SETTINGS = new Set(['help', 'about', 'coupon', 'account']);
+// 이벤트 상세는 X·뒤로가기로 이벤트 목록에.
 // 종료 확인(뒤로가기 - 메뉴에서). 카드 왼쪽 위 기준.
 const EXIT = { bodyY: 110, cancel: [40, 160, 150, 46], ok: [210, 160, 150, 46] };
 
@@ -275,8 +283,14 @@ export class MainMenuScreen {
     this._aboutScroll = 0; // 게임 정보 본문 스크롤(basis px).
     this._eventScroll = 0; // 이벤트 목록 스크롤(basis px).
     this._mailScroll = 0; // 우편 목록 스크롤(basis px).
-    // 이벤트 목록 [{ id, title: { ko, en } }] - 이벤트 API가 생기면 main.js가 채운다(docs/server.md §19-11).
+    // 이벤트 목록(docs/events.md) - serverUi가 hello·event-list 결과(EventService.list)로 채운다.
     this.events = [];
+    this.eventBadge = () => false; // serverUi: 받을 수 있는 이벤트가 있으면 메뉴 이벤트 버튼 빨간 점
+    this._eventDetailId = null; // 상세 팝업에 띄운 이벤트 id
+    this._eventMsg = null; // 상세 팝업 실패 reason(버튼 위 빨간 한 줄)
+    this._banners = new Map(); // 원격 배너 URL -> { img } (한 번만 받는다, 실패·크기 다름 = img null)
+    this._periodCache = new Map(); // `${id}|${loc}|${withTime}` -> 기간 글자
+    this._eventBodyWrap = null; // { key, lines }
     this._aboutWrap = null; // { key, lines } - 배율·언어가 같으면 줄바꿈 결과를 다시 쓴다.
     this._helpImages = {}; // 이름 -> 로드 상태(도움말을 처음 열 때 그 쪽 그림만 불러온다).
     this.mailBadge = () => false; // main.js: 서버가 켜져 있으면 "안 받은 우편 있음"
@@ -520,9 +534,8 @@ export class MainMenuScreen {
   _drawUi(ctx, playerState) {
     const layout = this._layout();
     this._drawCurrencyBar(ctx, playerState);
-    // 이벤트 배지는 끔(보상 상태가 생기면 여기에 연결).
     this._drawIconButton(ctx, 'attendance', layout.attendance, COLORS.gold, this.attendanceBadge());
-    this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, false);
+    this._drawIconButton(ctx, 'event', layout.event, COLORS.purple, this.eventBadge());
     this._drawIconButton(ctx, 'mail', layout.mail, COLORS.bone, this.mailBadge());
     this._drawIconButton(ctx, 'settings', layout.settings, COLORS.bg3, false);
     this._drawIconButton(ctx, 'shop', layout.shop, COLORS.blue, false);
@@ -626,7 +639,8 @@ export class MainMenuScreen {
 
     const [cx, cy, cw] = card;
     // 문장(48x48)을 윗변 가운데에 반쯤 걸쳐서. 전용 문장이 없는 팝업은 설정 문장을 쓴다. 제목은 금색 #f2d264.
-    const emblem = this.popup === 'mode' ? 'menu/emblem_mode.png' : this.popup === 'coupon' ? 'menu/emblem_coupon.png' : 'menu/emblem_settings.png';
+    const own = ['mode', 'coupon', 'attendance', 'event', 'mail'].includes(this.popup);
+    const emblem = `menu/emblem_${own ? this.popup : 'settings'}.png`;
     if (!this._sprite(ctx, emblem, cx + cw / 2 - 24, cy - 24)) this._sprite(ctx, 'menu/emblem_settings.png', cx + cw / 2 - 24, cy - 24);
     const title = t(`menu.${this._popupKey()}.title`);
     this._text(ctx, title, cx + cw / 2, cy + 52, { size: 22, color: COLORS.title, align: 'center' });
@@ -642,6 +656,7 @@ export class MainMenuScreen {
     else if (this.popup === 'attendance' && this.server?.att) this._drawAttendancePopup(ctx, card);
     else if (this.popup === 'mail' && this.server?.mail) this._drawMailPopup(ctx, card);
     else if (this.popup === 'coupon') this._drawCouponPopup(ctx, card);
+    else if (this.popup === 'eventDetail') this._drawEventDetail(ctx, card);
     else if (this.popup === 'saveConflict') this._drawSaveConflictPopup(ctx, card);
     else if (this.popup === 'account' && this.account) this._drawAccountPopup(ctx, card);
     else if (this.popup === 'deleteAccount' && this.account) this._drawDeleteAccountPopup(ctx, card);
@@ -854,21 +869,22 @@ export class MainMenuScreen {
       this._text(ctx, t('menu.event.body'), view[0] + view[2] / 2, view[1] + view[3] / 2, { size: 13, align: 'center' });
     } else {
       const step = EVENT_LIST.rowH + EVENT_LIST.rowGap;
-      this._eventScroll = Math.max(0, Math.min(this._eventScroll, list.length * step - EVENT_LIST.rowGap - view[3]));
+      // 끝의 안내 한 줄("배너를 누르면 자세히 볼 수 있어요")까지 스크롤 범위.
+      const contentH = list.length * step - EVENT_LIST.rowGap + EVENT_LIST.hintH;
+      this._eventScroll = Math.max(0, Math.min(this._eventScroll, contentH - view[3]));
       const sv = this._toScreen(view);
       ctx.save();
       ctx.beginPath();
       ctx.rect(sv.x, sv.y, sv.width, sv.height);
       ctx.clip();
-      const loc = getLocale();
+      const rowX = view[0] + (view[2] - EVENT_ROW.w) / 2;
       for (let i = 0; i < list.length; i++) {
         const y = view[1] + i * step - this._eventScroll;
         if (y + EVENT_LIST.rowH < view[1] || y > view[1] + view[3]) continue;
-        const row = [view[0], y, view[2], EVENT_LIST.rowH];
-        // shortcut: 배너 그림 없이 제목 글자만 - 이벤트 배너 이미지가 생기면 여기서 그림을 그린다.
-        if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
-        this._text(ctx, list[i].title?.[loc] || list[i].title?.ko || '', row[0] + row[2] / 2, y + EVENT_LIST.rowH / 2, { size: 15, align: 'center' });
+        this._drawEventRow(ctx, list[i], rowX, y, true);
       }
+      const hintY = view[1] + list.length * step - EVENT_LIST.rowGap - this._eventScroll + EVENT_LIST.hintH / 2;
+      this._text(ctx, t('menu.event.hint'), view[0] + view[2] / 2, hintY, { size: 11, align: 'center', color: COLORS.dim });
       ctx.restore();
     }
     if (!this.popupAd()) return;
@@ -883,6 +899,186 @@ export class MainMenuScreen {
       ctx.lineWidth = 1;
       ctx.strokeRect(r.x + r.width / 2 - EVENT_AD.bannerW / 2 + 0.5, r.y + r.height / 2 - EVENT_AD.bannerH / 2 + 0.5, EVENT_AD.bannerW - 1, EVENT_AD.bannerH - 1);
     }
+  }
+
+  // ---- 이벤트 배너 줄·상세(docs/events.md) ----
+
+  // 원격 배너(Storage 공개 URL): 한 번만 받아 메모리에 둔다. 받는 중·실패·236x55가 아님 = null(앱 안 그림으로).
+  _remoteBanner(url) {
+    if (!url) return null;
+    let st = this._banners.get(url);
+    if (!st) {
+      st = { img: null };
+      this._banners.set(url, st);
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        if (img.naturalWidth === EVENT_ROW.srcW && img.naturalHeight === EVENT_ROW.srcH) st.img = img;
+      };
+      img.src = url;
+    }
+    return st.img;
+  }
+
+  // 그림 하나를 basis (bx, by)에 원본의 s배로(스무딩 없이).
+  _imgAt(ctx, img, bx, by, s) {
+    const { offsetX, offsetY, k } = this._transform;
+    drawImageSnapped(ctx, img, offsetX + bx * k, offsetY + by * k, img.width * s * k, img.height * s * k);
+  }
+
+  _eventPeriod(e, withTime) {
+    const loc = getLocale();
+    const key = `${e.id}|${loc}|${withTime}|${e.startsAt}|${e.endsAt}`;
+    let v = this._periodCache.get(key);
+    if (v == null) this._periodCache.set(key, (v = eventPeriodText(e.startsAt, e.endsAt, loc, withTime)));
+    return v;
+  }
+
+  // 배너 줄 [x, y, 472, 110]: 원격 그림 -> 앱 안 그림(banner_{banner}) -> banner_default. marks = 받음 덮개·도장 / 빨간 점.
+  _drawEventRow(ctx, e, x, y, marks) {
+    const local = (name) => {
+      const st = getUi(this._assets, `events/banner_${name}.png`);
+      return uiReady(st) ? st.img : null;
+    };
+    const img = this._remoteBanner(e.bannerUrl) ?? (e.banner ? local(e.banner) : null) ?? local('default');
+    const row = [x, y, EVENT_ROW.w, EVENT_ROW.h];
+    if (img) this._imgAt(ctx, img, x, y, EVENT_ROW.w / img.width);
+    else if (!this._nine(ctx, 'panels/panel_inset.png', row)) this._panel(ctx, row, COLORS.bg2, COLORS.bg3);
+    const loc = getLocale();
+    this._text(ctx, e.title?.[loc] || e.title?.ko || '', x + EVENT_ROW.title[0], y + EVENT_ROW.title[1], { size: 22, color: COLORS.title });
+    this._text(ctx, this._eventPeriod(e, false), x + EVENT_ROW.period[0], y + EVENT_ROW.period[1], { size: 13, color: COLORS.dim });
+    if (!marks) return;
+    if (e.claimed) {
+      const r = this._toScreen(row);
+      ctx.fillStyle = 'rgba(13, 10, 16, 0.55)';
+      ctx.fillRect(r.x, r.y, r.width, r.height);
+      const st = getUi(this._assets, 'events/stamp_claimed.png');
+      if (uiReady(st)) this._imgAt(ctx, st.img, x + EVENT_ROW.stamp[0], y + EVENT_ROW.stamp[1], 2);
+    } else if (canClaimEvent(e)) {
+      const st = getUi(this._assets, 'menu/badge.png');
+      if (uiReady(st)) this._imgAt(ctx, st.img, x + EVENT_ROW.badge[0], y + EVENT_ROW.badge[1], 3);
+    }
+  }
+
+  // 목록에서 (x, y)를 탭한 줄 -> 상세 팝업.
+  _openEventAt(x, y) {
+    const view = this._eventView(this._popupCardBasis());
+    const { offsetX, offsetY, k } = this._transform;
+    const bx = (x - offsetX) / k;
+    const by = (y - offsetY) / k;
+    if (bx < view[0] || bx > view[0] + view[2] || by < view[1] || by > view[1] + view[3]) return;
+    const step = EVENT_LIST.rowH + EVENT_LIST.rowGap;
+    const off = by - view[1] + this._eventScroll;
+    const i = Math.floor(off / step);
+    if (i < 0 || i >= this.events.length || off - i * step > EVENT_LIST.rowH) return;
+    audio.play('ui_click');
+    this.openEventDetail(this.events[i]);
+  }
+
+  // 상세 팝업 열기(목록 탭, serverUi 자동 열기).
+  openEventDetail(e) {
+    this._eventDetailId = e.id;
+    this._eventMsg = null;
+    this.popup = 'eventDetail';
+  }
+
+  // serverUi: 받기 결과. 실패 reason은 버튼 위 빨간 한 줄(받음·기간 끝은 버튼 상태로 보인다).
+  eventResult(res) {
+    this._eventMsg = res.ok || ['already', 'expired', 'busy'].includes(res.reason) ? null : res.reason;
+  }
+
+  _detailEvent() {
+    return this.events.find((e) => e.id === this._eventDetailId) ?? null;
+  }
+
+  _eventBtnRect([cx, cy, cw, ch]) {
+    const [w, h] = EVENT_DETAIL.btn;
+    return [cx + (cw - w) / 2, cy + ch - EVENT_DETAIL.btnBottom, w, h];
+  }
+
+  _eventBtnState(e) {
+    return eventButtonState(e, { busy: !!this.server?.event?.busy, online: this.server?.online?.() ?? false });
+  }
+
+  // 설명 줄바꿈(공백 단위, 줄바꿈 문자 = 새 줄). 이벤트·언어·배율이 같으면 다시 쓴다.
+  _eventBodyLines(ctx, e) {
+    const loc = getLocale();
+    const text = e.body?.[loc] || e.body?.ko || '';
+    const key = `${e.id}|${loc}|${this._transform.k}|${text}`;
+    if (this._eventBodyWrap?.key === key) return this._eventBodyWrap.lines;
+    const wrap = (para, maxW) => {
+      const out = [];
+      let line = '';
+      for (const word of para.split(' ')) {
+        const next = line ? `${line} ${word}` : word;
+        if (line && this._measure(ctx, next, 15) > maxW) {
+          out.push(line);
+          line = word;
+        } else line = next;
+      }
+      return [...out, line];
+    };
+    const lines = [];
+    for (const para of text.split('\n')) {
+      let p = wrap(para, EVENT_DETAIL.bodyW);
+      // 줄 길이를 고르게(목업처럼 "…기념해 / 모든 수호자에게…") - 줄 수가 늘면 원래대로.
+      if (p.length > 1) {
+        const even = wrap(para, (this._measure(ctx, para, 15) / p.length) * 1.15);
+        if (even.length === p.length) p = even;
+      }
+      lines.push(...p);
+    }
+    this._eventBodyWrap = { key, lines };
+    return lines;
+  }
+
+  // 보상 칸: [그림 상태, 배율, 수량] - 다이아, 골드, 아이템, 정령석 순.
+  _eventRewards(b) {
+    const ui = (p) => getUi(this._assets, p);
+    const out = [];
+    if (b?.diamonds) out.push([ui('icons/diamond.png'), 3, b.diamonds]);
+    if (b?.gold) out.push([ui('icons/gold.png'), 3, b.gold]);
+    for (const [id, n] of Object.entries(b?.items ?? {})) out.push([this.itemIcons()?.get(id), 4, n]);
+    if (b?.spiritStones) out.push([ui('icons/spirit_stone.png'), 3, b.spiritStones]);
+    return out;
+  }
+
+  _drawEventDetail(ctx, card) {
+    const [cx, cy, cw] = card;
+    const e = this._detailEvent();
+    if (!e) return;
+    const mid = cx + cw / 2;
+    this._drawEventRow(ctx, e, cx + (cw - EVENT_ROW.w) / 2, cy + EVENT_DETAIL.bannerY, false);
+    this._eventBodyLines(ctx, e).forEach((line, i) =>
+      this._text(ctx, line, mid, cy + EVENT_DETAIL.bodyY + i * EVENT_DETAIL.bodyLineH, { size: 15, align: 'center' }));
+    if (e.kind === 'claim') {
+      this._text(ctx, t('menu.eventDetail.reward'), mid, cy + EVENT_DETAIL.rewardY, { size: 15, align: 'center', color: COLORS.title });
+      const [by, bw, bh] = EVENT_DETAIL.box;
+      const box = [cx + (cw - bw) / 2, cy + by, bw, bh];
+      if (!this._nine(ctx, 'panels/panel_inset.png', box)) this._panel(ctx, box, COLORS.bg2, COLORS.bg3);
+      const rewards = this._eventRewards(e.bundle);
+      const cellW = bw / Math.max(1, rewards.length);
+      rewards.forEach(([st, s, n], i) => {
+        const x = box[0] + cellW * (i + 0.5);
+        if (uiReady(st)) this._imgAt(ctx, st.img, Math.round(x - (st.img.width * s) / 2), Math.round(box[1] + EVENT_DETAIL.iconY - (st.img.height * s) / 2), s);
+        this._text(ctx, `x${n}`, x, box[1] + EVENT_DETAIL.qtyY, { size: 15, align: 'center' });
+      });
+    }
+    this._text(ctx, t('menu.eventDetail.period', { range: this._eventPeriod(e, true) }), mid, cy + EVENT_DETAIL.periodY, { size: 13, align: 'center', color: COLORS.dim });
+    if (e.kind !== 'claim') return; // notice = 안내만, 버튼 없음
+    this._text(ctx, t('menu.eventDetail.once'), mid, cy + EVENT_DETAIL.onceY, { size: 13, align: 'center', color: COLORS.dim });
+    if (this._eventMsg) {
+      const known = ['notFound', 'notStarted', 'platform', 'banned'].includes(this._eventMsg);
+      const key = this._eventMsg === 'offline' ? 'menu.eventDetail.offline' : `menu.eventDetail.err.${known ? this._eventMsg : 'error'}`;
+      this._text(ctx, t(key), mid, cy + EVENT_DETAIL.msgY, { size: 13, align: 'center', color: COLORS.redLight });
+    }
+    const state = this._eventBtnState(e);
+    const rect = this._eventBtnRect(card);
+    const down = state === 'claim' && this._pressed === 'eventClaim';
+    const img = `buttons/${state === 'claim' || state === 'busy' ? 'btn_gold' : 'btn_secondary'}${down ? '_pressed' : ''}.png`;
+    if (!this._nine(ctx, img, rect)) this._panel(ctx, rect, COLORS.bg2, COLORS.bg3);
+    const color = state === 'claim' ? getUiMeta(this._assets, img)?.textColor ?? COLORS.bone : COLORS.dim;
+    this._text(ctx, t(`menu.eventDetail.${state}`), rect[0] + rect[2] / 2, rect[1] + rect[3] / 2 + (down ? 2 : 0), { size: 18, align: 'center', color });
   }
 
   // 광고 칸 크기(basis) - 320x50 CSS px 배너 + 여백. 폭은 카드 안(좌우 12)으로 자른다(그러면 배너는 안 띄운다).
@@ -1095,6 +1291,7 @@ export class MainMenuScreen {
   // X·뒤로가기로 돌아갈 곳.
   _backOf(popup) {
     if (popup === 'deleteAccount') return 'account';
+    if (popup === 'eventDetail') return 'event';
     return BACK_TO_SETTINGS.has(popup) ? 'settings' : null;
   }
 
@@ -1684,9 +1881,20 @@ export class MainMenuScreen {
       }
     }
 
+    // 목록은 끌기 스크롤 - 거의 안 움직이고 뗀 줄만 탭(handlePointerUp -> 상세).
     if (this.popup === 'event' && pointInRect(x, y, this._toScreen(this._eventView(card)))) {
       this._drag = { scrollFromY: y, scrollStart: this._eventScroll, key: '_eventScroll' };
       return null;
+    }
+
+    if (this.popup === 'eventDetail') {
+      const e = this._detailEvent();
+      // 'none' = 누름 소리 없음(받기 결과 소리는 획득 팝업). 받는 중·받음·끝남·오프라인은 못 누름.
+      if (e && this._eventBtnState(e) === 'claim' && pressButton(x, y, this._toScreen(this._eventBtnRect(card)), 'none')) {
+        this._pressed = 'eventClaim';
+        this._eventMsg = null;
+        return `eventClaim:${e.id}`;
+      }
     }
 
     if (this.popup === 'about') {
@@ -1872,7 +2080,8 @@ export class MainMenuScreen {
     const crystal = on('crystal', this._crystal());
     // 게임 정보 본문을 끌지 않고 뗐으면(탭) 그 자리의 링크 버튼을 연다.
     const d = this._drag;
-    if (up && this.popup === 'about' && d?.key === '_aboutScroll' && Math.abs(y - d.scrollFromY) < 8 * this._transform.k) this._openAboutLinkAt(y);
+    if (up && this.popup === 'about' && d?.key === '_aboutScroll' && isTap(d.scrollFromY, y, this._transform.k)) this._openAboutLinkAt(y);
+    if (up && this.popup === 'event' && d?.key === '_eventScroll' && isTap(d.scrollFromY, y, this._transform.k)) this._openEventAt(x, y);
     this._pressed = null;
     this._drag = null;
     if (!altar && !chest && !crystal) return null;

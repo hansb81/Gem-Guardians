@@ -83,7 +83,7 @@ function fakeDb(pg: PGlite) {
     const where: string[] = [];
     const args: unknown[] = [];
     let cols = "*", order = "", limit = "", op: "select" | "update" | "insert" = "select", patch: Record<string, unknown> = {};
-    let returning = false;
+    let returning = false, counting = false;
     const p = (v: unknown) => (args.push(val(v)), `$${args.length}`);
     const sql = () => {
       const w = where.length ? ` where ${where.join(" and ")}` : "";
@@ -95,18 +95,22 @@ function fakeDb(pg: PGlite) {
         const ks = Object.keys(patch);
         return `insert into public.${table} (${ks.map(col).join(", ")}) values (${ks.map((k) => p(patch[k])).join(", ")})`;
       }
+      if (counting) return `select count(*)::int as n from public.${table}${w}`;
       return `select ${cols} from public.${table}${w}${order}${limit}`;
     };
     const run = async () => {
       try {
-        return { data: (await pg.query(sql(), args)).rows, error: null };
+        const r = (await pg.query(sql(), args)).rows as Record<string, unknown>[];
+        if (counting) return { data: null, count: r[0].n as number, error: null }; // select(c, {count, head})
+        return { data: r, error: null };
       } catch (e) {
         return { data: null, error: { message: String(e) } };
       }
     };
     const b = {
-      select(c = "*") {
+      select(c = "*", o: { head?: boolean } = {}) {
         if (op === "update") returning = true;
+        if (o.head) counting = true;
         cols = c;
         return b;
       },
@@ -135,8 +139,16 @@ function fakeDb(pg: PGlite) {
     };
     return b;
   };
+  const uploads: string[] = [];
   return {
     from,
+    uploads,
+    storage: {
+      from: (bucket: string) => ({
+        upload: (path: string) => (uploads.push(`${bucket}/${path}`), Promise.resolve({ error: null })),
+        getPublicUrl: (path: string) => ({ data: { publicUrl: `https://s.test/${bucket}/${path}` } }),
+      }),
+    },
     async rpc(fn: string, a: Record<string, unknown> = {}) {
       const ty = await argTypes(fn);
       const names = Object.keys(a);
@@ -500,4 +512,52 @@ Deno.test("권한: anon·authenticated는 새 표·admin_* 함수 못 씀", asyn
     }
     await pg.exec("reset role");
   }
+});
+
+// ---------- 이벤트 (docs/events.md) ----------
+const EV = {
+  action: "event.save", id: "launch2026", isNew: true, kind: "claim", title: { ko: "출시 기념 선물", en: "Launch Gift" },
+  body: { ko: "설명", en: "Body" }, bundle: { diamonds: 100, spiritStones: 10 },
+  startsAt: "2026-12-01T00:00:00+09:00", endsAt: "2026-12-31T23:59:59+09:00", platforms: [], sort: 0, enabled: false,
+};
+// 236x55 PNG 머리(서명 + IHDR) - 크기 검사만 보면 된다.
+const pngHead = (wd: number, ht: number) => {
+  const b = new Uint8Array(33);
+  b.set([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82]);
+  const v = new DataView(b.buffer);
+  v.setUint32(16, wd);
+  v.setUint32(20, ht);
+  return btoa(String.fromCharCode(...b));
+};
+
+Deno.test("이벤트: 만들기·중복·검사, 목록 받은 사람 수, 켜기, 받은 뒤 보상 바꾸기 확인, 배너", async () => {
+  const pg = await setup();
+  assertEquals((await call(pg, "viewer", w(EV))).reason, "role");
+  assertEquals((await call(pg, "owner", w(EV))).ok, true);
+  assertEquals((await call(pg, "owner", w(EV))).reason, "exists");
+  assertEquals((await call(pg, "owner", w({ ...EV, id: "x", bundle: { flags: ["adFree"] } }))).reason, "badBundle");
+  assertEquals((await call(pg, "owner", w({ ...EV, id: "bad id" }))).reason, "badRequest");
+  assertEquals((await call(pg, "owner", w({ ...EV, id: "y", platforms: ["play"] }))).reason, "badRequest");
+  assertEquals((await call(pg, "owner", w({ ...EV, id: "n", kind: "notice", bundle: { diamonds: 1 } }))).ok, true, "notice는 번들 무시");
+  assertEquals((await rows(pg, "select bundle from public.events where id = 'n'"))[0].bundle, null);
+  assertEquals((await call(pg, "owner", w({ action: "event.toggle", id: "launch2026", enabled: true }))).ok, true);
+  assertEquals((await call(pg, "owner", w({ action: "event.toggle", id: "nope", enabled: true }))).ok, false);
+  await pg.query("update public.events set starts_at = now() - interval '1 day' where id = 'launch2026'");
+  assertEquals((await pg.query<{ r: { ok: boolean } }>("select public.event_claim($1, 'launch2026') r", [A])).rows[0].r.ok, true);
+  const list = await call(pg, "viewer", { action: "event.list" });
+  const row = (list.events as { id: string; claimed_count: number; enabled: boolean }[]).find((e) => e.id === "launch2026");
+  assertEquals([row?.claimed_count, row?.enabled], [1, true]);
+  const edit = { ...EV, isNew: false, bundle: { diamonds: 200 } };
+  const ch = await call(pg, "owner", w(edit));
+  assertEquals([ch.reason, ch.claimed], ["bundleChanged", 1]);
+  assertEquals((await call(pg, "owner", w({ ...edit, bundle: { spiritStones: 10, diamonds: 100 }, title: { ko: "새 제목", en: "T" } }))).ok, true, "같은 보상(키 순서만 다름)은 확인 없이");
+  assertEquals((await call(pg, "owner", w({ ...edit, confirmBundle: true }))).ok, true);
+  assertEquals((await rows(pg, "select bundle, title_ko from public.events where id = 'launch2026'"))[0], { bundle: { diamonds: 200 }, title_ko: "출시 기념 선물" });
+  assertEquals((await rows(pg, "select bundle from public.claims where tx_id = 'event:launch2026'"))[0].bundle, { diamonds: 100, spiritStones: 10 }, "받은 사람은 그대로");
+  assertEquals((await call(pg, "owner", w({ action: "event.banner", id: "launch2026", png: pngHead(100, 55) }))).reason, "badRequest");
+  const bn = await call(pg, "owner", w({ action: "event.banner", id: "launch2026", png: pngHead(236, 55) }));
+  assertEquals(bn.ok, true);
+  const url = (await rows(pg, "select banner_url from public.events where id = 'launch2026'"))[0].banner_url as string;
+  assert(/^https:\/\/s\.test\/event-banners\/launch2026-[0-9a-f]{8}\.png$/.test(url), url);
+  assertEquals((await rows(pg, "select 1 from public.admin_audit where action like 'event.%'")).length, 6);
 });

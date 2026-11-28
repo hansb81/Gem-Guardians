@@ -1,5 +1,6 @@
 // POST /hello {platform, appVersion, legacyId, tossKey?} -> players 생성/갱신, 서버 시각·KST 날짜, 받을 것 개수, features,
-// 시작 정보(docs/auth.md §1-E 1번): save 메타, att(att-status 응답), mail(mail-list 응답), claims(claims-pending 응답).
+// 시작 정보(docs/auth.md §1-E 1번): save 메타, att(att-status 응답), mail(mail-list 응답), claims(claims-pending 응답),
+// events(event-list 응답, docs/events.md).
 // mail은 예전엔 안 받은 우편 개수(숫자)였다 - 옛 앱은 시작 때 mail-list를 따로 불러 목록으로 덮으므로 배지만 잠깐 늦다.
 import { handle, must } from "../_shared/http.ts";
 import { kstDate } from "../_shared/kst.ts";
@@ -8,7 +9,7 @@ import { ADFREE_KEYS } from "../_shared/iap.ts";
 
 const PLATFORMS = ["web", "toss", "android", "onestore", "ios"];
 // 기본 켜진 기능(배포 없이 끄기: supabase secrets set FEATURES='{"cloudSave":false}').
-const FEATURES = { cloudSave: true };
+const FEATURES = { cloudSave: true, events: true };
 
 handle("hello", async ({ uid, user, body, db }) => {
   const row: Record<string, unknown> = { id: uid, last_seen_at: new Date().toISOString() };

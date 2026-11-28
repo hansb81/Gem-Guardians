@@ -4,5 +4,5 @@
   "url": "https://jzpjqfbpqzghprqbqexp.supabase.co",
   "anonKey": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp6cGpxZmJwcXpnaHBycWJxZXhwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyMjEyMDMsImV4cCI6MjEwOTc5NzIwM30.7COmuSGr4ErbrCj6UDU6hJoeAOLfXm4PIIkzhCTWdx8",
   "googleWebClientId": "1038419828500-5s86tm4jsbedqlt5fc44b3md00aeaqls.apps.googleusercontent.com",
-  "features": { "attendance": true, "mail": true, "compRanking": false, "iapStrict": false, "adSsv": false, "coupon": true }
+  "features": { "attendance": true, "mail": true, "compRanking": false, "iapStrict": false, "adSsv": false, "coupon": true, "events": false }
 }

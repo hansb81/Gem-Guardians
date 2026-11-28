@@ -311,26 +311,28 @@ function drawStatueTab(ctx, assets, state, tab, view) {
     // 강화(btn_gold, 코인 + 비용) / MAX +N(btn_primary). 골드 부족·최대 레벨 = btn_disabled.
     const up = row.upgrade;
     const upMeta = nine(ctx, assets, info.affordable ? 'buttons/btn_gold.png' : 'upgrade/btn_disabled.png', up, HUD_CONFIG.popup.disabled);
-    if (info.maxed) label(ctx, t('popup.prep.max'), up, C.sub, 15, true, 'center');
+    if (info.maxed) label(ctx, t('popup.prep.maxLevel'), up, C.sub, 15, true, 'center');
     else {
       ctx.font = getFontString(15, true);
       const costText = fmtGold(info.cost);
       const tw = numberWidth(assets, costText) ?? ctx.measureText(costText).width;
       const left = Math.round(up.x + up.width / 2 - (16 + 6 + tw) / 2);
-      drawFixedImage(ctx, assets, 'upgrade/coin_small.png', left + 8, up.y + up.height / 2, K);
+      drawFixedImage(ctx, assets, 'icons/gold.png', left + 8, up.y + up.height / 2, 1); // 상단 골드와 같은 그림(16px)
       if (info.affordable) label(ctx, costText, rect(left + 22, up.y, tw, up.height), upMeta?.textColor ?? C.outline, 15, true, 'left', { outline: false });
       else number(ctx, assets, costText, left + 22, up.y + up.height / 2, 'red', 'left', true);
     }
+    // 최대 강화 = 도착 레벨(+N은 강화 등급처럼 읽혀서). 최대 레벨이면 아래 버튼 없음, 골드 부족은 글자로 구분.
+    if (info.maxed) return;
     const canMax = info.maxUps > 0;
     const mxMeta = nine(ctx, assets, canMax ? 'buttons/btn_primary.png' : 'upgrade/btn_disabled.png', row.max, HUD_CONFIG.popup.disabled);
-    label(ctx, canMax ? t('popup.prep.maxN', { n: info.maxUps }) : t('popup.prep.max'), row.max, canMax ? mxMeta?.textColor ?? C.text : C.sub, 13, true, 'center');
+    label(ctx, canMax ? t('popup.prep.maxTo', { lv: tower.level + info.maxUps }) : t('popup.prep.noGold'), row.max, canMax ? mxMeta?.textColor ?? C.text : C.sub, 13, true, 'center');
   });
   label(ctx, t('popup.prep.holdHint'), tab.hint, C.sub, 12, false, 'left');
   label(ctx, t('popup.prep.totalAttack', { n: Math.round(view.totalAttack) }), tab.total, C.text, 13, true, 'right');
   const all = view.all ?? { count: 0, cost: 0 };
   const can = all.count > 0;
   const allMeta = nine(ctx, assets, can ? 'buttons/btn_primary.png' : 'upgrade/btn_disabled.png', tab.all, HUD_CONFIG.popup.disabled);
-  const allText = can ? t('popup.prep.allN', { n: all.count, cost: fmtGold(all.cost) }) : t('popup.prep.all');
+  const allText = can ? t('popup.prep.allN', { cost: fmtGold(all.cost) }) : t('popup.prep.all');
   label(ctx, allText, tab.all, can ? allMeta?.textColor ?? C.text : C.sub, 14, true, 'center');
 }
 

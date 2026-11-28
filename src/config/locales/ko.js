@@ -111,7 +111,15 @@ export const ko = {
       line: '클라우드 저장 · {time}', pending: '클라우드 저장 · 저장 대기 중',
     },
     attendance: { title: '출석 체크' },
-    event: { title: '이벤트', body: '새 이벤트를 준비하고 있어요', ad: '광고' },
+    event: { title: '이벤트', body: '새 이벤트를 준비하고 있어요', ad: '광고', hint: '배너를 누르면 자세히 볼 수 있어요' },
+    eventDetail: {
+      title: '이벤트', reward: '보상', period: '기간  {range} (한국 시간)', once: '계정당 1번 받을 수 있어요',
+      claim: '받기', busy: '받는 중…', claimed: '받았어요', expired: '기간이 끝났어요', offline: '인터넷 연결이 필요해요',
+      err: {
+        notFound: '지금은 받을 수 없는 이벤트예요', notStarted: '아직 시작하지 않은 이벤트예요',
+        platform: '이 마켓에서는 받을 수 없는 이벤트예요', banned: '받을 수 없는 계정이에요', error: '잠시 후 다시 시도해 주세요',
+      },
+    },
     mail: { title: '우편함' },
     help: {
       title: "도움말",
@@ -323,9 +331,11 @@ export const ko = {
       totalAttack: '전체 공격 {n}',
       holdHint: '길게 누르면 연속 강화',
       max: 'MAX',
-      maxN: 'MAX +{n}',
+      maxLevel: '최대 레벨',
+      maxTo: '최대 ▶ Lv.{lv}',
+      noGold: '골드 부족',
       all: '일괄 강화',
-      allN: '일괄 강화 +{n} ({cost})',
+      allN: '일괄 강화 ({cost}) · 낮은 레벨부터',
     },
     button: {
       resume: '계속하기',
