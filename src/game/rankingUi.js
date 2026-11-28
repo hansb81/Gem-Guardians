@@ -174,6 +174,7 @@ export class RankingUi {
     st.crown = this.crownSheet?.(st.myMetal) ?? null;
     st.history = r.comp.history;
     st.tiers = this.config.tiers;
+    st.launch = this.config.launch ?? null;
     st.floorGold = this.service.floorGold();
     st.myName = r.profile.nickname;
     st.myStatue = r.profile.statue || this.defaultStatue();

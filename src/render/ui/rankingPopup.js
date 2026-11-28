@@ -54,6 +54,12 @@ const rect = (x, y, width, height) => ({ x, y, width, height });
 const inside = (x, y, r) => r && x >= r.x && x < r.x + r.width && y >= r.y && y < r.y + r.height;
 
 // ---------- 배치 ----------
+// 출시 기념 기간(config/ranking.json launch) - 순위 보상 시작 시점 글자. rankedFrom 'YYYY-MM-DD'(KST) | null = 추후 공지.
+export function launchWhenText(launch) {
+  const [, m, d] = String(launch?.rankedFrom ?? '').split('-').map(Number);
+  return m && d ? t('ranking.launchFrom', { m, d }) : t('ranking.launchTbd');
+}
+
 export function layoutRankingPopup(screenW, screenH, st) {
   const scale = screenW / BASIS_W;
   const H = Math.round(screenH / scale);
@@ -561,7 +567,7 @@ function drawRewards(ctx, assets, st, s) {
     label(ctx, text, rect(r.x + 48, r.y, 200, r.height), tier.id === mine ? C.goldL : C.bone, 11, 'left');
     rewardIcons(ctx, assets, tier, st, r.x + r.width - 8, r.y + r.height / 2, 11, 'right');
   });
-  wrapLabel(ctx, t('ranking.rewards.note'), s.note, C.dim, 11);
+  wrapLabel(ctx, st.launch?.on ? t('ranking.rewards.launchNote', { when: launchWhenText(st.launch) }) : t('ranking.rewards.note'), s.note, C.dim, 11);
 }
 
 function drawHistory(ctx, assets, st, s) {

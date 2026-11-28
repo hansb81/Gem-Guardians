@@ -95,6 +95,12 @@ export const ko = {
       body: ['진행을 Google 계정에', '안전하게 저장할까요?'],
       later: '나중에', ok: '연결하기',
     },
+    compLaunch: {
+      title: '출시 기념 보상',
+      body: ['출시 기념 기간에는', '1~3위 다이아 100개,', '참가자 모두 다이아 50개!'],
+      when: '순위별 보상 적용: {when}',
+      ok: '확인',
+    },
     saveConflict: {
       title: '저장된 진행이 있어요',
       bodyDevice: ['다른 기기에 저장된 진행이 있어요.', '어느 쪽으로 계속할까요?'],
@@ -543,9 +549,10 @@ export const ko = {
     offlineHint: '지금은 내 기록만 보여요',
     offlineAgo: '오프라인 · 마지막 갱신 {n}분 전',
     partCrit: '1판 이상',
+    launchFrom: '{m}월 {d}일 시즌부터', launchTbd: '추후 공지',
     tier: { r1: '1위', r2: '2위', r3: '3위', r10: '4~10위', r50: '11~50위', p1: '상위 1%', p5: '상위 5%', p10: '상위 10%', p30: '상위 30%', p50: '상위 50%', part: '참여' },
     reward: { diamonds: '다이아', gold: '골드' },
-    rewards: { title: '경쟁 보상', sub: '{week}주차 · 매주 월요일 00:00 정산 · 참가 {total}명', mine: '◀ 나', note: '순위·비율이 겹치면 더 좋은 쪽 하나만 · 1~3위 왕관 테두리, 4~10위 금 테두리는 다음 시즌 동안' },
+    rewards: { title: '경쟁 보상', sub: '{week}주차 · 매주 월요일 00:00 정산 · 참가 {total}명', mine: '◀ 나', note: '순위·비율이 겹치면 더 좋은 쪽 하나만 · 1~3위 왕관 테두리, 4~10위 금 테두리는 다음 시즌 동안', launchNote: '지금은 출시 기념 기간이에요. 순위별 보상 적용: {when}' },
     history: { title: '최근 8주 기록', week: '{week}주차', empty: '아직 기록이 없어요' },
     nick: {
       title: '랭킹에 쓸 이름', titleEdit: '이름 바꾸기', label: '닉네임', rule: '2~10자 · 한글·영문·숫자', statue: '대표 수호자', save: '저장',

@@ -25,6 +25,7 @@ import { drawImageSnapped, screen } from './screenFit.js';
 import { createDomInput, placeDomInput } from './ui/domInput.js';
 import { splitName } from './rewardPopup.js';
 import { eventPeriodText, eventButtonState, canClaimEvent, isTap } from '../game/eventRules.js';
+import { launchWhenText } from './ui/rankingPopup.js';
 
 const FALLBACK_BG = '#221c2b';
 const NATIVE_W = 180;
@@ -97,6 +98,7 @@ const POPUP_SIZES = {
   account: [400, 380],
   deleteAccount: [440, 470],
   linkNudge: [400, 250],
+  compLaunch: [400, 300],
 };
 // 이벤트 팝업 광고 칸(docs/ads.md 3장): 안내 문구 아래 "광고" 라벨 + 테두리 칸. 칸 = 320x50dp 배너가 들어갈 basis 크기 + 여백 pad.
 // 칸 양옆·바로 위에는 버튼을 두지 않는다(AdMob: 버튼 옆 배너 금지) - 닫기 버튼(오른쪽 위)과는 100 이상 떨어져 있다.
@@ -127,6 +129,7 @@ const DEL = { bodyY: [96, 122, 148, 174], hintY: 222, input: [70, 244, 300, 52],
 // 계정 팝업 맨 아래 [계정 삭제](빨간 작은 글씨) 터치 영역.
 const ACCOUNT_DEL_HIT = [120, 312, 160, 36];
 const NUDGE = { bodyY: [100, 126], later: [40, 170, 150, 46], ok: [210, 170, 150, 46] };
+const COMP_LAUNCH = { bodyY: [102, 130, 158], whenY: 196, ok: [125, 226, 150, 46] };
 const CONFLICT_CANCEL_H = 60;
 // 웹 빌드만: 설정 맨 아래 "브라우저 데이터를 지우면 진행이 사라진다" 안내 한 줄(저장이 localStorage뿐).
 const WEB_NOTE_H = PLATFORM_ID === 'web' ? 30 : 0;
@@ -308,6 +311,7 @@ export class MainMenuScreen {
     this.mine = () => null; // main.js: 광산 입구 { locked, badge, floor } | null(설정 없음 - 버튼 안 그림)
     this.normalFloor = () => null; // main.js: 일반 모드로 들어가면 이어 할 층(버튼 둘째 줄)
     this.compStatus = null; // main.js compStatus() - 경쟁 모드 버튼(열림·남은 입장·잠김 이유)
+    this.compLaunch = null; // config/ranking.json launch - 출시 기념 안내 팝업 글자(main.js)
 
     fetchJson('assets/menu/manifest.json').then((m) => {
       this.manifest = m;
@@ -693,6 +697,7 @@ export class MainMenuScreen {
     else if (this.popup === 'account' && this.account) this._drawAccountPopup(ctx, card);
     else if (this.popup === 'deleteAccount' && this.account) this._drawDeleteAccountPopup(ctx, card);
     else if (this.popup === 'linkNudge') this._drawNudgePopup(ctx, card);
+    else if (this.popup === 'compLaunch') this._drawCompLaunchPopup(ctx, card);
     else this._drawPlaceholderPopup(ctx, card);
   }
 
@@ -1608,6 +1613,15 @@ export class MainMenuScreen {
     this._drawButton(ctx, at(NUDGE.ok), 'nudgeOk', 'btn_primary', t('menu.linkNudge.ok'));
   }
 
+  // 경쟁 모드 출시 기념 안내(main.js startCompGame이 하루(KST)에 1번 연다). [확인] = 판 시작, X = 취소.
+  _drawCompLaunchPopup(ctx, [cx, cy, cw]) {
+    t('menu.compLaunch.body').forEach((l, i) => this._text(ctx, l, cx + cw / 2, cy + COMP_LAUNCH.bodyY[i], { size: 15, align: 'center' }));
+    const when = t('menu.compLaunch.when', { when: launchWhenText(this.compLaunch) });
+    this._text(ctx, when, cx + cw / 2, cy + COMP_LAUNCH.whenY, { size: 13, align: 'center', color: COLORS.title });
+    const r = COMP_LAUNCH.ok;
+    this._drawButton(ctx, [cx + r[0], cy + r[1], r[2], r[3]], 'compLaunchOk', 'btn_primary', t('menu.compLaunch.ok'));
+  }
+
   _drawHelpPopup(ctx, card) {
     const [cx, cy, cw] = card;
     const pages = t('menu.help.pages');
@@ -2018,6 +2032,14 @@ export class MainMenuScreen {
 
     if (this.popup === 'account' && this.account) return this._accountPointerDown(x, y, card);
     if (this.popup === 'deleteAccount' && this.account) return this._deleteAccountPointerDown(x, y, card);
+    if (this.popup === 'compLaunch') {
+      const r = COMP_LAUNCH.ok;
+      if (pressButton(x, y, this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]))) {
+        this._pressed = 'compLaunchOk';
+        this.popup = null;
+        return 'compLaunchOk';
+      }
+    }
     if (this.popup === 'linkNudge') {
       const hit = (r) => this._toScreen([card[0] + r[0], card[1] + r[1], r[2], r[3]]);
       if (pressButton(x, y, hit(NUDGE.later), 'cancel')) {
