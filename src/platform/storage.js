@@ -8,8 +8,17 @@
 const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'guardianFx', 'leaderboardSubmitted', 'devServer', 'devCheats', 'pendingVerify', 'adContinue', 'locale', 'cloudMeta', 'mailDeleted', 'attAutoDate', 'eventAutoOpened', 'crownBand', 'lastSeenSeasonId'];
 // adContinue = 옛 키(지금은 save 안 playerState.adContinue) - 한 번 읽어 옮기고 지운다. cloudMeta = 클라우드 저장 기기 기록(src/net/cloudSave.js).
 // 전체 데이터 초기화: 이 값을 올리면 모든 접속자의 저장 데이터가 다음 실행 때 한 번 비워진다.
-const DATA_EPOCH = 1;
+const DATA_EPOCH = 2; // 2026-11-28 오픈 후 전체 초기화(게스트 서버 계정 삭제와 같은 날 배포)
 const FLUSH_MS = 300;
+const AUTH_KEY = 'gemGuardians.auth'; // src/net/api.js storageKey (supabase 세션 JSON)
+
+async function isGuestSession(store) {
+  try {
+    return JSON.parse(await store.get(AUTH_KEY))?.user?.is_anonymous === true;
+  } catch {
+    return false; // 없음·깨짐 = 그대로(깨진 세션은 supabase가 버린다)
+  }
+}
 
 const cache = new Map(); // key -> JSON 문자열
 const dirty = new Set();
@@ -23,7 +32,12 @@ export async function initStorage(store) {
   cache.clear();
   if ((await store.get('dataEpoch')) !== String(DATA_EPOCH)) {
     backend = store;
-    await Promise.all(KEYS.map((k) => store.remove(k)));
+    // 결제 대기열(pendingVerify)은 영수증이라 남긴다(account.js 계정 삭제와 같음).
+    await Promise.all(KEYS.filter((k) => k !== 'pendingVerify').map((k) => store.remove(k)));
+    const v = await store.get('pendingVerify');
+    if (v != null) cache.set('pendingVerify', v);
+    // 게스트 로그인 세션도 지운다 - 남기면 클라우드 저장이 빈 기기에 서버 세이브를 다시 받아온다. 연결 계정(Google 등)은 남겨 서버 세이브를 받는다.
+    if (await isGuestSession(store)) await store.remove(AUTH_KEY);
     await store.set('dataEpoch', String(DATA_EPOCH));
     return;
   }
