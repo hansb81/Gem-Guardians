@@ -2816,7 +2816,8 @@ export class CanvasRenderer {
     const stackH = Math.max(0, loseButtons.length - 1) * (btnHeight + btnGap);
     // 클리어 골드 내역(처치 / 클리어 보너스 / 콤보 보너스) 3줄 - 설명과 버튼 사이에 끼운다.
     const goldBlockH = kind === 'win' && clearReward ? headH * 0.3 : 0; // 클리어 골드 / 콤보 보너스 2줄
-    const cardHeight = headH + audioBlockH + replayBlockH + stackH + goldBlockH;
+    const loseGoldH = kind === 'lose' && !itemUi?.comp ? headH * 0.14 : 0; // 패배 팝업 획득 골드 한 줄
+    const cardHeight = headH + audioBlockH + replayBlockH + stackH + goldBlockH + loseGoldH;
     const cardX = (width - cardWidth) / 2;
     const cardY = (height - cardHeight) / 2;
 
@@ -2872,6 +2873,11 @@ export class CanvasRenderer {
     ctx.font = getFontString(Math.max(11, headH * 0.08));
     drawText(ctx, title.desc, cardX + cardWidth / 2, cardY + headH * 0.48);
 
+    if (loseGoldH > 0) {
+      ctx.fillStyle = '#f2d264';
+      ctx.font = getFontString(Math.max(12, headH * 0.09), true);
+      drawText(ctx, t('popup.win.descGold', { total: fmt(itemUi.floorGold ?? 0) }), cardX + cardWidth / 2, cardY + headH * 0.62);
+    }
     if (goldBlockH > 0) this._drawClearGold(clearReward, cardX + 20, cardY + headH * 0.62, cardWidth - 40, goldBlockH, headH);
 
     const audioRects = audioBlockH > 0 ? this._drawAudioSettings(cardX + 14, cardY + headH * 0.6, cardWidth - 28, audioBlockH) : null;
@@ -2917,8 +2923,7 @@ export class CanvasRenderer {
         const iy = Math.round(btnY + btnHeight / 2 - iconSize / 2);
         ctx.imageSmoothingEnabled = false;
         if (uiReady(icon)) drawImageSnapped(ctx, icon.img, ix, iy, iconSize, iconSize);
-        else drawItemIconFallback(ctx, 'revive', ix, iy, iconSize);
-        labelX += iconSize / 2;
+        else drawItemIconFallback(ctx, 'revive', ix, iy, iconSize); // 글자는 버튼 가운데 그대로
       } else if (action === 'adContinue' && itemUi.adContinue === 'ad') {
         // 재생 아이콘(새 PNG 없이 코드 삼각형, 팔레트 #f2d264).
         const s = Math.round(btnHeight * 0.36);

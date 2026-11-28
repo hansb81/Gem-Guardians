@@ -404,7 +404,7 @@ function drawDetail(ctx, assets, a, view, sel, towers, hits, nowMs) {
     const short = (lack) => (ok ? col : lack ? HUD_CONFIG.popup.loseColor : C.sub);
     const half = Math.floor((up.width - lw - 20) / 2);
     const gx = up.x + 16 + lw;
-    drawFixedImage(ctx, assets, 'upgrade/coin_small.png', gx + 8, up.y + bh / 2, 2);
+    drawFixedImage(ctx, assets, 'icons/gold.png', gx + 8, up.y + bh / 2, 1); // 상단 골드와 같은 그림(16px)
     label(ctx, goldText, rect(gx + 20, up.y, half - 22, bh), short(view.gold < cost.gold), 13, true, 'left', opts);
     drawSpiritStone(ctx, assets, gx + half + 8, up.y + bh / 2, 1);
     label(ctx, stoneText, rect(gx + half + 20, up.y, half - 22, bh), short(view.stones < cost.stones), 13, true, 'left', opts);

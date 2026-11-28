@@ -331,9 +331,11 @@ export const ko = {
       totalAttack: '전체 공격 {n}',
       holdHint: '길게 누르면 연속 강화',
       max: 'MAX',
-      maxN: 'MAX +{n}',
+      maxLevel: '최대 레벨',
+      maxTo: '최대 ▶ Lv.{lv}',
+      noGold: '골드 부족',
       all: '일괄 강화',
-      allN: '일괄 강화 +{n} ({cost})',
+      allN: '일괄 강화 ({cost}) · 낮은 레벨부터',
     },
     button: {
       resume: '계속하기',

@@ -1773,6 +1773,7 @@ function buildItemUi() {
   itemUi.adContinue = cont.ad ? (playerState.inventory.isUnlocked('adFree') ? 'free' : 'ad') : null;
   itemUi.adBusy = adBusy;
   itemUi.goldMul = controller?.goldMul ?? 1;
+  itemUi.floorGold = controller?.killGoldThisFloor ?? 0; // 패배 팝업 "획득 골드"(처치 골드는 즉시 지급분)
   itemUi.comp = controller?.comp && !controller.comp.done ? controller.comp : null; // 패배 팝업 = 경쟁 결과 버튼
   return itemUi;
 }

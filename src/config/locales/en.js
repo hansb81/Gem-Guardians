@@ -328,9 +328,11 @@ export const en = {
       totalAttack: 'Total ATK {n}',
       holdHint: 'Hold to keep upgrading',
       max: 'MAX',
-      maxN: 'MAX +{n}',
+      maxLevel: 'MAX LEVEL',
+      maxTo: 'MAX ▶ Lv.{lv}',
+      noGold: 'Need Gold',
       all: 'Upgrade All',
-      allN: 'Upgrade All +{n} ({cost})',
+      allN: 'Upgrade All ({cost}) · Lowest first',
     },
     button: {
       resume: 'Resume',
