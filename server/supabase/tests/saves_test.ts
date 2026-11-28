@@ -236,7 +236,8 @@ function fakeDb(tables: Record<string, Record<string, unknown>[]>) {
         return () => chain(rows);
       },
     });
-  return { from: (t: string) => chain(tables[t] ?? []) };
+  // rpc는 event_list(이벤트 목록)만 - tables.events를 그대로 돌려준다.
+  return { from: (t: string) => chain(tables[t] ?? []), rpc: () => Promise.resolve({ data: tables.events ?? [], error: null }) };
 }
 
 Deno.test("hello 시작 정보: att·mail·claims가 각 함수 응답과 같음, save는 메타만", async () => {
@@ -245,8 +246,10 @@ Deno.test("hello 시작 정보: att·mail·claims가 각 함수 응답과 같음
     mail: [{ id: 7, title_ko: "선물", title_en: "Gift", bundle: { diamonds: 5 }, expires_at: null, created_at: "2026-11-10T00:00:00Z" }],
     claims: [{ tx_id: "mail:7", kind: "mail", bundle: { diamonds: 5 } }],
     saves: [{ rev: 4, updated_at: "2026-11-12T09:20:00Z", device_id: "dev-1" }],
+    events: [{ id: "launch2026", kind: "claim", claimed: false }],
   });
   const s = await startInfo(db, A);
+  assertEquals(s.events, { ok: true, events: [{ id: "launch2026", kind: "claim", claimed: false }] });
   assertEquals(s.att, await attStatus(db, A));
   assertEquals(s.mail, await mailList(db, A));
   assertEquals(s.claims, await claimsPending(db, A));

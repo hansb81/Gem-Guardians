@@ -1,5 +1,6 @@
 // 지급 내용 입력(보상 지급·전체 발송·쿠폰 공용). 번들 모양 = docs/admin.md §4-1, 서버 admin_bundle_ok가 최종 검사.
 // coupon: true = coupon_bundle_ok 범위(골드·다이아·아이템만, 다이아 5000·골드 100만·아이템 99).
+// stones: true = 정령석 칸도(이벤트 event_bundle_ok = 쿠폰 범위 + 정령석 1000).
 import items from '../../config/items.json';
 import shop from '../../config/shop.json';
 import balance from '../../config/balance.json';
@@ -17,14 +18,15 @@ export const TOWERS = balance.tower.towers.map((t) => `${COLOR_KO[t.color] ?? t.
 export const itemName = (id) => ko.item.name[id] ?? id;
 const skillName = (id) => ko.shop.skill[id]?.name ?? id;
 
-export const LIMITS = { admin: { diamonds: 50000, gold: 100000000, item: 999 }, coupon: { diamonds: 5000, gold: 1000000, item: 99 } };
+export const LIMITS = { admin: { diamonds: 50000, gold: 100000000, item: 999 }, coupon: { diamonds: 5000, gold: 1000000, item: 99, stones: 1000 } };
 
 // 폼을 만든다 -> { el, get(): bundle|{error}, set(bundle) }
-export function bundleForm({ coupon = false } = {}) {
+export function bundleForm({ coupon = false, stones = false } = {}) {
   const lim = coupon ? LIMITS.coupon : LIMITS.admin;
   const n = (max, ph = '') => h('input', { type: 'number', min: 0, max, step: 1, placeholder: ph });
   const gold = n(lim.gold, '0');
   const dia = n(lim.diamonds, '0');
+  const stone = n(lim.stones ?? 0, '0');
   const itemIn = Object.fromEntries(ITEM_IDS.map((id) => [id, n(lim.item, '0')]));
   const skillIn = Object.fromEntries(SKILL_IDS.map((id) => [id, h('select',
     h('option', { value: '' }, '-'), h('option', { value: '+1' }, '+1'),
@@ -35,7 +37,7 @@ export function bundleForm({ coupon = false } = {}) {
 
   const el = h('div',
     h('fieldset', h('legend', '재화'), h('div.row',
-      h('label', '골드 ', gold), h('label', '다이아 ', dia),
+      h('label', '골드 ', gold), h('label', '다이아 ', dia), stones && h('label', '정령석 ', stone),
       h('span.muted', `상한 골드 ${num(lim.gold)} · 다이아 ${num(lim.diamonds)} · 아이템 개당 ${lim.item}`))),
     h('fieldset', h('legend', '아이템'), h('div.items', ITEM_IDS.map((id) => h('label',
       ICONS[`../../assets/items/${id}.png`] && h('img', { src: ICONS[`../../assets/items/${id}.png`], alt: '' }),
@@ -57,6 +59,7 @@ export function bundleForm({ coupon = false } = {}) {
     const g = int(gold), d = int(dia);
     if (g) b.gold = g;
     if (d) b.diamonds = d;
+    if (stones && int(stone)) b.spiritStones = int(stone);
     const it = {};
     for (const id of ITEM_IDS) if (int(itemIn[id])) it[id] = int(itemIn[id]);
     if (Object.keys(it).length) b.items = it;
@@ -80,6 +83,7 @@ export function bundleForm({ coupon = false } = {}) {
   function set(b = {}) {
     gold.value = b.gold ?? '';
     dia.value = b.diamonds ?? '';
+    stone.value = b.spiritStones ?? '';
     for (const id of ITEM_IDS) itemIn[id].value = b.items?.[id] ?? '';
   }
   return { el, get, set };
@@ -91,6 +95,7 @@ export function bundleText(b) {
   const out = [];
   if (b.gold) out.push(`골드 ${num(b.gold)}`);
   if (b.diamonds) out.push(`다이아 ${num(b.diamonds)}`);
+  if (b.spiritStones) out.push(`정령석 ${num(b.spiritStones)}`);
   for (const [id, c] of Object.entries(b.items ?? {})) out.push(`${itemName(id)} ${c}`);
   for (const [id, v] of Object.entries(b.skills ?? {})) out.push(`${skillName(id)} ${v === '+1' ? '+1' : `Lv ${v}`}`);
   for (const f of b.flags ?? []) out.push(f === 'slot4' ? '4번째 슬롯' : f === 'adFree' ? '광고 제거' : f);

@@ -1,4 +1,4 @@
-// 관리자 페이지 입구: 로그인(aal2) -> me -> 왼쪽 메뉴 7개 + 해시 라우터(#player/<uid> 등 바로 열기).
+// 관리자 페이지 입구: 로그인(aal2) -> me -> 왼쪽 메뉴 + 해시 라우터(#player/<uid> 등 바로 열기).
 import { call, logout, me, supabase, watchIdle } from './api.js';
 import { hasAal2, loginScreen } from './login.js';
 import { h, reasonText } from './ui.js';
@@ -8,17 +8,18 @@ import * as grant from './grant.js';
 import * as mail from './mail.js';
 import * as purchases from './purchases.js';
 import * as coupons from './coupons.js';
+import * as events from './events.js';
 import * as logs from './logs.js';
 import * as ranking from './ranking.js';
 
 const MENU = [
   ['dashboard', '대시보드'], ['players', '플레이어'], ['ranking', '랭킹'], ['grant', '보상 지급'], ['mail', '우편함'],
-  ['purchases', '결제'], ['coupons', '쿠폰'], ['logs', '로그·감사'],
+  ['purchases', '결제'], ['coupons', '쿠폰'], ['events', '이벤트'], ['logs', '로그·감사'],
 ];
 // 해시 첫 칸 -> 화면. #player/<uid>, #grant/<id>는 상세.
 const ROUTES = {
   dashboard: dashboard.render, players: players.search, player: players.detail, grant: grant.render,
-  mail: mail.render, purchases: purchases.render, coupons: coupons.render, logs: logs.render, ranking: ranking.render,
+  mail: mail.render, purchases: purchases.render, coupons: coupons.render, events: events.render, logs: logs.render, ranking: ranking.render,
 };
 
 const app = document.getElementById('app');

@@ -732,6 +732,21 @@
       "w": 43,
       "h": 46,
       "use": "정령 목록 칸 등급 테두리"
+    },
+    "events/banner_launch.png": {
+      "w": 236,
+      "h": 55,
+      "use": "이벤트 목록·상세 배너(출시 이벤트, banner 'launch'). 화면 2배 472x110, 왼쪽 글자 칸에 코드가 제목·기간을 쓴다"
+    },
+    "events/banner_default.png": {
+      "w": 236,
+      "h": 55,
+      "use": "이벤트 기본 배너 - 그림 키가 없거나 원격 그림을 못 받을 때"
+    },
+    "events/stamp_claimed.png": {
+      "w": 34,
+      "h": 34,
+      "use": "이벤트 받음 도장 - 받은 배너 줄 오른쪽에 2배"
     }
   },
   "upgrade/stage": {

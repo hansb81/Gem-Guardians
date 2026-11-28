@@ -1,4 +1,4 @@
-// 시작 정보(docs/auth.md §1-E 1번): att-status·mail-list·claims-pending 본문 + save 메타.
+// 시작 정보(docs/auth.md §1-E 1번): att-status·mail-list·claims-pending·event-list 본문 + save 메타.
 // 각 함수와 hello가 같은 코드를 쓴다 - hello 한 번으로 시작 호출을 4~5번에서 1번으로.
 import { must } from "./result.ts";
 import { kstDate } from "./kst.ts";
@@ -47,8 +47,15 @@ export async function claimsPending(db: Db, uid: string) {
   return { ok: true, claims: (list ?? []).map((c) => ({ txId: c.tx_id, kind: c.kind, bundle: c.bundle })) };
 }
 
-// hello에 붙이는 묶음.
+// 지금 보이는 이벤트 목록(docs/events.md) - SQL event_list.
+export async function eventList(db: Db, uid: string) {
+  return { ok: true, events: (must(await db.rpc("event_list", { p_player: uid })) as unknown[] | null) ?? [] };
+}
+
+// hello에 붙이는 묶음. events는 옛 앱이 모르는 키라 무시한다.
 export async function startInfo(db: Db, uid: string) {
-  const [att, mail, claims, save] = await Promise.all([attStatus(db, uid), mailList(db, uid), claimsPending(db, uid), saveMeta(db, uid)]);
-  return { att, mail, claims, save };
+  const [att, mail, claims, save, events] = await Promise.all([
+    attStatus(db, uid), mailList(db, uid), claimsPending(db, uid), saveMeta(db, uid), eventList(db, uid),
+  ]);
+  return { att, mail, claims, save, events };
 }

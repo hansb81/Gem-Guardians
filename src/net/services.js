@@ -2,6 +2,7 @@
 // 돌려주는 모양: { ok, reason?, delta? } - reason 'offline' | 'already' | 'notFound' | ...
 import { call, net, syncClaims } from './api.js';
 import { storage } from '../platform/storage.js';
+import { knownEvents, hasClaimableEvent } from '../game/eventRules.js';
 
 const MAIL_DELETED_KEY = 'mailDeleted'; // 받은 뒤 지운 우편 id - 서버엔 그대로 있어 기기에서 가린다
 
@@ -138,6 +139,53 @@ export class CouponService {
         return res;
       }
       return { ...grantClaim(this.inventory, res, 'coupon', this.api.call), title: res.title ?? null };
+    } finally {
+      this.busy = false;
+    }
+  }
+}
+
+// 이벤트(docs/events.md). 판정은 서버 event_claim, 지급은 쿠폰과 같은 grantClaim(txId 'event:{id}').
+// 실패 reason: notFound | notStarted | expired | platform | already | banned | offline | error.
+export class EventService {
+  constructor(inventory, api = { call, syncClaims }) {
+    this.inventory = inventory;
+    this.api = api;
+    this.list = null; // null = 아직 모름 | [{ id, kind, title, body, banner, bannerUrl, bundle, startsAt, endsAt, claimed }]
+    this.busy = false;
+  }
+
+  setList(events) {
+    this.list = knownEvents(events);
+  }
+
+  canClaim() {
+    return hasClaimableEvent(this.list);
+  }
+
+  // 실패하면 이전 목록 그대로.
+  async refresh() {
+    const res = await this.api.call('event-list');
+    if (res.ok) this.setList(res.events);
+    return res;
+  }
+
+  async claim(id) {
+    if (this.busy) return { ok: false, reason: 'busy' };
+    this.busy = true;
+    try {
+      const res = await this.api.call('event-claim', { eventId: id });
+      const e = this.list?.find((x) => x.id === id);
+      if (!res.ok) {
+        if (res.reason === 'already') {
+          if (e) e.claimed = true;
+          await this.api.syncClaims(this.inventory); // 응답이 끊겨 못 받은 지급 복구
+        }
+        if (res.reason === 'expired' && e) e.expired = true;
+        return res;
+      }
+      if (e) e.claimed = true;
+      return { ...grantClaim(this.inventory, res, 'event', this.api.call), title: res.title ?? null };
     } finally {
       this.busy = false;
     }

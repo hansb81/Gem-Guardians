@@ -19,6 +19,22 @@ export function firstBuyExtra(key: string) {
   return dia - DIA_BONUS[Number(m[1])];
 }
 
+const EVENT_ID = /^[A-Za-z0-9_-]{1,40}$/; // SQL event_create와 같은 규칙
+const EVENT_PLATFORMS = ["web", "toss", "android", "onestore", "ios"]; // players.platform 값(hello PLATFORMS)
+export const BANNER_W = 236, BANNER_H = 55;
+// PNG 서명 + IHDR 너비·높이. PNG가 아니면 null.
+export function pngSize(b: Uint8Array): [number, number] | null {
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+  if (b.length < 24 || sig.some((v, i) => b[i] !== v) || String.fromCharCode(...b.slice(12, 16)) !== "IHDR") return null;
+  const v = new DataView(b.buffer, b.byteOffset);
+  return [v.getUint32(16), v.getUint32(20)];
+}
+// 번들 비교용(키 순서 무시).
+const sortKeys = (v: unknown): unknown =>
+  v && typeof v === "object" && !Array.isArray(v)
+    ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, sortKeys((v as Record<string, unknown>)[k])]))
+    : v ?? null;
+
 const rpc = async (db: Db, fn: string, args: Record<string, unknown> = {}) => must(await db.rpc(fn, args));
 const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : null);
 const limitOf = (v: unknown, def = 100) => Math.min(500, Math.max(1, Number(v) || def));
@@ -47,8 +63,8 @@ const playerSet = (field: string, value: (b: Record<string, unknown>) => unknown
   },
 });
 
-// 쿠폰: 기존 SQL 함수(SQL 예외 = 입력 오류 메시지) + 감사. 같은 requestId면 저장된 결과.
-async function couponWrite(ctx: AdminCtx, action: string, target: string, fn: () => Promise<{ data: unknown; error: unknown }>) {
+// 쿠폰·이벤트: SQL 함수·표 쓰기(SQL 예외 = 입력 오류 메시지) + 감사. 같은 requestId면 저장된 결과.
+async function auditWrite(ctx: AdminCtx, action: string, target: string, fn: () => Promise<{ data: unknown; error: unknown }>) {
   const prev = must(await ctx.db.from("admin_audit").select("after").eq("request_id", ctx.requestId).maybeSingle()) as
     { after: unknown } | null;
   if (prev) return prev.after;
@@ -282,7 +298,7 @@ export const ACTIONS: Record<string, Action> = {
     run: (ctx) => {
       const b = ctx.body;
       const title = (b.title ?? {}) as { ko?: unknown; en?: unknown };
-      return couponWrite(ctx, "coupon.create", `coupon:${str(b.code, 40)}`, () =>
+      return auditWrite(ctx, "coupon.create", `coupon:${str(b.code, 40)}`, () =>
         ctx.db.rpc("coupon_create", {
           p_code: str(b.code, 40), p_title_ko: str(title.ko, 100), p_title_en: str(title.en, 100), p_bundle: b.bundle ?? null,
           p_ends_at: tsOrNull(b.endsAt), p_max_uses: Number.isSafeInteger(b.maxUses) ? b.maxUses : null,
@@ -298,7 +314,7 @@ export const ACTIONS: Record<string, Action> = {
     run: (ctx) => {
       const b = ctx.body;
       const title = (b.title ?? {}) as { ko?: unknown; en?: unknown };
-      return couponWrite(ctx, "coupon.batch", `campaign:${str(b.campaign, 40)}`, () =>
+      return auditWrite(ctx, "coupon.batch", `campaign:${str(b.campaign, 40)}`, () =>
         ctx.db.rpc("coupon_batch", {
           p_campaign: str(b.campaign, 40), p_count: Number(b.count), p_title_ko: str(title.ko, 100), p_title_en: str(title.en, 100),
           p_bundle: b.bundle ?? null, p_ends_at: tsOrNull(b.endsAt), p_platforms: Array.isArray(b.platforms) ? b.platforms : null,
@@ -313,8 +329,94 @@ export const ACTIONS: Record<string, Action> = {
     run: (ctx) => {
       const campaign = str(ctx.body.campaign, 40);
       if (!campaign || typeof ctx.body.enabled !== "boolean") return Promise.resolve(fail("badRequest"));
-      return couponWrite(ctx, "coupon.toggle", `campaign:${campaign}`, () =>
+      return auditWrite(ctx, "coupon.toggle", `campaign:${campaign}`, () =>
         ctx.db.from("coupons").update({ enabled: ctx.body.enabled }).eq("campaign", campaign).select("code"));
+    },
+  },
+
+  // 이벤트(docs/events.md). 목록 + 받은 사람 수(claims event:{id}).
+  "event.list": {
+    role: "viewer",
+    run: async ({ db }) => {
+      const events = (must(await db.from("events").select("*").order("sort").order("starts_at")) ?? []) as { id: string }[];
+      const counts = await Promise.all(events.map((e) =>
+        db.from("claims").select("player_id", { count: "exact", head: true }).eq("tx_id", `event:${e.id}`)));
+      return { ok: true, events: events.map((e, i) => ({ ...e, claimed_count: counts[i].count ?? 0 })) };
+    },
+  },
+
+  // {id, isNew, kind, title:{ko,en}, body:{ko,en}, bundle, startsAt, endsAt, platforms?, sort, enabled, banner?, confirmBundle?}
+  // banner = 앱 안 그림 키(원격 그림 banner_url은 event.banner로만).
+  // 이미 받은 사람이 있는 이벤트의 보상을 바꾸면 confirmBundle 없이는 'bundleChanged'(받은 사람 수와 함께) - 받은 사람은 그대로.
+  "event.save": {
+    role: "owner", write: true,
+    run: async (ctx) => {
+      const b = ctx.body;
+      const id = str(b.id, 40);
+      if (!id || !EVENT_ID.test(id)) return fail("badRequest", { message: "id는 영문·숫자·_·- 1~40자" });
+      if (b.kind !== "claim" && b.kind !== "notice") return fail("badRequest", { message: "종류는 claim·notice" });
+      const startsAt = tsOrNull(b.startsAt), endsAt = tsOrNull(b.endsAt);
+      if (!startsAt || !endsAt || endsAt <= startsAt) return fail("badRequest", { message: "기간" });
+      const platforms = Array.isArray(b.platforms) && b.platforms.length ? b.platforms : null;
+      if (platforms && !platforms.every((p) => EVENT_PLATFORMS.includes(p as string))) return fail("badRequest", { message: "마켓" });
+      const bundle = b.kind === "claim" ? b.bundle ?? null : null;
+      if (bundle && !(await rpc(ctx.db, "event_bundle_ok", { b: bundle }))) return fail("badBundle");
+      if (b.kind === "claim" && !bundle) return fail("badBundle");
+      const old = must(await ctx.db.from("events").select("bundle").eq("id", id).maybeSingle()) as { bundle: unknown } | null;
+      if (b.isNew === true && old) return fail("exists");
+      if (b.isNew !== true && !old) return fail("notFound");
+      if (old && JSON.stringify(sortKeys(old.bundle)) !== JSON.stringify(sortKeys(bundle)) && b.confirmBundle !== true) {
+        const { count } = await ctx.db.from("claims").select("player_id", { count: "exact", head: true }).eq("tx_id", `event:${id}`);
+        if (count) return fail("bundleChanged", { claimed: count });
+      }
+      const title = (b.title ?? {}) as { ko?: unknown; en?: unknown };
+      const text = (b.body ?? {}) as { ko?: unknown; en?: unknown };
+      const row = {
+        id, kind: b.kind, bundle, title_ko: str(title.ko, 100), title_en: str(title.en, 100),
+        body_ko: str(text.ko, 1000), body_en: str(text.en, 1000), starts_at: startsAt, ends_at: endsAt, platforms,
+        sort: Number.isSafeInteger(b.sort) ? b.sort : 0, enabled: b.enabled === true, banner: str(b.banner, 40) || null,
+      };
+      return auditWrite(ctx, "event.save", `event:${id}`, () =>
+        old ? ctx.db.from("events").update(row).eq("id", id).select("id") : ctx.db.from("events").insert(row));
+    },
+  },
+
+  // {id, enabled}
+  "event.toggle": {
+    role: "owner", write: true,
+    run: (ctx) => {
+      const id = str(ctx.body.id, 40);
+      if (!id || typeof ctx.body.enabled !== "boolean") return Promise.resolve(fail("badRequest"));
+      return auditWrite(ctx, "event.toggle", `event:${id}`, async () => {
+        const r = await ctx.db.from("events").update({ enabled: ctx.body.enabled }).eq("id", id).select("id, enabled");
+        return !r.error && !r.data?.length ? { data: null, error: { message: "없는 이벤트" } } : r;
+      });
+    },
+  },
+
+  // {id, png(base64)} -> Storage event-banners/{id}-{해시 8자}.png(바꿀 때마다 새 이름 = 캐시 문제 없음) -> events.banner_url.
+  "event.banner": {
+    role: "owner", write: true,
+    run: async (ctx) => {
+      const id = str(ctx.body.id, 40);
+      const b64 = str(ctx.body.png, 200_000);
+      if (!id || !EVENT_ID.test(id) || !b64) return fail("badRequest");
+      let bytes: Uint8Array;
+      try {
+        bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      } catch {
+        return fail("badRequest");
+      }
+      const size = pngSize(bytes);
+      if (!size || size[0] !== BANNER_W || size[1] !== BANNER_H) return fail("badRequest", { message: `PNG ${BANNER_W}x${BANNER_H}만` });
+      if (!must(await ctx.db.from("events").select("id").eq("id", id).maybeSingle())) return fail("notFound");
+      const hash = [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].slice(0, 4).map((x) => x.toString(16).padStart(2, "0")).join("");
+      const path = `${id}-${hash}.png`;
+      const up = await ctx.db.storage.from("event-banners").upload(path, bytes, { contentType: "image/png", upsert: true });
+      if (up.error) return fail("error", { message: String(up.error.message ?? up.error) });
+      const url = ctx.db.storage.from("event-banners").getPublicUrl(path).data.publicUrl as string;
+      return auditWrite(ctx, "event.banner", `event:${id}`, () =>
+        ctx.db.from("events").update({ banner_url: url }).eq("id", id).select("id, banner_url"));
     },
   },
 

@@ -35,7 +35,7 @@ import { restore, flushPendingPurchases, startPendingPurchases } from './shop/ia
 import { storage } from './platform/storage.js';
 import { guardianFxSetting, lookGrade, fxTier } from './render/guardianFx.js';
 import { UpgradeSfx, BULK_STAGGER_MS } from './audio/upgradeSfx.js';
-import { loadServerConfig, setupServer, autoOpenAttendance } from './game/serverUi.js';
+import { loadServerConfig, setupServer, autoOpenAttendance, autoOpenEvent } from './game/serverUi.js';
 import { titleLoginMode, linkFromTitle } from './game/titleLogin.js';
 import { showRewarded } from './game/ads.js';
 import { continueOptions, recordUse } from './game/adContinue.js';
@@ -1923,8 +1923,11 @@ function loop(now) {
       mainMenuScreen.openSaveConflict(cloudConflict);
       cloudConflict = null;
     } else if ((nudgeCheck || pendingNudge) && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) maybeNudge();
-    // 하루 첫 메뉴 진입: 출석 팝업 자동 1회(저장 충돌·연결 권유가 먼저, 그게 닫힌 뒤에).
-    else if (!cloudConflict && !prep && !fade && !ranking.isOpen && !rewardPopup.active) autoOpenAttendance(serverUi.att, mainMenuScreen, !!playerState.tutorial?.done);
+    // 하루 첫 메뉴 진입: 출석 팝업 자동 1회(저장 충돌·연결 권유가 먼저, 그게 닫힌 뒤에). 그다음 차례 = 새 이벤트 상세 자동 1회(docs/events.md).
+    else if (!cloudConflict && !prep && !fade && !ranking.isOpen && !rewardPopup.active) {
+      const done = !!playerState.tutorial?.done;
+      autoOpenAttendance(serverUi.att, mainMenuScreen, done) || autoOpenEvent(serverUi, mainMenuScreen, done);
+    }
     // 소급 지급한 보스 정령(inv.pendingSpiritNotice) - 메뉴에서 다른 팝업이 없을 때 한 번 보여 주고 비운다.
     const spiritNotice = playerState.inventory.data.pendingSpiritNotice;
     if (spiritNotice.length > 0 && spiritEnv && !prep && !mainMenuScreen.popup && !fade && !ranking.isOpen && !rewardPopup.active) {
