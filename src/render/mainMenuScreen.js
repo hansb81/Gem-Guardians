@@ -1613,7 +1613,7 @@ export class MainMenuScreen {
     this._drawButton(ctx, at(NUDGE.ok), 'nudgeOk', 'btn_primary', t('menu.linkNudge.ok'));
   }
 
-  // 경쟁 모드 출시 기념 안내(main.js startCompGame이 시즌마다 1번 연다). [확인] = 판 시작, X = 취소.
+  // 경쟁 모드 출시 기념 안내(main.js startCompGame이 하루(KST)에 1번 연다). [확인] = 판 시작, X = 취소.
   _drawCompLaunchPopup(ctx, [cx, cy, cw]) {
     t('menu.compLaunch.body').forEach((l, i) => this._text(ctx, l, cx + cw / 2, cy + COMP_LAUNCH.bodyY[i], { size: 15, align: 'center' }));
     const when = t('menu.compLaunch.when', { when: launchWhenText(this.compLaunch) });

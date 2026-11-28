@@ -124,7 +124,7 @@
 | 그 밖 참여 | 다이아 50 + 참여 골드 |
 
 - `config/ranking.json` `launch.on = true` + `tiers` = 위 표. 위 5-3 표는 `rankedTiers`에 그대로(아직 안 씀).
-- 경쟁 모드 시작(모드 팝업 → 경쟁) 때 **시즌마다 1번** 안내 팝업(`menu.compLaunch`) - [확인]이면 판 시작, X면 취소. 본 시즌은 save `ranking.launchSeen`.
+- 경쟁 모드 시작(모드 팝업 → 경쟁) 때 **하루(KST)에 1번** 안내 팝업(`menu.compLaunch`) - [확인]이면 판 시작, X면 취소. 본 날짜는 save `ranking.launchSeen`.
 - `보상 보기` 팝업 아래 안내 줄이 `지금은 출시 기념 기간이에요. 순위별 보상 적용: {시점}`으로 바뀐다.
 - 시행일(`launch.rankedFrom`, 'YYYY-MM-DD' KST)은 **아직 미정** - null이면 `추후 공지`로 보인다. 날짜를 넣으면 `M월 D일 시즌부터`.
 - 끝낼 때: `tiers` ← `rankedTiers`(그때 확정한 표), `launch.on = false`, 서버 사본(`_shared/ranking.json`)도 같이 배포 - **순위 보상을 처음 주는 주의 정산(월 00:31) 전에**. 앱에 든 표는 앱 업데이트 전까지 옛 표가 보인다.

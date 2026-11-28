@@ -14,7 +14,7 @@ function defaultRanking() {
       history: [], // 최근 8개 { seasonId, points, rank, pct, tierId }
     },
     lastTab: 'normal',
-    launchSeen: '', // 출시 기념 안내 팝업을 본 시즌 id(config/ranking.json launch)
+    launchSeen: '', // 출시 기념 안내 팝업을 본 날짜(KST 'YYYY-MM-DD')(config/ranking.json launch)
   };
 }
 

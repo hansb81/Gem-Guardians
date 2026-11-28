@@ -435,9 +435,8 @@ function startNormalGame() {
 
 async function startCompGame() {
   if (compBusy || fade || !controller || !compStatus().open) return;
-  // 출시 기념 기간(config/ranking.json launch)이면 시즌마다 1번 안내 팝업 - [확인](compLaunchOk) 때 다시 들어온다.
-  const sid = ranking.service.currentSeason().id;
-  if (rankingCfg.launch?.on && playerState.ranking.launchSeen !== sid) {
+  // 출시 기념 기간(config/ranking.json launch)이면 하루(KST)에 1번 안내 팝업 - [확인](compLaunchOk) 때 다시 들어온다.
+  if (rankingCfg.launch?.on && playerState.ranking.launchSeen !== kstDate(ranking.service.now())) {
     mainMenuScreen.compLaunch = rankingCfg.launch;
     mainMenuScreen.popup = 'compLaunch';
     return;
@@ -1299,7 +1298,7 @@ canvas.addEventListener('pointerdown', (e) => {
     else if (action === 'startNormalGame') startNormalGame();
     else if (action === 'startCompGame') startCompGame();
     else if (action === 'compLaunchOk') {
-      playerState.ranking.launchSeen = ranking.service.currentSeason().id;
+      playerState.ranking.launchSeen = kstDate(ranking.service.now());
       playerState.save();
       startCompGame();
     }

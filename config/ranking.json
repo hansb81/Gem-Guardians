@@ -34,7 +34,7 @@
     }
   },
   "launch": {
-    "_doc": "출시 기념 기간(docs/ranking.md 5-3-1): on이면 tiers = 1~3위 다이아 100, 참가자 전원 50. 경쟁 모드 시작 때 시즌마다 1번 안내 팝업 + 보상 보기에 안내 문구. rankedFrom = 순위 보상 시작일 'YYYY-MM-DD'(KST, 그 날짜의 시즌부터), null = 추후 공지. 끝낼 때: tiers를 rankedTiers로 바꾸고 on=false, 서버 사본도 같이 배포(그 주 정산 전).",
+    "_doc": "출시 기념 기간(docs/ranking.md 5-3-1): on이면 tiers = 1~3위 다이아 100, 참가자 전원 50. 경쟁 모드 시작 때 하루(KST)에 1번 안내 팝업 + 보상 보기에 안내 문구. rankedFrom = 순위 보상 시작일 'YYYY-MM-DD'(KST, 그 날짜의 시즌부터), null = 추후 공지. 끝낼 때: tiers를 rankedTiers로 바꾸고 on=false, 서버 사본도 같이 배포(그 주 정산 전).",
     "on": true,
     "rankedFrom": null
   },
