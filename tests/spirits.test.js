@@ -44,9 +44,9 @@ test('everyN: 별 3에서 5→4, 별 5에서 5→3, 최소 2', () => {
   assert.equal(everyN(CFG, 2, 5), 2);
 });
 
-test('levelUpCost: 골드 = round(층 보상 x 0.25 x 1.06^(lv-1)), 정령석 = ceil(lv / 3)', () => {
-  assert.deepEqual(levelUpCost(CFG, 1, 1000), { gold: 250, stones: 1 });
-  assert.deepEqual(levelUpCost(CFG, 4, 1000), { gold: Math.round(250 * 1.06 ** 3), stones: 2 });
+test('levelUpCost: 골드 = round(층 보상 x 0.06 x 1.04^(lv-1)), 정령석 = ceil(lv / 3)', () => {
+  assert.deepEqual(levelUpCost(CFG, 1, 1000), { gold: 60, stones: 1 });
+  assert.deepEqual(levelUpCost(CFG, 4, 1000), { gold: Math.round(60 * 1.04 ** 3), stones: 2 });
   assert.equal(levelUpCost(CFG, 29, 1000).stones, 10);
 });
 

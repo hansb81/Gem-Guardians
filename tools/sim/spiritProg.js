@@ -22,7 +22,8 @@ export function newSpiritProg(cfg) {
   const wallet = { gold: 0, diamonds: 0 };
   const inv = new Inventory(null, { wallet, clock: () => 0 });
   inv.initSpirits(cfg); // 시작 정령(도깨비불) 지급 + 첫 칸 장착
-  return { cfg, inv, wallet, goldSpent: 0, stonesGot: 0, stonesSpent: 0, levels: 0 };
+  // stops(v13-8 측정) = 레벨업이 멈춘 이유별 횟수: cap(spiritBuy 상한), gold(지갑), stones(정령석만), both(골드와 정령석 둘 다), max(올릴 정령 없음).
+  return { cfg, inv, wallet, goldSpent: 0, stonesGot: 0, stonesSpent: 0, levels: 0, stops: { cap: 0, gold: 0, stones: 0, both: 0, max: 0 } };
 }
 
 // 보스 첫 클리어(게임 BattleController._grantBossSpirit과 같은 묶음·txId).
@@ -80,10 +81,13 @@ export function spiritLevelUp(sp, gold, cap, floorReward) {
   for (;;) {
     const cand = (list) => list.filter((id) => owned[id].lv < cfg.levelMax).sort((a, b) => owned[a].lv - owned[b].lv)[0];
     const id = cand(equipped) ?? cand(Object.keys(owned).filter((x) => !equipped.includes(x) && !SIM_EXCLUDED.includes(x)));
-    if (!id) break;
+    if (!id) { sp.stops.max++; break; }
     const cost = levelUpCost(cfg, owned[id].lv, floorReward);
-    if (sp.goldSpent + cost.gold > cap) break;
-    if (!inv.levelUpSpirit(id, floorReward).ok) break; // 골드나 정령석 부족
+    // 멈춤 판정은 예전과 같다(상한 넘음 또는 levelUpSpirit의 골드·정령석 부족). 이유만 나눠 센다.
+    const goldShort = sp.goldSpent + cost.gold > cap ? 'cap' : wallet.gold < cost.gold ? 'gold' : null;
+    const stoneShort = inv.spiritStones < cost.stones;
+    if (goldShort || stoneShort) { sp.stops[goldShort && stoneShort ? 'both' : stoneShort ? 'stones' : goldShort]++; break; }
+    if (!inv.levelUpSpirit(id, floorReward).ok) break;
     sp.goldSpent += cost.gold;
     sp.stonesSpent += cost.stones;
     sp.levels++;

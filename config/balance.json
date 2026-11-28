@@ -39,9 +39,9 @@
     "_docDmgGrowthAfter100": "101층부터 적 성벽 피해 층당 성장률(100층까지는 scaling.wallDmgGrowth, 100층 누적 배율은 그대로 이어 받음). floorGen.js wallDmgRaw, v13-5. 현재 1.015 = 효과 없음, 출시 뒤 조정용."
   },
   "scaling": {
-    "_doc": "f = 층(1부터). hpMul = hpGrowth^(f-1), atkMul = wallDmgGrowth^(f-1), speedMul = min(speedCap, 1 + speedPerFloor*(f-1)), defAdd = floor((f-1)/defEvery). enemyHpMul = 모든 일반·엘리트·보스 HP에 곱하는 전체 배율(젬 기술 v3 보정, docs/balance.md 10-1).",
+    "_doc": "f = 층(1부터). hpMul = hpGrowth^(f-1), atkMul = wallDmgGrowth^(f-1), speedMul = min(speedCap, 1 + speedPerFloor*(f-1)), defAdd = floor((f-1)/defEvery). enemyHpMul = 모든 일반·엘리트·보스 HP에 곱하는 전체 배율(젬 기술 v3 보정, docs/balance.md 10-1). v13-8b(2026-11-28): 1.56 -> 1.58(정령 비용 0.06/1.04 뒤 목표 밖 칸 수 1.56과 같음(6), slow 보스층 최대 재도전 6.4 -> 5.6, reports/sim/v13/8b-enemyhp.md).",
     "hpGrowth": 1.0235,
-    "enemyHpMul": 1.56,
+    "enemyHpMul": 1.58,
     "wallDmgGrowth": 1.015,
     "speedPerFloor": 0.0035,
     "speedCap": 1.35,
