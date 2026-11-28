@@ -3,7 +3,7 @@
 // 쓴다 - Lv1 고정으로는 후반 층을 깨지 못해 골드 칸이 비고, "첫 클리어로 몇 레벨"도
 // 과대평가된다(sim.json targets.levelsPerFirstClear._doc).
 import { runFloorAttempt } from '../floorSim.js';
-import { clearBonus } from '../../../src/core/economy/economy.js';
+import { clearBonus, failKillGold } from '../../../src/core/economy/economy.js';
 import { runOneProgression, spendGold } from './t4.js';
 import { comboGold } from '../combo.js';
 import { mdTable } from '../report.js';
@@ -63,7 +63,7 @@ export async function run(env) {
       const nextLevels = levelsByFloor.get(floor + 1);
       for (let s = 0; nextLevels && floor < env.floorsRange.to && s < env.seeds; s++) {
         const r = attemptAt(nextLevels, skillLvByFloor.get(floor + 1), s + 1, spiritsByFloor.get(floor + 1));
-        const rr = r.killGoldTotal + r.spiritGold + (r.status === 'cleared' ? clearBonus(balance, r.killGoldTotal, false) : 0);
+        const rr = r.status === 'cleared' ? r.killGoldTotal + r.spiritGold + clearBonus(balance, r.killGoldTotal, false) : failKillGold(balance, r.tag, r.killGoldTotal + r.spiritGold);
         pf.replayNextGold += rr + (r.status === 'cleared' ? comboGold(balance, rr, r.maxCombo) : 0); // 콤보 골드(기본 config, --combogold=off면 0)
         pf.replayNextSec += r.timeSec;
       }
@@ -101,7 +101,7 @@ export async function run(env) {
           pf.firstGold += firstGold;
           pf.firstSec += result.timeSec;
         } else {
-          agg.failGold.push(result.killGoldTotal + result.spiritGold);
+          agg.failGold.push(failKillGold(balance, result.tag, result.killGoldTotal + result.spiritGold));
         }
       }
     }

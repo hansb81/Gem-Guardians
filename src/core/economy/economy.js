@@ -62,6 +62,14 @@ export function clearBonus(balance, killGoldTotal, isFirstClear) {
   return Math.round(killGoldTotal * (isFirstClear ? clearBonusMul : replayClearMul));
 }
 
+// 진 판에서 받는 처치 골드(v13-sw, docs/balance.md 8장) = floor(처치 골드 x economy.failGoldMul).
+// failGoldScope "boss"면 보스층(tag 'boss')만, "all"(기본)이면 모든 층. 배율 1(기본)이면 그대로. 게임·시뮬 공용.
+export function failKillGold(balance, tag, gold) {
+  const { failGoldMul = 1, failGoldScope = 'all' } = balance.economy;
+  if (failGoldMul === 1 || (failGoldScope === 'boss' && tag !== 'boss')) return gold;
+  return Math.floor(gold * failGoldMul + 1e-9);
+}
+
 // 아이템 골드 가격(docs/items.md 4장) = round(goldBase x 기준 층 보상). 기준 층 = 최고 도달 층
 // 이하에서 가장 가까운 순수 일반층(보스·엘리트 제외), 보상 = 그 층 처치 골드 합 + clearBonus(다시 깬 층 기준).
 // floors.json/genFloor 모두 층 번호 seed라 같은 층이면 항상 같은 값이다.

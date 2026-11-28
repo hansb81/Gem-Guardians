@@ -25,6 +25,7 @@ export function loadConfigs() {
   const attendance = loadJson(join(CFG, 'attendance.json'));
   const mine = loadJson(join(CFG, 'mine.json'));
   const spirits = loadJson(join(CFG, 'spirits.json'));
+  const products = loadJson(join(CFG, 'products.json')); // v13-sw T10(보스 돌파 팩 구성)
   let summon = null;
   try {
     const manifest = loadJson(join(ROOT, 'assets', 'summon', 'manifest.json'));
@@ -34,7 +35,7 @@ export function loadConfigs() {
   } catch {
     summon = null;
   }
-  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance, mine, spirits };
+  return { balance, enemies, obstacles, floorsData, sim, battleEffects, summon, skills, items, shop, attendance, mine, spirits, products };
 }
 
 function parseList(str) {
@@ -125,7 +126,7 @@ export function parseArgs(argv, sim) {
   // --stonesPerDay=N: 하루(--idleDayHours 플레이 시간)마다 정령석 N개(T4, 10층 보스 전 0). 기본 0 = 없음.
   const stonesPerDay = Number(args.stonesPerDay ?? 0);
   if (!(Number.isInteger(stonesPerDay) && stonesPerDay >= 0)) throw new Error('--stonesPerDay=0 이상 정수');
-  return { idle, idleDayHours, idleRMul, stonesPerDay, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset };
+  return { idle, idleDayHours, idleRMul, stonesPerDay, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset, wallfloors: args.wallfloors };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).
@@ -149,7 +150,6 @@ export function applySets(configs, setStr) {
       value = NaN;
     }
     const ok = (v) => typeof v === 'number' && Number.isFinite(v);
-    if (!(ok(value) || (Array.isArray(value) && value.every(ok)))) throw new Error(`--set 값은 숫자 또는 숫자 배열: ${pair}`);
     const file = SET_FILES.includes(keys[0]) && keys.length > 1 ? keys[0] : 'balance';
     if (file === keys[0]) keys = keys.slice(1);
     const step = (obj, k) => (Array.isArray(obj) && !/^\d+$/.test(k) ? obj.find((e) => e?.id === k || e?.item === k) : obj?.[k]);
@@ -159,6 +159,9 @@ export function applySets(configs, setStr) {
       if (obj == null || typeof obj !== 'object') throw new Error(`--set 경로 없음: ${pair}`);
     }
     const last = keys.at(-1);
+    // 지금 값이 문자열인 키(예: economy.failGoldScope)는 따옴표 없는 단어를 그대로 받는다.
+    if (typeof obj[last] === 'string' && /^\w+$/.test(pair.slice(eq + 1))) value = pair.slice(eq + 1);
+    else if (!(ok(value) || (Array.isArray(value) && value.every(ok)))) throw new Error(`--set 값은 숫자 또는 숫자 배열: ${pair}`);
     // 층 번호 키(예: hpMulByFloor.150)는 새로 만들 수 있다(v13-5 101층 이후 보스 키 비교용). 그 밖의 없는 키는 오타로 보고 에러.
     if (!(last in obj) && !(/^\d+$/.test(last) && !Array.isArray(obj))) throw new Error(`--set 키 없음: ${pair}`);
     done.push(`${file}.${keys.join('.')}: ${JSON.stringify(obj[last])} -> ${JSON.stringify(value)}`);
