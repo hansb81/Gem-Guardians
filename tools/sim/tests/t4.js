@@ -18,7 +18,8 @@ import { defaultShopSave } from '../../../src/core/shop/shop.js';
 import { combo, comboGold } from '../combo.js';
 import { failReason } from './t1.js';
 import { towerAttack } from '../../../src/core/economy/economy.js';
-import { newSpiritProg, spiritBossClear, spiritEquipBest, spiritLevelUp, spiritStats } from '../spiritProg.js';
+import { newSpiritProg, spiritBossClear, spiritEquipBest, spiritLevelUp, spiritStats, atkPerMul } from '../spiritProg.js';
+import { effectMul, levelUpCost } from '../../../src/core/spirits/spirits.js';
 
 const HARD_STOP_RETRIES = 50; // 무한 루프 방지용 안전판일 뿐 - worst 보스 벽은 sim.targets.bossWallMinutesByPlayer(시간)로 표시.
 
@@ -92,6 +93,8 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
   const colors = balance.tower.towers.map((t) => t.color);
   let tutorial = !!sp; // 최초 튜토리얼 층(1층 첫 도전)은 게임에서 정령이 꺼진다(docs/spirits.md 10장 10)
   let spiritGoldTotal = 0; // 재물 정령이 더 준 골드(모든 시도)
+  const wealthStat = []; // --spiritstats: 10층 구간별 { g = 재물 골드, m = 시도마다 장착 재물 배율 합, a = 시도 수 }
+  const spiritSnap = {}; // --spiritstats: 100·200층을 깬 순간(보스 보상 전) 정령 상태
   const rewardMemo = new Map();
   const floorReward = (f) => rewardMemo.get(f) ?? rewardMemo.set(f, normalFloorReward(env.configs, f)).get(f);
   const comboByTag = { normal: 0, elite: 0, boss: 0 }; // --combogold 보너스(측정 전용) 층 종류별 합
@@ -339,6 +342,12 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         spiritSlots: spiritsNow,
       });
       spiritGoldTotal += r.spiritGold;
+      if (env.spiritStats && sp) {
+        const w = (wealthStat[Math.floor((floor - 1) / 10)] ??= { g: 0, m: 0, a: 0 });
+        w.g += r.spiritGold;
+        w.a++;
+        (spiritsNow ?? []).forEach((s, i) => { if (s && env.configs.spirits.spirits[s.id].role === 'wealth') w.m += effectMul(env.configs.spirits, s.id, s, colors[i]); });
+      }
       return r;
     };
     const result = attemptFloor(floor, seed * 100000 + attempt);
@@ -381,6 +390,10 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
         if (floor === itemsCfg.slots.unlock4BossFirstClear && !equipped.includes(SLOT4_ITEM)) equipped.push(SLOT4_ITEM);
       }
       retriesByFloor.push({ floor, tag: result.tag, retries: attempt - 1, floorMinutes: floorTimeSec / 60, avgLevelAtEntry: avgLevel, wallLeftPct: result.wallHealthPct, levelsAtEntry: levelsAtEntry, skillLvAtEntry, continueUsed: result.continueUsed, goldAtEntry, unlockPending, clearSec: result.timeSec, cumMin: cumulativeTimeSec / 60, ...(sp ? { spiritsAtEntry } : {}) });
+      if (env.spiritStats && sp && (floor === 100 || floor === 200)) {
+        const lvs = Object.values(sp.inv.data.perm.spirits).map((o) => o.lv);
+        spiritSnap[floor] = { cumMin: cumulativeTimeSec / 60, goldEarned, goldSpent: sp.goldSpent, stonesLeft: sp.inv.data.perm.spiritStones, ownedLv: lvs.reduce((t, v) => t + v, 0) / lvs.length, stops: { ...sp.stops } };
+      }
       if (sp && tag === 'boss') spiritBossClear(sp, floor);
       const isWall = result.tag === 'boss' && bossWallMin != null ? floorTimeSec / 60 > bossWallMin : attempt - 1 >= wallFlagAt(result.tag);
       if (isWall) wallFloors.push(floor);
@@ -453,7 +466,9 @@ export function runOneProgression(env, player, strategy, seed, { itemPolicy = 'n
     itemsUsed: agg.itemsUsed,
     idle,
     itemStat,
-    spirit: sp ? { goldSpent: sp.goldSpent, levels: sp.levels, stonesGot: sp.stonesGot, stonesSpent: sp.stonesSpent, stonesLeft: sp.inv.data.perm.spiritStones, wealthGold: spiritGoldTotal, owned: { ...sp.inv.data.perm.spirits } } : null,
+    wealthStat,
+    spiritSnap,
+    spirit: sp ? { stops: { ...sp.stops }, goldSpent: sp.goldSpent, levels: sp.levels, stonesGot: sp.stonesGot, stonesSpent: sp.stonesSpent, stonesLeft: sp.inv.data.perm.spiritStones, wealthGold: spiritGoldTotal, owned: { ...sp.inv.data.perm.spirits } } : null,
   };
 }
 
@@ -505,6 +520,8 @@ export async function run(env) {
   const causeCsv = [];
   const flowCsv = [];
   const spiritEcon = [];
+  const spiritEffCsv = []; // --spiritstats=on일 때만
+  const spiritStatCsv = [];
   const special = env.configs.shop.skills.special;
   const unlockIds = Object.keys(special).filter((id) => special[id].unlockBossFloor);
 
@@ -530,6 +547,10 @@ ${wasteCauseTable(runs)}`);
           const { rows, econ } = spiritRows(env.configs, player, strategy, runs);
           spiritCsv.push(...rows);
           spiritEcon.push(econ);
+          if (env.spiritStats) {
+            spiritEffCsv.push(...spiritEffRows(env.configs, player, strategy, runs));
+            spiritStatCsv.push(spiritStatRow(player, strategy, runs));
+          }
         }
         if (combo.goldPct !== 'off') comboRows.push(comboRow(player, strategy, runs, unlockIds));
         causeRows.push(...causeCsvRows(player, strategy, runs));
@@ -694,7 +715,7 @@ ${mdTable(['플레이어:전략', '구간', '장착 수', '평균 Lv', '평균 �
 ### T4 정령 경제 (시드 평균, % = 전체 획득 골드 대비)
 ${mdTable(Object.keys(spiritEcon[0]), spiritEcon.map((r) => Object.values(r)))}`
     : '';
-  return { csvRows, summaryMd: summaryMd + idleMd + spiritMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, t4seed: seedCsv, t4failcause: causeCsv, t4flow: flowCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}), ...(spiritCsv.length ? { t4spirit: spiritCsv, t4spiritecon: spiritEcon } : {}) } };
+  return { csvRows, summaryMd: summaryMd + idleMd + spiritMd, outOfRange, extraCsv: { t4cause: causeRows, t4boss: bossCsv, t4time: timeCsv, t4seed: seedCsv, t4failcause: causeCsv, t4flow: flowCsv, ...(comboRows.length ? { t4combo: comboRows } : {}), ...(idleCsv.length ? { t4idle: idleCsv } : {}), ...(spiritCsv.length ? { t4spirit: spiritCsv, t4spiritecon: spiritEcon } : {}), ...(spiritEffCsv.length ? { t4spiriteff: spiritEffCsv, t4spiritstat: spiritStatCsv } : {}) } };
 }
 
 // --spirits=prog: 10층 구간별 장착 상태(클리어한 층의 진입 장착) + 경제 한 줄.
@@ -721,6 +742,62 @@ function spiritRows(configs, player, strategy, runs) {
     ownedSeed1: Object.entries(runs[0].spirit.owned).map(([id, o]) => `${id}:${o.lv}:${o.star}`).join(' '),
   };
   return { rows, econ };
+}
+
+// --spiritstats(v13-8): 10층 구간마다 깬 층의 진입 상태(탑 레벨·장착 정령)로 "1레벨 더 올리면" 공격 환산 % / 비용(그 층 normalFloorReward 대비).
+// 탑 = 가장 낮은 탑 1레벨(even이 다음에 사는 것): 그 탑 공격 증가 / 5탑 공격 합. 정령 = 장착 칸마다 (effectMul(lv+1) - effectMul(lv)) x atkPerMul.
+// 효율 = 증가 % / 비용(층 보상 배수), 구간 값 = 기록 평균. 재물 = 1레벨 골드 비용 / (배율 증가 x 이 구간 실측 "재물 배율 1당 층당 재물 골드") = 갚는 층 수.
+function spiritEffRows(configs, player, strategy, runs) {
+  const { balance, spirits: cfg } = configs;
+  const colors = balance.tower.towers.map((t) => t.color);
+  const fr = new Map();
+  const R = (f) => fr.get(f) ?? fr.set(f, normalFloorReward(configs, f)).get(f);
+  const mean = (a) => (a.length ? a.reduce((t, v) => t + v, 0) / a.length : NaN);
+  const f3 = (v) => (Number.isFinite(v) ? v.toFixed(3) : '');
+  const B = new Map();
+  for (const run of runs) for (const x of run.retriesByFloor) {
+    if (x.clearSec == null || !x.levelsAtEntry) continue;
+    const i = Math.floor((x.floor - 1) / 10);
+    const b = B.get(i) ?? B.set(i, { tower: [], common: [], rare: [], epic: [], legend: [], all: [], wealthDm: [], wealthCost: [], clears: 0 }).get(i);
+    b.clears++;
+    const L = x.levelsAtEntry;
+    const sumA = L.reduce((t, l) => t + towerAttack(balance, l), 0);
+    const lo = Math.min(...L);
+    if (lo < balance.tower.maxLevel) b.tower.push(((towerAttack(balance, lo + 1) - towerAttack(balance, lo)) / sumA * 100) / (towerLevelCost(balance, lo) / R(x.floor)));
+    (x.spiritsAtEntry ?? []).forEach((s, k) => {
+      if (!s || s.lv >= cfg.levelMax) return;
+      const dm = effectMul(cfg, s.id, { ...s, lv: s.lv + 1 }, colors[k]) - effectMul(cfg, s.id, s, colors[k]);
+      const cost = levelUpCost(cfg, s.lv, R(x.floor)).gold / R(x.floor);
+      if (cfg.spirits[s.id].role === 'wealth') { b.wealthDm.push(dm); b.wealthCost.push(cost * R(x.floor)); return; }
+      const a = atkPerMul(cfg, s.id);
+      if (!(a > 0)) return;
+      const e = (dm * a) / cost;
+      b[cfg.spirits[s.id].grade].push(e);
+      b.all.push(e);
+    });
+  }
+  const rows = [];
+  for (const [i, b] of [...B].sort((p, q) => p[0] - q[0])) {
+    const w = runs.reduce((t, r) => { const v = r.wealthStat[i]; return v ? { g: t.g + v.g, m: t.m + v.m, a: t.a + v.a } : t; }, { g: 0, m: 0, a: 0 });
+    const perMulFloor = w.m > 0 ? (w.g / w.m) * (w.a / b.clears) : NaN; // 재물 배율 1이 한 층(깬 층 1개) 진행하는 동안 더 주는 골드
+    const t = mean(b.tower);
+    rows.push({ player, strategy, bucket: `${i * 10 + 1}-${i * 10 + 10}`, towerEff: f3(t), common: f3(mean(b.common)), rare: f3(mean(b.rare)), epic: f3(mean(b.epic)), legend: f3(mean(b.legend)), spiritEff: f3(mean(b.all)), ratio: f3(mean(b.all) / t),
+      nSpirit: b.all.length, wealthPaybackFloors: f3(mean(b.wealthCost) / (mean(b.wealthDm) * perMulFloor)), nWealth: b.wealthDm.length });
+  }
+  return rows;
+}
+
+// --spiritstats: 시드 평균 100·200층 시간, 정령 레벨 골드 몫(누적 수입 대비), 가진 정령 평균 레벨, 남은 정령석, 레벨업 멈춘 이유(그 층까지 누적).
+function spiritStatRow(player, strategy, runs) {
+  const row = { player, strategy };
+  for (const f of [100, 200]) {
+    const s = runs.map((r) => r.spiritSnap[f]).filter(Boolean);
+    const m = (g) => (s.length ? (s.reduce((t, v) => t + g(v), 0) / s.length) : NaN);
+    const fx = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '');
+    Object.assign(row, { [`n${f}`]: s.length, [`min${f}`]: fx(m((v) => v.cumMin)), [`goldShare${f}`]: fx(m((v) => v.goldSpent / Math.max(1, v.goldEarned)) * 100), [`ownedLv${f}`]: fx(m((v) => v.ownedLv)), [`stonesLeft${f}`]: fx(m((v) => v.stonesLeft), 1) });
+    for (const k of ['cap', 'gold', 'stones', 'both', 'max']) row[`stop_${k}${f}`] = fx(m((v) => v.stops[k]), 1);
+  }
+  return row;
 }
 
 // --idle: 광산 골드 몫(전체·층 구간별). 구간 분모 = 그 구간 층에서 번 골드(flow 수입 칸) + 그 구간에서 받은 광산 골드.

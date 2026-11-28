@@ -85,7 +85,7 @@
 
 ## 6. 성장·획득
 
-- **레벨업**: 골드 = 일반 층 보상 × 0.25 × 1.06^(레벨−1), 정령석 = ceil(레벨 / 3). 최대 30.
+- **레벨업**: 골드 = 일반 층 보상 × 0.06 × 1.04^(레벨−1), 정령석 = ceil(레벨 / 3). 최대 30. (v13-8, 2026-11-28: 0.25 × 1.06에서 내림 - 정령 레벨업이 탑보다 손해인 골드 함정을 줄이고, 레벨업 상한은 정령석이 맡는다.)
 - **각성**: 같은 정령을 또 얻으면 별 +1(최대 5). 별 5 이후 중복은 정령석으로(일반 5 · 희귀 10 · 영웅 20 · 전설 50).
 - **정령석**: 보스 첫 클리어 +5(50층 이상 +10), 위 중복 변환. 매일 얻는 길(docs/spirit-stones.md):
   - 광산 용광로 정제: 하루 3개, 원석 60 / 120 / 240(`config/mine.json` `stones`, docs/mine.md 19장). 정령이 없어도 정제된다.
@@ -112,7 +112,7 @@
   "resonanceMul": 1.25,
   "gradeMul": { "common": 1.0, "rare": 1.2, "epic": 1.4, "legend": 1.6 },
   "levelMax": 30, "levelStep": 0.01, "starMax": 5, "starStep": 0.05, "everyStepStars": [3, 5],
-  "levelCost": { "goldFloors": 0.25, "goldGrowth": 1.06, "stonesPer": 3 },
+  "levelCost": { "goldFloors": 0.06, "goldGrowth": 1.04, "stonesPer": 3 },
   "dupeStones": { "common": 5, "rare": 10, "epic": 20, "legend": 50 },
   "roles": {
     "attack":  { "every": 3, "mul": 1.2 },

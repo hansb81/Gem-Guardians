@@ -126,7 +126,7 @@ export function parseArgs(argv, sim) {
   // --stonesPerDay=N: 하루(--idleDayHours 플레이 시간)마다 정령석 N개(T4, 10층 보스 전 0). 기본 0 = 없음.
   const stonesPerDay = Number(args.stonesPerDay ?? 0);
   if (!(Number.isInteger(stonesPerDay) && stonesPerDay >= 0)) throw new Error('--stonesPerDay=0 이상 정수');
-  return { idle, idleDayHours, idleRMul, stonesPerDay, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset, wallfloors: args.wallfloors };
+  return { idle, idleDayHours, idleRMul, stonesPerDay, towerBuy, tests, players, seeds, floors, mods, out: args.out, skills, itemPolicies, set: args.set ?? null, skillBuy, skillGate, skillShare, dia, ads, minutesPerDay, strategies, skillLvAll: args.skilllv ? Number(args.skilllv) : null, flight: args.flight === 'on', emptySpawn: emptySpawnArg(args.emptySpawn), combo: args.combo, combowindow: args.combowindow, combostats: args.combostats, combogold: args.combogold, t7base: args.t7base, rainbowdef: args.rainbowdef, spirits: args.spirits ?? null, spiritbuy: args.spiritbuy, spiritequip: args.spiritequip, itemset: args.itemset, wallfloors: args.wallfloors, spiritstats: args.spiritstats === 'on' };
 }
 
 // --set=a.b.c=1.2;x.y=3 : config를 메모리에서만 덮어쓴다(제안 값 전/후 비교용, 파일은 그대로).
@@ -135,7 +135,7 @@ export function parseArgs(argv, sim) {
 // 값 = 숫자 또는 숫자 배열(JSON, 예: shop.skills.levelCost=[0.75,0.75,0.75,0.75]). 없는 경로·키는 에러.
 // HP 배율(enemyHpMul, bossMul.hpMulByFloor)은 unitStats가 매번 balance에서 읽어 floors.json 재생성 없이 반영된다.
 // shortcut: hpGrowth처럼 floors.json에 미리 계산된 값은 1~100층에 반영 안 됨 - 그런 키는 T5 withBalanceOverride 방식 필요.
-export const SET_FILES = ['balance', 'shop', 'skills', 'items', 'enemies', 'obstacles', 'sim'];
+export const SET_FILES = ['balance', 'shop', 'skills', 'items', 'enemies', 'obstacles', 'sim', 'spirits'];
 export function applySets(configs, setStr) {
   if (!setStr) return [];
   const done = [];

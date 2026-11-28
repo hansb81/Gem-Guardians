@@ -6,7 +6,7 @@
   "starMax": 5,
   "starStep": 0.05,
   "everyStepStars": [3, 5],
-  "levelCost": { "goldFloors": 0.25, "goldGrowth": 1.06, "stonesPer": 3 },
+  "levelCost": { "_doc": "lv -> lv+1 비용: 골드 = round(일반층 보상 x goldFloors x goldGrowth^(lv-1)), 정령석 = ceil(lv / stonesPer). v13-8(2026-11-28): 0.25/1.06 -> 0.06/1.04 - 골드 함정 완화, 레벨업 상한은 정령석(reports/sim/v13/8-spirit-cost.md).", "goldFloors": 0.06, "goldGrowth": 1.04, "stonesPer": 3 },
   "dupeStones": { "common": 5, "rare": 10, "epic": 20, "legend": 50 },
   "roles": {
     "attack": { "every": 3, "mul": 1.2 },

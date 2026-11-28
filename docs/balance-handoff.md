@@ -247,6 +247,11 @@
 
 ---
 
+### 7-4. 정령 레벨업 비용 (config/spirits.json levelCost, v13-8)
+- lv → lv+1: 골드 = round(R × **0.06** × **1.04**^(lv−1)), 정령석 = ceil(lv / 3). 최대 30. (v13-8 전 0.25 × 1.06)
+- 이유: 정령 1레벨 = 효과 배율 +1%(levelStep 0.01)라 공격 환산이 탑 1레벨의 약 1/20(0.25/1.06 기준 정령/탑 골드 효율 비율 0.06). 0.06/1.04에서 0.25. 실제 진행에서 정령 레벨은 정령석이 막는다(평균 Lv 6 근처, spiritbuy 10과 20 결과 같음) - 정령석이 진짜 상한, 골드는 "손해만 아니면" 되는 값.
+- 판정(reports/sim/v13/8-spirit-cost.md): spiritbuy 10 - spiritbuy 0 시간 차 ±1분 안이면 통과(효율 비율 기준은 안 씀).
+
 ## 8. 아이템
 
 ### 8-1. 규칙
@@ -372,6 +377,8 @@
   2. T7 normal 30층 기준 Lv 승률 83%(기준 60에서 75%). 30층이 쉽다고 느껴지면 30층 보스 HP 0.86에서 0.89.
 - normal A줄이 하한 근처: 층 시간 중앙값 47.0초(45에서 75), 100층 92.3분(90에서 150), 보스 재도전 0.32(0.3에서 1.0).
 
+- **v13-8(2026-11-28) 정령 레벨업 골드 비용** 0.25/1.06 -> 0.06/1.04(7-4). 난이도 재확인(수치 안 바꿈, stonesPerDay 4): 1-100층 밖 = normal 90층 재도전 0.80·보스 재도전(벽 제외) 0.23·T7 70층 87%, 101-200층 밖 = normal 시간 135.0분, slow 200층 벽 6.4·시간 247.4분. spiritbuy 10 - 0 시간 차 slow +2.2/+5.6분(±1분 밖, 그대로). reports/sim/v13/8-spirit-cost.md.
+
 ### (옛 기록) v9~v11
 
 - 젬 기술 전체 등가 전력: normal ×1.66, slow ×1.54 → 그 보정으로 enemyHpMul 1.65.
@@ -405,6 +412,7 @@
 | config/products.json | priceKRW, grant | 현금 가치 |
 | config/attendance.json, ranking.json | 무료 다이아 공급 | 다이아 인플레 |
 | config/obstacles.json | schedule | 퍼즐 효율 저하, 시한폭탄 피해 |
+| config/spirits.json | levelCost.goldFloors·goldGrowth·stonesPer, levelStep | 정령 레벨업 골드 몫·속도(상한은 정령석) |
 
 ---
 
