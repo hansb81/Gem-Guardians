@@ -24,6 +24,7 @@ const TEST_MODULES = {
   t7: () => import('./tests/t7.js'),
   t8: () => import('./tests/t8.js'), // 경쟁 모드 무한 웨이브 - all에는 안 넣음
   t9: () => import('./tests/t9.js'), // v13-6 아이템 하나씩 쓸모 - all에는 안 넣음(--itemset=none,scythe_h,...)
+  t10: () => import('./tests/t10.js'), // v13-sw 벽 층 구매 가치 - all에는 안 넣음(--wallfloors=30,60,90)
 };
 
 async function main() {
@@ -69,6 +70,7 @@ async function main() {
     spiritsProg: spiritMode === 'prog', // T1·T3·T4(·T5·T6)·T7이 정령 진행을 쓴다
     spiritBuy: spiritBuy / 100,
     spiritEquip,
+    wallFloors: args.wallfloors ? args.wallfloors.split(',').map(Number) : null, // T10 벽 층
     itemSets: args.itemset ? args.itemset.split(',').map((s) => s.trim()).filter(Boolean) : null, // T9 세트 고르기(병렬 실행용)
     idle: args.idle, // --idle: 방치 광산 하루 접속 횟수(0 = 없음). T4 진행과 그 진행을 쓰는 테스트(T7 기준 레벨 등)에 반영
     idleDayHours: args.idleDayHours,

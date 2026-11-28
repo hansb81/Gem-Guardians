@@ -1,6 +1,6 @@
 import { BattleState } from '../battle/battleState.js';
 import { getFloor, resolveFloorSpawns } from '../core/balance/floorGen.js';
-import { towerAttack, clearBonus, comboGoldBonus } from '../core/economy/economy.js';
+import { towerAttack, clearBonus, comboGoldBonus, failKillGold } from '../core/economy/economy.js';
 import { playerState } from './playerState.js';
 import { ItemController } from './itemController.js';
 import { applySkillLevels, offerBossPack } from '../core/shop/shop.js';
@@ -77,8 +77,9 @@ export class BattleController {
     }
     this.currentFloor = floor;
     this.floorTag = comp ? 'comp' : floor.tag;
-    this.killGoldThisFloor = 0; // 실제로 지급된 처치 골드(황금 주화 배율 포함).
+    this.killGoldThisFloor = 0; // 이 판 처치 골드(황금 주화·재물 정령 포함). 지갑에 바로 들어간 몫은 _killGoldPaid.
     this._killGoldBase = 0; // 배율 전 처치 골드 - 클리어 보너스는 이걸로 계산해 층 골드가 정확히 x배가 되게.
+    this._killGoldPaid = 0; // 지갑에 이미 넣은 처치 골드 = failGold(지면 받는 몫). 나머지는 클리어 때(_applyClearReward).
     this.lastClearReward = null;
     this._spirits = null;
     this._wealthCarry = 0; // 재물 정령 추가 골드의 소수 이월(층마다 0부터)
@@ -125,6 +126,11 @@ export class BattleController {
     if (this.battleState.spirits || this.gameState?.board.bombTimerPlus || this.gameState?.board.paint) {
       this.gameState?.setSpiritMods(supportMods(this.battleState.spirits, this.towersData.map((t) => t.color)), this.floor * 7919 + 31);
     }
+  }
+
+  // 이 판에서 지면 받는 처치 골드(failKillGold, economy.failGoldMul) - 패배 팝업 "획득 골드"도 이 값.
+  get failGold() {
+    return failKillGold(this.balance, this.floorTag, this.killGoldThisFloor);
   }
 
   get goldMul() {
@@ -210,7 +216,9 @@ export class BattleController {
     // 콤보 골드 보너스 - 골드 배율 전 클리어 골드 기준(시뮬 A줄과 같게). 이어하기 전후 모두 같은 보드라 maxComboStreak가 큰 값.
     const maxCombo = this.gameState?.maxComboStreak ?? 0;
     const comboGold = comboGoldBonus(this.balance, this._killGoldBase + baseBonus, maxCombo);
-    playerState.addGold(bonusGold + comboGold);
+    // 진 판 몫만 미리 줬으면(failGoldMul < 1) 남은 처치 골드도 여기서 - 클리어 판은 처치 골드 전부.
+    playerState.addGold(bonusGold + comboGold + this.killGoldThisFloor - this._killGoldPaid);
+    this._killGoldPaid = this.killGoldThisFloor;
     const items = isFirstClear ? this._grantFirstClearItems() : [];
     const spirit = isFirstClear ? this._grantBossSpirit() : null;
     // 보스 첫 클리어로 열린 광산 광맥 id(없으면 빈 배열) - 연습 모드는 여기까지 오지 않는다.
@@ -296,7 +304,10 @@ export class BattleController {
       }
       this._killGoldBase += event.gold;
       this.killGoldThisFloor += gold;
-      playerState.addGold(gold);
+      // 지갑에는 "지면 받는 몫"까지만 바로 넣는다(failGoldMul 1이면 처치 골드 전부 = 예전과 같음).
+      const paid = this.practice ? this.killGoldThisFloor : this.failGold; // 연습 모드는 클리어 보상 단계가 없어 전부 바로
+      playerState.addGold(paid - this._killGoldPaid);
+      this._killGoldPaid = paid;
     }
   }
 
@@ -308,7 +319,7 @@ export class BattleController {
     this._resetBattleState(playerState.floor);
   }
 
-  // 실패 팝업의 "다시 하기" - 같은 층을 처음부터(잡은 골드는 이미 _collectKillGold로 지급됨).
+  // 실패 팝업의 "다시 하기" - 같은 층을 처음부터(진 판 몫 failGold는 이미 _collectKillGold로 지급됨).
   retryFloor() {
     this._resetBattleState(playerState.floor);
   }

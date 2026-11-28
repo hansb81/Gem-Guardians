@@ -63,6 +63,14 @@
 - 후보 비교: 환경 변수 `T8_GRID`에 `comp.endless` 덮어쓰기 배열(JSON). 예: `T8_GRID='[{"startFloor":10},{"bossHpMul":0.6}]'`. 없으면 config 값 하나.
 - 보는 값: 판 길이(분), 도달 웨이브, 그때 난이도 층, 점수(중앙·P10·P90). 결정 기록은 docs/ranking.md §5-2.
 
+### T10. 소프트 벽 구매 가치 (v13-sw, 2026-11-28)
+- `node tools/sim/run.js --test=t10 --player=normal,slow --seeds=5 --wallfloors=30,60,90 ...` (all에는 안 들어감). 코드 `tools/sim/tests/t10.js`.
+- 구매 4가지: none / continue(패배 직후 이어하기 1회 - 광고 이어하기와 깃털이 같은 효과) / pack(보스 돌파 팩 아이템, `config/products.json` pack.boss grant.items) / exchange(골드 교환 small 1회 = R x `shop.json goldExchange[0].floors`).
+- T7 부분: 기준 Lv(T7과 같음)에서 시드 31-90 승률. pack = 팩 하단 아이템 장착(층당 한도) + 깃털 1, exchange = 기준 Lv에서 그 골드로 일괄 강화.
+- T4 부분: `runOneProgression(..., { wallBuy })` - 그 층에서 처음 진 순간 한 번만 산다(팩은 다음 도전부터 쓰고, 그 층을 깨면 남은 것은 버린다). 벽 층 재도전을 none과 비교 = 아낀 재도전.
+- 실패 골드 배율(`balance.json economy.failGoldMul / failGoldScope`)은 T3·T4(반복 사냥 포함)가 게임과 같은 `economy.failKillGold`로 계산한다. 1.0이면 예전과 바이트 동일(`reports/sim/v13/sw/bytecheck.txt`).
+- `--set`은 지금 값이 문자열인 키에 따옴표 없는 단어를 받는다(예: `--set=economy.failGoldScope=boss`).
+
 ### 기술 해금 일정 옵션 (2026-11-07)
 - `--skills=shop | shop-free | none | color | special | all | all+boss`, **기본값 `shop`**.
   - `shop`: 해금 A안 + 해금 골드 차감(실제 게임과 같음). 가시는 처음부터 Lv 1, 용암탄·영혼 불꽃·궁극기(+대폭발)는 10·20·30층 보스를 처음 잡은 뒤(최고 층 > 그 보스층) 해금할 수 있다.
