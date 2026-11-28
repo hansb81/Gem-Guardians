@@ -205,6 +205,24 @@
    "h": 24,
    "use": "쿠폰 팝업 윗변 가운데 문장 24x24"
   },
+  "emblem_attendance": {
+   "file": "emblem_attendance.png",
+   "w": 24,
+   "h": 24,
+   "use": "출석체크 팝업 윗변 가운데 문장 24x24"
+  },
+  "emblem_event": {
+   "file": "emblem_event.png",
+   "w": 24,
+   "h": 24,
+   "use": "이벤트 팝업 윗변 가운데 문장 24x24"
+  },
+  "emblem_mail": {
+   "file": "emblem_mail.png",
+   "w": 24,
+   "h": 24,
+   "use": "우편함 팝업 윗변 가운데 문장 24x24"
+  },
   "icon_coupon": {
    "file": "icon_coupon.png",
    "w": 16,

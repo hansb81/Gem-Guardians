@@ -639,7 +639,8 @@ export class MainMenuScreen {
 
     const [cx, cy, cw] = card;
     // 문장(48x48)을 윗변 가운데에 반쯤 걸쳐서. 전용 문장이 없는 팝업은 설정 문장을 쓴다. 제목은 금색 #f2d264.
-    const emblem = this.popup === 'mode' ? 'menu/emblem_mode.png' : this.popup === 'coupon' ? 'menu/emblem_coupon.png' : 'menu/emblem_settings.png';
+    const own = ['mode', 'coupon', 'attendance', 'event', 'mail'].includes(this.popup);
+    const emblem = `menu/emblem_${own ? this.popup : 'settings'}.png`;
     if (!this._sprite(ctx, emblem, cx + cw / 2 - 24, cy - 24)) this._sprite(ctx, 'menu/emblem_settings.png', cx + cw / 2 - 24, cy - 24);
     const title = t(`menu.${this._popupKey()}.title`);
     this._text(ctx, title, cx + cw / 2, cy + 52, { size: 22, color: COLORS.title, align: 'center' });
