@@ -145,24 +145,26 @@ test('출시 기념 tiers: 1~3위 다이아 100, 나머지 전원 50 (둘 다 �
   assert.deepEqual(rewardBundle(tierOf(L, 4, 5), 150), { diamonds: 50, gold: 450 });
 });
 
-test('닉네임 팝업을 X로 닫고 다음에 랭킹을 열면 다시 뜬다(저장하면 안 뜸)', async () => {
+test('랭킹을 열면 이름 팝업 없이 닉네임 = 플레이어 코드(uid 앞 8자리), 중복이면 10자리, uid 없으면 다음에', async () => {
   const { RankingUi } = await import('../src/game/rankingUi.js');
   const { player } = makeService();
-  const ui = new RankingUi({ player, canvas: null });
+  let uid = null;
+  const ui = new RankingUi({ player, canvas: null, playerUid: () => uid });
   ui.init(CFG, { floorGold: () => 0 });
   ui.open();
-  assert.equal(ui.state.sub, 'nick');
-  ui._closeSub(); // X
   assert.equal(ui.state.sub, null);
+  await ui._autoNick();
+  assert.equal(player.ranking.profile.nickname, '', '서버 uid 전에는 그대로');
   ui.close();
-  ui.open();
-  assert.equal(ui.state.sub, 'nick', '닉네임이 없으니 다시');
-  ui._setDraft('가디언');
-  await ui._saveNick();
-  assert.equal(player.ranking.profile.nickname, '가디언');
-  ui.close();
-  ui.open();
+  uid = '3f9a2c1b-77de-4a00-9c3e-0123456789ab';
+  const tried = [];
+  const save = ui.service.saveProfile.bind(ui.service);
+  ui.service.saveProfile = (p) => (tried.push(p.nickname), tried.length === 1 ? { ok: false, reason: 'taken' } : save(p));
+  ui.open(); // open이 _autoNick을 부른다(기다리지 않음)
+  await new Promise((r) => setTimeout(r, 0));
   assert.equal(ui.state.sub, null);
+  assert.deepEqual(tried, ['3f9a2c1b', '3f9a2c1b77']);
+  assert.equal(player.ranking.profile.nickname, '3f9a2c1b77');
 });
 
 // ---------- 메뉴 왕관(config crown) ----------

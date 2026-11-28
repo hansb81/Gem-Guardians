@@ -20,10 +20,12 @@ const TICK_MS = 1000;
 
 export class RankingUi {
   // player = playerState, canvas = 입력 칸을 겹칠 캔버스, defaultStatue() = 처음 고를 대표 석상(가장 레벨 높은 석상).
-  constructor({ player, canvas, defaultStatue = () => 'red' }) {
+  // playerUid() = 서버 uid(없으면 null) - 닉네임이 없으면 설정에 보이는 플레이어 코드(앞 8자리)로 자동.
+  constructor({ player, canvas, defaultStatue = () => 'red', playerUid = () => null }) {
     this.player = player;
     this.canvas = canvas;
     this.defaultStatue = defaultStatue;
+    this.playerUid = playerUid;
     this.config = null;
     this.service = null;
     this.state = null; // 열려 있으면 그릴 값 묶음(rankingPopup.js 맨 위 주석)
@@ -60,7 +62,7 @@ export class RankingUi {
     if (!this.service) return;
     const r = this.player.ranking;
     this.state = this._newState(true, r.lastTab);
-    if (!r.profile.nickname) this._openNick(true);
+    if (!r.profile.nickname) this._autoNick();
     this.refresh();
   }
 
@@ -93,8 +95,11 @@ export class RankingUi {
     if (seq !== this._loadSeq || this.state !== st) return;
     st.data = this.devPlayers != null ? { normal: this._fakeBoard('normal'), comp: this._fakeBoard('comp') } : { normal: { ...nt, me: nm }, comp: { ...ct, me: cm } };
     st.loaded = true;
-    // 서버가 기기 닉네임을 거절해 비웠으면 바로 다시 고르게(이유 한 줄과 함께).
-    if (this.service.nickResetReason && st.sub == null) this._openNick(true);
+    // 서버가 기기 닉네임을 거절해 비웠으면 플레이어 코드로 다시 자동.
+    if (this.service.nickResetReason) {
+      this.service.nickResetReason = null;
+      this._autoNick();
+    }
   }
 
   // 매 프레임(메뉴). 1초마다 시즌 넘김 확인 -> 넘어갔으면 다시 받기. 지난 시즌 보상은 서버가 우편으로 보낸다.
@@ -300,6 +305,21 @@ export class RankingUi {
   }
 
   // ---------- 닉네임 ----------
+  // 처음 = 이름 팝업 없이 플레이어 코드(8자리)로. 중복·금칙어면 uid 10자리로 한 번 더. 코드가 없으면(서버 연결 전) 다음에 열 때.
+  async _autoNick() {
+    const code = this.playerUid()?.replace(/-/g, '');
+    if (!code || this._autoNicking) return;
+    this._autoNicking = true;
+    const statue = this.player.ranking.profile.statue || this.defaultStatue();
+    try {
+      let res = await this.service.saveProfile({ nickname: code.slice(0, 8), statue });
+      if (!res.ok && (res.reason === 'taken' || res.reason === 'badword')) res = await this.service.saveProfile({ nickname: code.slice(0, 10), statue });
+      if (res.ok && this.state) this.refresh(); // 내 줄 이름
+    } finally {
+      this._autoNicking = false;
+    }
+  }
+
   _openNick(first) {
     const p = this.player.ranking.profile;
     this.state.sub = 'nick';

@@ -98,6 +98,7 @@ const mainMenuScreen = new MainMenuScreen();
 const ranking = new RankingUi({
   player: playerState,
   canvas,
+  playerUid: () => net.playerId,
   defaultStatue: () => {
     const towers = controller?.battleState?.towers ?? [];
     let best = 0;
@@ -347,7 +348,7 @@ function tickTutorialStart() {
     tutorial = null;
   }
   if (tutorial?.finished && !tutorial.practice) tutorial = null; // 연습 모드는 끝나도 메뉴로 나갈 때까지 둔다.
-  if (tutorial || bs.status !== 'active') return;
+  if (tutorial || bs.status !== 'active' || controller.comp) return; // 경쟁 모드 = 튜토리얼 없이 바로
   if (!controller.practice && !shouldStartTutorial(playerState.tutorial, controller.floor)) return;
   bs.holdSpawns = true;
   if (bs.summon.active || fade) return;
