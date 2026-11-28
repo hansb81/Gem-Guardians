@@ -256,10 +256,10 @@ def boss_hp_mul_at(B, f):
     """Boss HP floor multiplier (same as floorGen.js bossHpMulAt): own key, else for f > 100 the same slot of 1-100 x cycleMul."""
     m = B['floorShape']['bossMul']
     t = m.get('hpMulByFloor', {})
+    if f <= 100:  # softWallAdd (v13-sw) only for 1-100
+        return t.get(str(f), 1) + m.get('softWallAdd', {}).get(str(f), 0)
     if str(f) in t:
         return t[str(f)]
-    if f <= 100:
-        return 1
     return t.get(str((f - 1) % 100 + 1), 1) * m.get('cycleMul', 1)
 
 

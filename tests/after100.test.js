@@ -29,3 +29,12 @@ test('wallDmgRaw: 100층까지 wallDmgGrowth^(f-1), 101층부터 100층 누적 x
   const same = { scaling: { wallDmgGrowth: 1.015 }, wall: {} }; // 키 없음 = 예전 식 그대로
   assert.equal(wallDmgRaw(same, 180), 1.015 ** 179);
 });
+
+test('bossHpMulAt: softWallAdd는 1~100층에서만 더하고 101층 이후 같은 자리에는 안 쓴다', () => {
+  const B = bal({ cycleMul: 0.9, softWallAdd: { 30: 0.3, 80: 0.2 } });
+  assert.equal(bossHpMulAt(B, 30), 1 + 0.3); // 키 없음 1.0 + 벽
+  assert.equal(bossHpMulAt(B, 80), 0.8 + 0.2);
+  assert.equal(bossHpMulAt(B, 70), 1);
+  assert.equal(bossHpMulAt(B, 180), 0.8 * 0.9); // 같은 자리 = hpMulByFloor만
+  assert.equal(bossHpMulAt(B, 130), 0.9);
+});
