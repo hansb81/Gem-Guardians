@@ -33,7 +33,19 @@
       "killPoints": { "swarm": 10, "grunt": 20, "runner": 20, "brute": 50, "caster": 70, "armored": 80, "heavy": 140, "boss": 300 }
     }
   },
+  "launch": {
+    "_doc": "출시 기념 기간(docs/ranking.md 5-3-1): on이면 tiers = 1~3위 다이아 100, 참가자 전원 50. 경쟁 모드 시작 때 하루(KST)에 1번 안내 팝업 + 보상 보기에 안내 문구. rankedFrom = 순위 보상 시작일 'YYYY-MM-DD'(KST, 그 날짜의 시즌부터), null = 추후 공지. 끝낼 때: tiers를 rankedTiers로 바꾸고 on=false, 서버 사본도 같이 배포(그 주 정산 전).",
+    "on": true,
+    "rankedFrom": null
+  },
   "tiers": [
+    { "id": "r1", "rank": 1, "rewards": { "diamonds": 100, "goldFloorMul": 3 }, "frame": "crown_gold" },
+    { "id": "r2", "rank": 2, "rewards": { "diamonds": 100, "goldFloorMul": 3 }, "frame": "crown_silver" },
+    { "id": "r3", "rank": 3, "rewards": { "diamonds": 100, "goldFloorMul": 3 }, "frame": "crown_bronze" },
+    { "id": "part", "pct": 100, "rewards": { "diamonds": 50, "goldFloorMul": 3 } }
+  ],
+  "_rankedTiersDoc": "출시 기념이 끝난 뒤 쓸 순위 보상 표(임시, 밸런스 때 확정). 지금은 게임·서버 모두 안 쓴다 - tests/ranking.test.js가 구간 판정을 이 표로 본다.",
+  "rankedTiers": [
     { "id": "r1", "rank": 1, "rewards": { "diamonds": 500, "items": { "rainbow": 5 } }, "frame": "crown_gold" },
     { "id": "r2", "rank": 2, "rewards": { "diamonds": 400, "items": { "rainbow": 3 } }, "frame": "crown_silver" },
     { "id": "r3", "rank": 3, "rewards": { "diamonds": 300, "items": { "rainbow": 2 } }, "frame": "crown_bronze" },
