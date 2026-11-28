@@ -165,7 +165,7 @@ export function setupServer(config, { menu, rewardPopup, player, dev = false, be
       // 결과는 메뉴 한 곳(couponResult)으로 - 성공이면 메뉴가 설정으로 돌아가고 여기서 획득 팝업.
       ui.coupon?.redeem(action.slice(13)).then((res) => {
         menu.couponResult(res);
-        showGrant(res);
+        showGrant(res, res.title?.[getLocale()] || res.title?.ko || null);
       });
     }
     else if (action === 'playerCodeDown' || action === 'playerCodeCopy') {
