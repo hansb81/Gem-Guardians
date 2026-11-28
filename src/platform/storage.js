@@ -8,7 +8,7 @@
 const KEYS = ['gemGuardians.save.v2', 'gemGuardians.save.v1', 'sfxVolume', 'bgmVolume', 'muted', 'haptics', 'guardianFx', 'leaderboardSubmitted', 'devServer', 'devCheats', 'pendingVerify', 'adContinue', 'locale', 'cloudMeta', 'mailDeleted', 'attAutoDate', 'eventAutoOpened', 'crownBand', 'lastSeenSeasonId'];
 // adContinue = 옛 키(지금은 save 안 playerState.adContinue) - 한 번 읽어 옮기고 지운다. cloudMeta = 클라우드 저장 기기 기록(src/net/cloudSave.js).
 // 전체 데이터 초기화: 이 값을 올리면 모든 접속자의 저장 데이터가 다음 실행 때 한 번 비워진다.
-const DATA_EPOCH = 2; // 2026-11-28 오픈 후 전체 초기화(게스트 서버 계정 삭제와 같은 날 배포)
+const DATA_EPOCH = 1; // 2026-11-28: 서버만 초기화하고 기기 초기화는 하지 않기로(1.0.2) - 올리면 다음 실행 때 기기 세이브를 비운다
 const FLUSH_MS = 300;
 const AUTH_KEY = 'gemGuardians.auth'; // src/net/api.js storageKey (supabase 세션 JSON)
 
