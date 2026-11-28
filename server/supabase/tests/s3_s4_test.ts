@@ -131,7 +131,7 @@ Deno.test("정산: 구간·보상, 닉네임 없는 사람 제외, 한 번만, �
   assertEquals((await one(db, "select public.comp_settle_due($1, $2, true) r", [tiers, gold])).settled, []);
   const rows = (await db.query<R>("select player_id, rank, pct, tier_id, rewards from public.season_results order by rank")).rows;
   assertEquals(rows.map((r) => [r.player_id, r.rank, r.pct, r.tier_id]), [[A, 1, 50, "r1"], [B, 2, 100, "r2"]]); // 동점 = 먼저 낸 A
-  assertEquals(rows[0].rewards, { diamonds: 500, items: { rainbow: 5 } });
+  assertEquals(rows[0].rewards, { diamonds: 100, gold: Math.round(3 * FLOOR_GOLD.gold[11]) }); // 출시 기념 tiers(config/ranking.json launch)
   const mail = (await db.query<R>("select id, player_id, title_ko, title_en, bundle, expires_at is not null exp from public.mail order by id")).rows;
   assertEquals(mail.map((m) => [m.player_id, m.title_ko, m.title_en, m.exp]), [
     [A, "경쟁 모드 40주차 보상 · 1위", "Competitive W40 reward · #1", true],

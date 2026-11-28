@@ -14,6 +14,7 @@ function defaultRanking() {
       history: [], // 최근 8개 { seasonId, points, rank, pct, tierId }
     },
     lastTab: 'normal',
+    launchSeen: '', // 출시 기념 안내 팝업을 본 시즌 id(config/ranking.json launch)
   };
 }
 
@@ -46,5 +47,6 @@ export function normalizeRanking(r, { bestFloor = 1, nowMs = 0 } = {}) {
       history: [],
     },
     lastTab: r.lastTab === 'comp' ? 'comp' : 'normal',
+    launchSeen: typeof r.launchSeen === 'string' ? r.launchSeen : '',
   };
 }

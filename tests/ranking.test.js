@@ -10,7 +10,7 @@ import { migrateSave, SAVE_VERSION } from '../src/core/inventory/inventory.js';
 import { Inventory } from '../src/game/inventory.js';
 
 const CFG = JSON.parse(readFileSync(new URL('../config/ranking.json', import.meta.url), 'utf8'));
-const T = CFG.tiers;
+const T = CFG.rankedTiers; // 구간 판정은 출시 뒤 순위 표로 본다(출시 기념 tiers는 아래 따로)
 const id = (rank, total) => tierOf(T, rank, total)?.id;
 
 test('seasonId: 일요일 14:59:59 UTC는 그 주, 15:00:00 UTC(월 00:00 KST)는 다음 주', () => {
@@ -135,6 +135,14 @@ test('예전 save의 pending·가짜 정산 기록은 버림', () => {
 test('참여 보상 골드 = 층 기준가 x 3', () => {
   assert.deepEqual(rewardBundle(T.find((t) => t.id === 'part'), 150), { diamonds: 10, gold: 450 });
   assert.deepEqual(rewardBundle(T.find((t) => t.id === 'r1'), 150), { diamonds: 500, items: { rainbow: 5 } });
+});
+
+test('출시 기념 tiers: 1~3위 다이아 100, 나머지 전원 50 (둘 다 참여 골드)', () => {
+  assert.equal(CFG.launch.on, true);
+  const L = CFG.tiers;
+  assert.deepEqual([1, 2, 3, 4, 50, 1000].map((r) => tierOf(L, r, 1000).id), ['r1', 'r2', 'r3', 'part', 'part', 'part']);
+  assert.deepEqual(rewardBundle(tierOf(L, 3, 5), 150), { diamonds: 100, gold: 450 });
+  assert.deepEqual(rewardBundle(tierOf(L, 4, 5), 150), { diamonds: 50, gold: 450 });
 });
 
 test('닉네임 팝업을 X로 닫고 다음에 랭킹을 열면 다시 뜬다(저장하면 안 뜸)', async () => {

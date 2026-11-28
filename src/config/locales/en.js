@@ -92,6 +92,12 @@ export const en = {
       body: ['Keep your progress safe', 'with your Google account?'],
       later: 'Later', ok: 'Link',
     },
+    compLaunch: {
+      title: 'Launch Rewards',
+      body: ['During the launch event:', '#1~3 get 100 gems,', 'everyone else gets 50 gems!'],
+      when: 'Rank rewards start {when}',
+      ok: 'OK',
+    },
     saveConflict: {
       title: 'Saved Progress Found',
       bodyDevice: ['There is progress saved from another device.', 'Which one do you want to keep?'],
@@ -534,9 +540,10 @@ export const en = {
     offlineHint: 'Only your record for now',
     offlineAgo: 'Offline · updated {n} min ago',
     partCrit: '1+ run',
+    launchFrom: 'from the {m}/{d} season', launchTbd: 'to be announced',
     tier: { r1: '#1', r2: '#2', r3: '#3', r10: '#4~10', r50: '#11~50', p1: 'Top 1%', p5: 'Top 5%', p10: 'Top 10%', p30: 'Top 30%', p50: 'Top 50%', part: 'Joined' },
     reward: { diamonds: 'Gems', gold: 'Gold' },
-    rewards: { title: 'Rewards', sub: 'Week {week} · settles Mondays 00:00 KST · {total} players', mine: '◀ Me', note: 'Rank and percent tiers: best one only · #1~3 crown frame, #4~10 gold frame for next season' },
+    rewards: { title: 'Rewards', sub: 'Week {week} · settles Mondays 00:00 KST · {total} players', mine: '◀ Me', note: 'Rank and percent tiers: best one only · #1~3 crown frame, #4~10 gold frame for next season', launchNote: 'Launch event in progress. Rank rewards start {when}' },
     history: { title: 'Last 8 weeks', week: 'W{week}', empty: 'No records yet' },
     nick: {
       title: 'Your ranking name', titleEdit: 'Change name', label: 'Nickname', rule: '2~10 letters/digits', statue: 'Guardian', save: 'Save',
